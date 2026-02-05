@@ -28,20 +28,37 @@ def load_all_sheets(service_account_file, spreadsheet_name):
     Works both locally (with JSON file) and on Streamlit Cloud (with secrets).
     """
     try:
-        # Try to use Streamlit secrets first (for deployed app)
-        if hasattr(st, 'secrets') and 'gcp_service_account' in st.secrets:
-            credentials_dict = dict(st.secrets['gcp_service_account'])
-            creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
-        # Fall back to JSON file (for local development)
-        elif os.path.exists(service_account_file):
+        creds = None
+        
+        # FIRST: Try to use Streamlit secrets (for deployed app)
+        try:
+            # Method 1: JSON string in secrets
+            if 'gcp_service_account_json' in st.secrets:
+                credentials_dict = json.loads(st.secrets['gcp_service_account_json'])
+                creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
+            # Method 2: TOML format in secrets
+            elif 'gcp_service_account' in st.secrets:
+                credentials_dict = dict(st.secrets['gcp_service_account'])
+                creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
+        except Exception as e:
+            # Secrets not available or failed, will try JSON file next
+            pass
+        
+        # SECOND: Try JSON file (for local development)
+        if creds is None and os.path.exists(service_account_file):
             creds = Credentials.from_service_account_file(service_account_file, scopes=SCOPES)
-        else:
-            raise FileNotFoundError(
-                f"Could not find credentials. "
-                f"Please either:\n"
-                f"1. Add secrets in Streamlit Cloud Settings, OR\n"
-                f"2. Place {service_account_file} in the project directory"
+        
+        # If still no credentials, show error
+        if creds is None:
+            st.error(
+                "❌ Could not find Google Sheets credentials!\n\n"
+                "**For Streamlit Cloud:**\n"
+                "1. Go to Settings > Secrets\n"
+                "2. Add your Google credentials\n\n"
+                f"**For Local Development:**\n"
+                f"Place '{service_account_file}' in the project directory"
             )
+            st.stop()
         
         client = gspread.authorize(creds)
         spreadsheet = client.open(spreadsheet_name)
@@ -60,5 +77,5 @@ def load_all_sheets(service_account_file, spreadsheet_name):
         return data
     
     except Exception as e:
-        st.error(f"Error loading Google Sheets: {str(e)}")
-        raise
+        st.error(f"❌ Error loading Google Sheets: {str(e)}")
+        st.stop()
