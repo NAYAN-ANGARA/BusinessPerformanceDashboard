@@ -218,6 +218,7 @@ except Exception as e:
 # Load all spend sheets (including IB marketplace)
 spend_sheets = []
 spend_sheet_names = []
+spend_sheet_info = []
 
 for sheet_name in data.keys():
     # Check if sheet name contains 'spend' or 'marketplace' or 'IB'
@@ -228,6 +229,12 @@ for sheet_name in data.keys():
             if not df.empty and len(df) > 0:
                 spend_sheets.append(df)
                 spend_sheet_names.append(sheet_name)
+                # Store info about this sheet
+                spend_sheet_info.append({
+                    'name': sheet_name,
+                    'rows': len(df),
+                    'columns': list(df.columns)
+                })
         except Exception as e:
             st.warning(f"⚠️ Could not load spend data from sheet '{sheet_name}': {str(e)}")
 
@@ -237,21 +244,13 @@ with st.sidebar:
     st.markdown("### 🔍 Data Sources")
     if spend_sheet_names:
         st.markdown("**Spend Sheets Loaded:**")
-        for sheet in spend_sheet_names:
-            st.text(f"• {sheet}")
+        for info in spend_sheet_info:
+            st.text(f"• {info['name']}: {info['rows']:,} rows")
     
 if spend_sheets:
     try:
-        # Combine all spend sheets
+        # Simply concatenate - DO NOT remove any data
         channel_spend = pd.concat(spend_sheets, ignore_index=True)
-        
-        # Check for and remove duplicates
-        # Keep track of original row count
-        original_rows = len(channel_spend)
-        
-        # After normalization and type casting, we'll check for duplicates
-        # This is done later in the process after columns are standardized
-        
     except Exception as e:
         st.warning(f"⚠️ Error combining spend sheets: {str(e)}")
         channel_spend = pd.DataFrame(columns=["date", "channel", "spend"])
@@ -354,9 +353,6 @@ if "type" not in sales.columns:
 
 # ---------------- SPEND DATA TYPE CASTING ----------------
 if len(channel_spend) > 0:
-    # Store original row count before processing
-    original_spend_rows = len(channel_spend)
-    
     # Handle date column
     date_cols = ["date", "Date", "purchased_on", "Purchased_On"]
     date_col = None
@@ -367,10 +363,11 @@ if len(channel_spend) > 0:
     
     if date_col:
         channel_spend["date"] = pd.to_datetime(channel_spend[date_col], format="mixed", errors="coerce")
+        # Remove rows with invalid dates
         channel_spend = channel_spend.dropna(subset=["date"])
     else:
-        st.warning("⚠️ No date column found in spend data. Ad spend will not be time-filtered.")
-        channel_spend["date"] = pd.Timestamp.now()
+        st.error("⚠️ No date column found in spend data. Ad spend will not be time-filtered.")
+        channel_spend = pd.DataFrame(columns=["date", "channel", "ad_spend"])
     
     # Handle ad_spend column
     if "ad_spend" in channel_spend.columns:
@@ -384,28 +381,11 @@ if len(channel_spend) > 0:
     
     # Handle channel column
     if "channel" not in channel_spend.columns:
-        st.warning("⚠️ No 'channel' column found in spend data. Cannot match spend to channels.")
+        st.error("⚠️ No 'channel' column found in spend data. Cannot match spend to channels.")
         channel_spend = pd.DataFrame(columns=["date", "channel", "ad_spend"])
     
-    # Remove duplicates based on date and channel
-    # This prevents double-counting if the same data appears in multiple sheets
-    if "channel" in channel_spend.columns and "date" in channel_spend.columns:
-        # Check for duplicates before removing
-        duplicates_before = channel_spend.duplicated(subset=["date", "channel"], keep=False).sum()
-        
-        if duplicates_before > 0:
-            # Remove duplicates, keeping the first occurrence and summing ad_spend
-            channel_spend = (
-                channel_spend.groupby(["date", "channel"], as_index=False)
-                .agg({"ad_spend": "sum"})
-            )
-            duplicates_removed = original_spend_rows - len(channel_spend)
-            
-            if duplicates_removed > 0:
-                st.sidebar.warning(f"⚠️ Removed {duplicates_removed} duplicate spend entries (same date + channel)")
-        
-        final_spend_rows = len(channel_spend)
-        st.sidebar.info(f"📊 Spend Data: {final_spend_rows:,} unique date-channel combinations")
+    # Show total spend data info in sidebar
+    st.sidebar.info(f"📊 Total Spend Records: {len(channel_spend):,} rows")
 
 # ---------------- SIDEBAR FILTERS ----------------
 st.sidebar.header("📅 Date Range")
@@ -532,36 +512,43 @@ with st.expander("🔍 Ad Spend Breakdown (Debug)", expanded=False):
         else:
             spend_debug_filtered = spend_debug
         
-        st.markdown(f"**Total Rows in Spend Data (all dates):** {len(channel_spend):,}")
+        st.markdown(f"**Total Rows in All Spend Sheets:** {len(channel_spend):,}")
         st.markdown(f"**Rows in Date Range ({start_date} to {end_date}):** {len(spend_debug):,}")
         st.markdown(f"**Rows After Channel Filter:** {len(spend_debug_filtered):,}")
-        st.markdown(f"**Total Ad Spend (Calculated):** ${total_spend:,.2f}")
+        st.markdown(f"**Total Ad Spend (Dashboard):** ${total_spend:,.2f}")
         
-        # Show spend by channel
-        st.markdown("#### Spend by Channel (Current Period)")
+        # Show spend by channel for selected period
+        st.markdown("#### Spend by Channel (Selected Period)")
         if len(spend_debug_filtered) > 0:
             channel_spend_summary = spend_debug_filtered.groupby("channel")["ad_spend"].sum().reset_index()
             channel_spend_summary.columns = ["Channel", "Ad Spend"]
             channel_spend_summary = channel_spend_summary.sort_values("Ad Spend", ascending=False)
+            
+            # Add a total row
+            total_row = pd.DataFrame([["TOTAL", channel_spend_summary["Ad Spend"].sum()]], columns=["Channel", "Ad Spend"])
+            display_df = pd.concat([channel_spend_summary, total_row], ignore_index=True)
+            
             st.dataframe(
-                channel_spend_summary.style.format({"Ad Spend": "${:,.2f}"}),
+                display_df.style.format({"Ad Spend": "${:,.2f}"}),
                 use_container_width=True
             )
-            st.markdown(f"**Sum from table:** ${channel_spend_summary['Ad Spend'].sum():,.2f}")
         else:
             st.warning("No spend data in selected date range and channels")
         
-        # Show raw spend data sample
-        st.markdown("#### Raw Spend Data Sample (First 10 Rows)")
-        st.dataframe(spend_debug_filtered.head(10), use_container_width=True)
+        # Show ALL channels in the data (not just selected)
+        st.markdown("#### All Channels in Spend Data (Selected Period)")
+        all_channels_spend = spend_debug.groupby("channel")["ad_spend"].sum().reset_index()
+        all_channels_spend.columns = ["Channel", "Ad Spend"]
+        all_channels_spend = all_channels_spend.sort_values("Ad Spend", ascending=False)
+        st.dataframe(
+            all_channels_spend.style.format({"Ad Spend": "${:,.2f}"}),
+            use_container_width=True
+        )
         
-        # Check for duplicates
-        if "channel" in spend_debug_filtered.columns and "date" in spend_debug_filtered.columns:
-            duplicates = spend_debug_filtered.groupby(["channel", "date"]).size()
-            duplicates = duplicates[duplicates > 1]
-            if len(duplicates) > 0:
-                st.warning(f"⚠️ Found {len(duplicates)} duplicate channel-date combinations!")
-                st.dataframe(duplicates.reset_index(name='count'), use_container_width=True)
+        # Show raw spend data sample
+        st.markdown("#### Raw Spend Data Sample (First 20 Rows in Date Range)")
+        st.dataframe(spend_debug.head(20), use_container_width=True)
+        
     else:
         st.info("No spend data available")
 
