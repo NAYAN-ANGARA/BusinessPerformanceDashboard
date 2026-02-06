@@ -242,10 +242,18 @@ for sheet_name in data.keys():
 with st.sidebar:
     st.markdown("---")
     st.markdown("### 🔍 Data Sources")
+    
+    # Show ALL sheets available
+    with st.expander("📂 All Available Sheets"):
+        for sheet_name in sorted(data.keys()):
+            st.text(f"• {sheet_name}")
+    
     if spend_sheet_names:
         st.markdown("**Spend Sheets Loaded:**")
         for info in spend_sheet_info:
             st.text(f"• {info['name']}: {info['rows']:,} rows")
+    else:
+        st.warning("⚠️ No spend sheets detected!")
     
     # Show column info
     if spend_sheet_info:
@@ -534,10 +542,16 @@ with col7:
     kpi("ACOS", f"{acos:.1f}%")
 
 # ---------------- DEBUG: AD SPEND BREAKDOWN ----------------
-with st.expander("🔍 Ad Spend Breakdown (Debug)", expanded=False):
+with st.expander("🔍 Ad Spend Breakdown (Debug)", expanded=True):
     st.markdown("#### Ad Spend Details by Source")
     
     if len(channel_spend) > 0 and "date" in channel_spend.columns:
+        # Show unique channels in spend data
+        st.markdown("#### All Unique Channels in Spend Data")
+        all_unique_channels = sorted(channel_spend["channel"].unique())
+        st.write(f"**{len(all_unique_channels)} unique channels found:**")
+        st.write(all_unique_channels)
+        
         # Filter spend data for current date range
         spend_debug = channel_spend[
             (channel_spend["date"] >= start_dt) & 
@@ -581,6 +595,22 @@ with st.expander("🔍 Ad Spend Breakdown (Debug)", expanded=False):
             all_channels_spend.style.format({"Ad Spend": "${:,.2f}"}),
             use_container_width=True
         )
+        
+        # Check channel name matching
+        st.markdown("#### Channel Name Matching")
+        sales_channels = set(sales_f["channel"].unique())
+        spend_channels = set(spend_debug["channel"].unique())
+        
+        st.write(f"**Sales channels:** {sorted(sales_channels)}")
+        st.write(f"**Spend channels:** {sorted(spend_channels)}")
+        
+        missing_in_spend = sales_channels - spend_channels
+        missing_in_sales = spend_channels - sales_channels
+        
+        if missing_in_spend:
+            st.warning(f"⚠️ Channels in sales but NOT in spend: {sorted(missing_in_spend)}")
+        if missing_in_sales:
+            st.info(f"ℹ️ Channels in spend but NOT in sales: {sorted(missing_in_sales)}")
         
         # Show raw spend data sample
         st.markdown("#### Raw Spend Data Sample (First 20 Rows in Date Range)")
