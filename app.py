@@ -308,7 +308,7 @@ if len(channel_spend) > 0:
     # Ensure required columns exist - handle multiple possible column names
     # Check for spend/ad_spend columns (after normalization, column names are lowercase with underscores)
     spend_col = None
-    possible_spend_cols = ["ad_spend", "spend", "ad_spend_$", "advertising_spend", "ads_spend", "cost"]
+    possible_spend_cols = ["ad_spend", "spend", "ad_spend_$", "advertising_spend", "ads_spend", "cost","Spend"]
     
     for col in possible_spend_cols:
         if col in channel_spend.columns:
