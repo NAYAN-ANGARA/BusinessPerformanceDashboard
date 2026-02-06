@@ -221,9 +221,14 @@ spend_sheet_names = []
 spend_sheet_info = []
 
 for sheet_name in data.keys():
-    # Check if sheet name contains 'spend' or 'marketplace' or 'IB'
     sheet_lower = sheet_name.lower()
-    if any(keyword in sheet_lower for keyword in ['spend', 'marketplace', 'ib marketplace']):
+    
+    # Skip the generic "spend_data" sheet for USA (we want "channel_spend_data" instead)
+    if 'usa_spend_data' in sheet_lower and 'channel' not in sheet_lower:
+        continue
+    
+    # Check if sheet name contains spend-related keywords
+    if any(keyword in sheet_lower for keyword in ['channel_spend_data', 'channel spend data', 'spend', 'marketplace']):
         try:
             df = data[sheet_name].copy()
             if not df.empty and len(df) > 0:
@@ -251,7 +256,7 @@ with st.sidebar:
     if spend_sheet_names:
         st.markdown("**Spend Sheets Loaded:**")
         for info in spend_sheet_info:
-            st.text(f"• {info['name']}: {info['rows']:,} rows")
+            st.text(f"✓ {info['name']}: {info['rows']:,} rows")
     else:
         st.warning("⚠️ No spend sheets detected!")
     
@@ -542,7 +547,7 @@ with col7:
     kpi("ACOS", f"{acos:.1f}%")
 
 # ---------------- DEBUG: AD SPEND BREAKDOWN ----------------
-with st.expander("🔍 Ad Spend Breakdown (Debug)", expanded=True):
+with st.expander("🔍 Ad Spend Breakdown (Debug)", expanded=False):
     st.markdown("#### Ad Spend Details by Source")
     
     if len(channel_spend) > 0 and "date" in channel_spend.columns:
