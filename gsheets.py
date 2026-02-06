@@ -130,13 +130,11 @@ def load_all_sheets(service_account_file: str, spreadsheet_name: str):
                 
                 # Handle empty sheets
                 if not values or len(values) < 1:
-                    st.warning(f"⚠️ Sheet '{ws.title}' is empty, skipping...")
                     data[ws.title] = pd.DataFrame()
                     continue
                 
                 # Handle sheets with only headers
                 if len(values) < 2:
-                    st.warning(f"⚠️ Sheet '{ws.title}' has no data rows, creating empty DataFrame with headers...")
                     headers = _clean_headers(values[0])
                     data[ws.title] = pd.DataFrame(columns=headers)
                     continue
@@ -156,12 +154,11 @@ def load_all_sheets(service_account_file: str, spreadsheet_name: str):
                 # Create empty DataFrame as fallback
                 data[ws.title] = pd.DataFrame()
 
-        # Show summary
-        if data:
-            st.success(f"✅ Successfully loaded {len(data)} sheet(s): {', '.join(data.keys())}")
-            if failed_sheets:
-                st.warning(f"⚠️ Failed to load {len(failed_sheets)} sheet(s): {', '.join(failed_sheets)}")
-        else:
+        # Show summary only if there were failures
+        if failed_sheets:
+            st.warning(f"⚠️ Failed to load {len(failed_sheets)} sheet(s): {', '.join(failed_sheets)}")
+        
+        if not data:
             st.error("❌ No sheets were loaded successfully")
             st.stop()
 

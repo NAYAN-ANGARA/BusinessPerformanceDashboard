@@ -143,20 +143,18 @@ def load_data():
         if data1:
             for sheet_name, df in data1.items():
                 all_data[f"USA_{sheet_name}"] = df
-            st.success(f"✅ Loaded {len(data1)} sheets from 'USA - DB for Marketplace Dashboard'")
     except Exception as e:
         st.warning(f"⚠️ Could not load 'USA - DB for Marketplace Dashboard': {str(e)}")
     
-    # Spreadsheet 2: IB Marketplace (update the name below to match your actual spreadsheet name)
+    # Spreadsheet 2: IB Marketplace
     try:
         data2 = load_all_sheets(
             credentials_file,
-            "IB - Database for Marketplace Dashboard"  # ← UPDATE THIS to your actual IB marketplace spreadsheet name
+            "IB - Database for Marketplace Dashboard"
         )
         if data2:
             for sheet_name, df in data2.items():
                 all_data[f"IB_{sheet_name}"] = df
-            st.success(f"✅ Loaded {len(data2)} sheets from 'IB Marketplace'")
     except Exception as e:
         st.warning(f"⚠️ Could not load 'IB Marketplace': {str(e)}")
     
@@ -204,7 +202,6 @@ for sheet_name, df in data.items():
     if any(keyword in sheet_lower for keyword in sales_sheet_keywords):
         if not df.empty and len(df) > 0:
             sales_sheets.append(df.copy())
-            st.info(f"📊 Loading sales data from: {sheet_name}")
 
 if not sales_sheets:
     st.error("❌ No sales data sheets found")
@@ -214,7 +211,6 @@ if not sales_sheets:
 # Combine all sales data
 try:
     sales = pd.concat(sales_sheets, ignore_index=True)
-    st.success(f"✅ Combined {len(sales_sheets)} sales data sheet(s) with {len(sales):,} total rows")
 except Exception as e:
     st.error(f"❌ Error combining sales data: {str(e)}")
     st.stop()
@@ -236,14 +232,12 @@ for sheet_name in data.keys():
             st.warning(f"⚠️ Could not load spend data from sheet '{sheet_name}': {str(e)}")
 
 if spend_sheets:
-    st.info(f"📊 Loaded spend data from: {', '.join(spend_sheet_names)}")
     try:
         channel_spend = pd.concat(spend_sheets, ignore_index=True)
     except Exception as e:
         st.warning(f"⚠️ Error combining spend sheets: {str(e)}")
         channel_spend = pd.DataFrame(columns=["date", "channel", "spend"])
 else:
-    st.warning("⚠️ No spend data sheets found. Ad spend metrics will be zero.")
     channel_spend = pd.DataFrame(columns=["date", "channel", "spend"])
 
 # ---------------- NORMALIZE COLUMNS ----------------
@@ -491,6 +485,12 @@ selected_metric = st.selectbox(
     index=0
 )
 
+# Check if we have data for last year
+has_ly_data = len(sales_ly) > 0
+
+if not has_ly_data:
+    st.info(f"ℹ️ No data available for the same period last year ({year_ago_start.date()} to {year_ago_end.date()}). Showing current year data only.")
+
 # Prepare trend data
 current_trend = (
     sales_f.groupby(pd.Grouper(key="purchased_on", freq="D"))
@@ -498,12 +498,16 @@ current_trend = (
     .reset_index()
 )
 
-ly_trend = (
-    sales_ly.groupby(pd.Grouper(key="purchased_on", freq="D"))
-    .agg({"revenue": "sum", "no_of_orders": "sum", "selling_commission": "sum"})
-    .reset_index()
-)
-ly_trend["display_date"] = ly_trend["purchased_on"] + pd.DateOffset(years=1)
+# Only prepare last year trend if we have data
+if has_ly_data:
+    ly_trend = (
+        sales_ly.groupby(pd.Grouper(key="purchased_on", freq="D"))
+        .agg({"revenue": "sum", "no_of_orders": "sum", "selling_commission": "sum"})
+        .reset_index()
+    )
+    ly_trend["display_date"] = ly_trend["purchased_on"] + pd.DateOffset(years=1)
+else:
+    ly_trend = pd.DataFrame(columns=["purchased_on", "revenue", "no_of_orders", "selling_commission", "display_date"])
 
 # Add ad spend to trends
 if len(channel_spend) > 0 and "date" in channel_spend.columns:
@@ -522,32 +526,41 @@ if len(channel_spend) > 0 and "date" in channel_spend.columns:
     )
     current_trend["ad_spend"] = current_trend["ad_spend"].fillna(0)
     
-    # Calculate ad spend for last year
-    ly_spend_trend = (
-        channel_spend[channel_spend["date"].between(year_ago_start, year_ago_end)]
-        .groupby(pd.Grouper(key="date", freq="D"))
-        .agg({"ad_spend": "sum"})
-        .reset_index()
-    )
-    ly_spend_trend["display_date"] = ly_spend_trend["date"] + pd.DateOffset(years=1)
-    ly_trend = ly_trend.merge(
-        ly_spend_trend,
-        left_on="display_date",
-        right_on="display_date",
-        how="left"
-    )
-    ly_trend["ad_spend"] = ly_trend["ad_spend"].fillna(0)
+    # Calculate ad spend for last year (only if we have data)
+    if has_ly_data:
+        ly_spend_trend = (
+            channel_spend[channel_spend["date"].between(year_ago_start, year_ago_end)]
+            .groupby(pd.Grouper(key="date", freq="D"))
+            .agg({"ad_spend": "sum"})
+            .reset_index()
+        )
+        ly_spend_trend["display_date"] = ly_spend_trend["date"] + pd.DateOffset(years=1)
+        ly_trend = ly_trend.merge(
+            ly_spend_trend,
+            left_on="display_date",
+            right_on="display_date",
+            how="left"
+        )
+        ly_trend["ad_spend"] = ly_trend["ad_spend"].fillna(0)
+    else:
+        ly_trend["ad_spend"] = 0
 else:
     current_trend["ad_spend"] = 0
     ly_trend["ad_spend"] = 0
 
 # Calculate net earning for both periods
 current_trend["net_earning"] = (current_trend["revenue"] * SAFE_MARGIN) - current_trend["ad_spend"] - current_trend["selling_commission"]
-ly_trend["net_earning"] = (ly_trend["revenue"] * SAFE_MARGIN) - ly_trend["ad_spend"] - ly_trend["selling_commission"]
+if has_ly_data:
+    ly_trend["net_earning"] = (ly_trend["revenue"] * SAFE_MARGIN) - ly_trend["ad_spend"] - ly_trend["selling_commission"]
+else:
+    ly_trend["net_earning"] = 0
 
 # Calculate ACOS
-current_trend["acos"] = (current_trend["ad_spend"] / current_trend["revenue"] * 100).fillna(0)
-ly_trend["acos"] = (ly_trend["ad_spend"] / ly_trend["revenue"] * 100).fillna(0)
+current_trend["acos"] = (current_trend["ad_spend"] / current_trend["revenue"] * 100).replace([float('inf'), -float('inf')], 0).fillna(0)
+if has_ly_data:
+    ly_trend["acos"] = (ly_trend["ad_spend"] / ly_trend["revenue"] * 100).replace([float('inf'), -float('inf')], 0).fillna(0)
+else:
+    ly_trend["acos"] = 0
 
 # Select the metric to display
 metric_map = {
@@ -573,12 +586,14 @@ fig_yoy.add_trace(go.Scatter(
     fillcolor='rgba(59, 130, 246, 0.1)'
 ))
 
-fig_yoy.add_trace(go.Scatter(
-    x=ly_trend["display_date"],
-    y=ly_trend[metric_col],
-    name=f"{year_ago_start.year} (Last Year)",
-    line=dict(color="#10b981", width=3, dash='dash')
-))
+# Only add last year trace if we have data
+if has_ly_data and len(ly_trend) > 0:
+    fig_yoy.add_trace(go.Scatter(
+        x=ly_trend["display_date"],
+        y=ly_trend[metric_col],
+        name=f"{year_ago_start.year} (Last Year)",
+        line=dict(color="#10b981", width=3, dash='dash')
+    ))
 
 # Format y-axis based on metric
 if selected_metric in ["Revenue", "Ad Spend", "Commission", "Net Earning"]:
@@ -593,7 +608,10 @@ else:
 
 fig_yoy.update_layout(
     yaxis=dict(title=yaxis_title, tickformat=yaxis_format),
-    xaxis=dict(title="Date"),
+    xaxis=dict(
+        title="Date",
+        type='date'
+    ),
     hovermode="x unified",
     template="plotly_white",
     height=450,
