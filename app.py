@@ -166,26 +166,51 @@ if data is None:
     st.stop()
 
 # ---------------- GET REQUIRED SHEETS ----------------
-try:
-    sales = data["Sales_data"].copy()
-except KeyError:
-    st.error("❌ Sheet 'Sales_data' not found")
-    st.info("Available sheets: " + ", ".join(data.keys()))
+# Try to find the sales data sheet (handle different possible names)
+sales = None
+sales_sheet_names = ["Sales_data", "Sales Data", "sales_data", "sales data", "Sales"]
+
+for sheet_name in sales_sheet_names:
+    if sheet_name in data:
+        sales = data[sheet_name].copy()
+        break
+
+if sales is None:
+    st.error("❌ Sales data sheet not found")
+    st.info(f"Available sheets: {', '.join(data.keys())}")
+    st.info("Looking for one of: " + ", ".join(sales_sheet_names))
     st.stop()
 
-# Load all spend sheets
+# Load all spend sheets (including IB marketplace)
 spend_sheets = []
+spend_sheet_names = []
+
 for sheet_name in data.keys():
-    if 'spend' in sheet_name.lower():
-        spend_sheets.append(data[sheet_name].copy())
+    # Check if sheet name contains 'spend' or 'marketplace' or 'IB'
+    sheet_lower = sheet_name.lower()
+    if any(keyword in sheet_lower for keyword in ['spend', 'marketplace', 'ib marketplace']):
+        try:
+            df = data[sheet_name].copy()
+            if not df.empty and len(df) > 0:
+                spend_sheets.append(df)
+                spend_sheet_names.append(sheet_name)
+        except Exception as e:
+            st.warning(f"⚠️ Could not load spend data from sheet '{sheet_name}': {str(e)}")
 
 if spend_sheets:
-    channel_spend = pd.concat(spend_sheets, ignore_index=True)
+    st.info(f"📊 Loaded spend data from: {', '.join(spend_sheet_names)}")
+    try:
+        channel_spend = pd.concat(spend_sheets, ignore_index=True)
+    except Exception as e:
+        st.warning(f"⚠️ Error combining spend sheets: {str(e)}")
+        channel_spend = pd.DataFrame(columns=["date", "channel", "spend"])
 else:
+    st.warning("⚠️ No spend data sheets found. Ad spend metrics will be zero.")
     channel_spend = pd.DataFrame(columns=["date", "channel", "spend"])
 
 # ---------------- NORMALIZE COLUMNS ----------------
 def normalize_columns(df):
+    """Normalize column names to lowercase with underscores."""
     df.columns = (
         df.columns
         .str.strip()
@@ -210,6 +235,14 @@ if "channel" in sales.columns:
 
 if len(channel_spend) > 0:
     channel_spend = normalize_columns(channel_spend)
+    
+    # Ensure required columns exist
+    if "spend" in channel_spend.columns and "ad_spend" not in channel_spend.columns:
+        channel_spend["ad_spend"] = channel_spend["spend"]
+    elif "ad_spend" not in channel_spend.columns:
+        st.warning("⚠️ No 'spend' or 'ad_spend' column found in spend data. Using zero values.")
+        channel_spend["ad_spend"] = 0
+    
     if "channel" in channel_spend.columns:
         channel_spend["channel"] = (
             channel_spend["channel"]
@@ -221,8 +254,21 @@ if len(channel_spend) > 0:
         channel_spend["channel"] = channel_spend["channel"].str.replace(r'_Ebay$', '_eBay', case=False, regex=True)
 
 # ---------------- TYPE CAST SALES ----------------
+# Ensure required columns exist
+required_sales_cols = ["purchased_on", "no_of_orders", "discounted_price", "channel"]
+missing_cols = [col for col in required_sales_cols if col not in sales.columns]
+
+if missing_cols:
+    st.error(f"❌ Missing required columns in sales data: {', '.join(missing_cols)}")
+    st.info(f"Available columns: {', '.join(sales.columns)}")
+    st.stop()
+
 sales["purchased_on"] = pd.to_datetime(sales["purchased_on"], format="mixed", errors="coerce")
 sales = sales.dropna(subset=["purchased_on"])
+
+if len(sales) == 0:
+    st.error("❌ No valid dates found in sales data")
+    st.stop()
 
 sales["no_of_orders"] = pd.to_numeric(sales["no_of_orders"], errors="coerce").fillna(0)
 
@@ -238,203 +284,192 @@ sales["discounted_price"] = pd.to_numeric(sales["discounted_price"], errors="coe
 # Revenue = discounted_price × no_of_orders
 sales["revenue"] = sales["discounted_price"]  # already total revenue per row
 
-# Commission - handle dollar signs
-commission_col = None
-for col in ["selling_commission", "commission", "seller_commission"]:
-    if col in sales.columns:
-        commission_col = col
-        break
-
-if commission_col:
+# Commission
+if "selling_commission" not in sales.columns:
+    st.warning("⚠️ 'selling_commission' column not found. Using zero values.")
+    sales["selling_commission"] = 0
+else:
     sales["selling_commission"] = (
-        sales[commission_col].astype(str)
+        sales["selling_commission"].astype(str)
         .str.replace('$', '', regex=False)
         .str.replace(',', '', regex=False)
         .str.strip()
     )
     sales["selling_commission"] = pd.to_numeric(sales["selling_commission"], errors="coerce").fillna(0)
-else:
-    sales["selling_commission"] = 0
 
-# ---------------- TYPE CAST CHANNEL SPEND ----------------
+# Type (optional column)
+if "type" not in sales.columns:
+    st.info("ℹ️ 'type' column not found. Using 'Unknown' as default.")
+    sales["type"] = "Unknown"
+
+# ---------------- SPEND DATA TYPE CASTING ----------------
 if len(channel_spend) > 0:
-    channel_spend["date"] = pd.to_datetime(channel_spend["date"], format="mixed", errors="coerce").dt.normalize()
-    channel_spend = channel_spend.dropna(subset=["date"])
-    
-    ad_spend_column = None
-    for col_name in ["spend", "ad_spend", "adspend", "cost"]:
-        if col_name in channel_spend.columns:
-            ad_spend_column = col_name
+    # Handle date column
+    date_cols = ["date", "Date", "purchased_on", "Purchased_On"]
+    date_col = None
+    for col in date_cols:
+        if col in channel_spend.columns:
+            date_col = col
             break
     
-    if ad_spend_column:
-        channel_spend["ad_spend"] = pd.to_numeric(channel_spend[ad_spend_column], errors="coerce").fillna(0)
+    if date_col:
+        channel_spend["date"] = pd.to_datetime(channel_spend[date_col], format="mixed", errors="coerce")
+        channel_spend = channel_spend.dropna(subset=["date"])
     else:
-        channel_spend["ad_spend"] = 0
-else:
-    channel_spend = pd.DataFrame(columns=["date", "channel", "ad_spend"])
+        st.warning("⚠️ No date column found in spend data. Ad spend will not be time-filtered.")
+        channel_spend["date"] = pd.Timestamp.now()
+    
+    # Handle ad_spend column
+    if "ad_spend" in channel_spend.columns:
+        channel_spend["ad_spend"] = (
+            channel_spend["ad_spend"].astype(str)
+            .str.replace('$', '', regex=False)
+            .str.replace(',', '', regex=False)
+            .str.strip()
+        )
+        channel_spend["ad_spend"] = pd.to_numeric(channel_spend["ad_spend"], errors="coerce").fillna(0)
+    
+    # Handle channel column
+    if "channel" not in channel_spend.columns:
+        st.warning("⚠️ No 'channel' column found in spend data. Cannot match spend to channels.")
+        channel_spend = pd.DataFrame(columns=["date", "channel", "ad_spend"])
 
 # ---------------- SIDEBAR FILTERS ----------------
-st.sidebar.title("🎯 Filters")
-
+st.sidebar.header("📅 Date Range")
 min_date = sales["purchased_on"].min().date()
 max_date = sales["purchased_on"].max().date()
 
-date_range = st.sidebar.date_input(
-    "📅 Date Range",
-    [min_date, max_date],
-    min_value=min_date,
-    max_value=max_date
-)
+start_date = st.sidebar.date_input("Start Date", value=min_date, min_value=min_date, max_value=max_date)
+end_date = st.sidebar.date_input("End Date", value=max_date, min_value=min_date, max_value=max_date)
 
-if len(date_range) == 2:
-    start_date, end_date = map(pd.to_datetime, date_range)
-else:
-    start_date = end_date = pd.to_datetime(date_range[0])
+if start_date > end_date:
+    st.sidebar.error("Start date must be before end date")
+    st.stop()
 
-# Normalize date boundaries (inclusive end date handling)
-start_dt = pd.to_datetime(start_date).normalize()
-end_dt = pd.to_datetime(end_date).normalize()
-# Use half-open interval [start_dt, end_dt_next) to include the entire end date
-end_dt_next = end_dt + pd.Timedelta(days=1)
+st.sidebar.header("🎯 Filters")
 
+available_channels = sales["channel"].unique()
+selected_channels = multiselect_with_all("Channels", available_channels)
 
-channels = multiselect_with_all("🛒 Channel", sales["channel"].dropna().unique())
-types = multiselect_with_all("📦 Type", sales["type"].dropna().unique())
+available_types = sales["type"].unique()
+selected_types = multiselect_with_all("Types", available_types)
 
-# Metric selector for YoY comparison
-metric_options = ["Revenue", "Orders", "Ad Spend", "Commission", "Net Earning", "ACOS"]
-selected_metric = st.sidebar.selectbox("📊 YoY Comparison Metric", metric_options, index=0)
+# ---------------- FILTER DATA ----------------
+start_dt = pd.Timestamp(start_date)
+end_dt = pd.Timestamp(end_date)
+end_dt_next = end_dt + pd.Timedelta(days=1)  # include end date
 
-# ---------------- FILTER SALES ----------------
 sales_f = sales[
-    ((sales["purchased_on"] >= start_dt) & (sales["purchased_on"] < end_dt_next)) &
-    (sales["channel"].isin(channels)) &
-    (sales["type"].isin(types))
-].copy()
-
-# ---------------- CALCULATE AD SPEND ----------------
-sales_daily = (
-    sales_f.groupby([pd.Grouper(key="purchased_on", freq="D"), "channel"], as_index=False)
-    .agg({"revenue": "sum"})
-)
-
-if len(channel_spend) > 0:
-    spend_daily = (
-        channel_spend[(channel_spend["date"] >= start_dt) & (channel_spend["date"] < end_dt_next)]
-        .groupby(["date", "channel"], as_index=False)
-        .agg({"ad_spend": "sum"})
-    )
-    
-    merged = sales_daily.merge(
-        spend_daily,
-        left_on=["purchased_on", "channel"],
-        right_on=["date", "channel"],
-        how="left"
-    )
-    ad_spend = merged["ad_spend"].sum(skipna=True)
-else:
-    ad_spend = 0
-
-# ---------------- KPI CALCULATIONS ----------------
-orders = sales_f["no_of_orders"].sum()
-revenue = sales_f["revenue"].sum()
-commission = sales_f["selling_commission"].sum()
-aov = revenue / orders if orders > 0 else 0
-
-# Net Earning = (Revenue × Safe Margin) - Ad Spend - Commission
-net_earning = (revenue * SAFE_MARGIN) - ad_spend - commission
-
-roas = revenue / ad_spend if ad_spend > 0 else 0
-acos = (ad_spend / revenue * 100) if revenue > 0 else 0
-
-# Previous period comparison (for % change indicators)
-period_days = (end_date - start_date).days
-previous_start = start_date - pd.Timedelta(days=period_days + 1)
-previous_end = start_date - pd.Timedelta(days=1)
-
-sales_prev = sales[
-    ((sales["purchased_on"] >= previous_start) & (sales["purchased_on"] < (previous_end + pd.Timedelta(days=1)))) &
-    (sales["channel"].isin(channels)) &
-    (sales["type"].isin(types))
+    (sales["purchased_on"] >= start_dt) &
+    (sales["purchased_on"] < end_dt_next) &
+    (sales["channel"].isin(selected_channels)) &
+    (sales["type"].isin(selected_types))
 ]
 
-prev_revenue = sales_prev["revenue"].sum()
-revenue_change = ((revenue - prev_revenue) / prev_revenue * 100) if prev_revenue > 0 else 0
+if len(sales_f) == 0:
+    st.warning("⚠️ No data available for selected filters")
+    st.stop()
 
-prev_orders = sales_prev["no_of_orders"].sum()
-orders_change = ((orders - prev_orders) / prev_orders * 100) if prev_orders > 0 else 0
+# ---------------- KPI CARDS ----------------
+total_rev = sales_f["revenue"].sum()
+total_orders = sales_f["no_of_orders"].sum()
+aov = total_rev / total_orders if total_orders > 0 else 0
+total_commission = sales_f["selling_commission"].sum()
 
-# ---------------- DASHBOARD KPIs ----------------
-st.markdown("### 📈 Key Performance Indicators")
+# Calculate ad spend from spend data
+total_spend = 0
+if len(channel_spend) > 0 and "date" in channel_spend.columns:
+    spend_f = channel_spend[
+        (channel_spend["date"] >= start_dt) & 
+        (channel_spend["date"] < end_dt_next)
+    ]
+    if "channel" in channel_spend.columns:
+        spend_f = spend_f[spend_f["channel"].isin(selected_channels)]
+    total_spend = spend_f["ad_spend"].sum()
 
-# Detect if we're on mobile (simplified approach using columns)
-# First row - 6 KPIs (will stack on mobile due to CSS)
-c1, c2, c3, c4, c5, c6 = st.columns([1,1,1,1,1,1])
-with c1: kpi("Orders", f"{orders:,.0f}", orders_change)
-with c2: kpi("Revenue", f"${revenue:,.0f}", revenue_change)
-with c3: kpi("AOV", f"${aov:,.2f}")
-with c4: kpi("Ad Spend", f"${ad_spend:,.0f}")
-with c5: kpi("Commission", f"${commission:,.0f}")
-with c6: kpi("Net Earning", f"${net_earning:,.0f}")
+net_earning = (total_rev * SAFE_MARGIN) - total_spend - total_commission
+roas = total_rev / total_spend if total_spend > 0 else 0
+acos = (total_spend / total_rev * 100) if total_rev > 0 else 0
 
-st.markdown("---")
+# Calculate YoY changes
+year_ago_start = start_dt - pd.DateOffset(years=1)
+year_ago_end = end_dt - pd.DateOffset(years=1)
 
-# Second row - 3 KPIs (will stack on mobile)
-c7, c8, c9 = st.columns([1,1,1])
-with c7: 
-    kpi("ROAS", f"{roas:.2f}x")
-with c8:
-    kpi("ACOS", f"{acos:.1f}%")
-with c9: 
-    avg_comm = commission / orders if orders > 0 else 0
-    kpi("Avg Commission", f"${avg_comm:.2f}")
-
-st.markdown("---")
-
-# ---------------- YOY COMPARISON CHART ----------------
-st.markdown(f"### 📈 Year-over-Year Comparison: {selected_metric}")
-
-# Calculate same period last year
-year_ago_start = start_date - pd.DateOffset(years=1)
-year_ago_end = end_date - pd.DateOffset(years=1)
-
-# Filter for last year's data
 sales_ly = sales[
-    (sales["purchased_on"].between(year_ago_start, year_ago_end)) &
-    (sales["channel"].isin(channels)) &
-    (sales["type"].isin(types))
-].copy()
+    (sales["purchased_on"] >= year_ago_start) &
+    (sales["purchased_on"] < year_ago_end) &
+    (sales["channel"].isin(selected_channels)) &
+    (sales["type"].isin(selected_types))
+]
 
-# Prepare current year data
+ly_rev = sales_ly["revenue"].sum()
+ly_orders = sales_ly["no_of_orders"].sum()
+ly_commission = sales_ly["selling_commission"].sum()
+
+# Calculate last year ad spend
+ly_spend = 0
+if len(channel_spend) > 0 and "date" in channel_spend.columns:
+    spend_ly = channel_spend[
+        (channel_spend["date"] >= year_ago_start) & 
+        (channel_spend["date"] < year_ago_end)
+    ]
+    if "channel" in channel_spend.columns:
+        spend_ly = spend_ly[spend_ly["channel"].isin(selected_channels)]
+    ly_spend = spend_ly["ad_spend"].sum()
+
+ly_net_earning = (ly_rev * SAFE_MARGIN) - ly_spend - ly_commission
+
+# Calculate percentage changes
+rev_change = ((total_rev - ly_rev) / ly_rev * 100) if ly_rev > 0 else 0
+orders_change = ((total_orders - ly_orders) / ly_orders * 100) if ly_orders > 0 else 0
+spend_change = ((total_spend - ly_spend) / ly_spend * 100) if ly_spend > 0 else 0
+net_change = ((net_earning - ly_net_earning) / ly_net_earning * 100) if ly_net_earning != 0 else 0
+
+st.markdown("### 📈 Key Metrics")
+col1, col2, col3, col4, col5, col6 = st.columns(6)
+
+with col1:
+    kpi("Revenue", f"${total_rev:,.0f}", rev_change)
+with col2:
+    kpi("Orders", f"{total_orders:,.0f}", orders_change)
+with col3:
+    kpi("AOV", f"${aov:.2f}")
+with col4:
+    kpi("Ad Spend", f"${total_spend:,.0f}", spend_change)
+with col5:
+    kpi("Net Earning", f"${net_earning:,.0f}", net_change)
+with col6:
+    kpi("ACOS", f"{acos:.1f}%")
+
+# ---------------- YoY COMPARISON CHART ----------------
+st.markdown("---")
+st.markdown("### 📊 Year-over-Year Performance")
+
+selected_metric = st.selectbox(
+    "Select Metric",
+    ["Revenue", "Orders", "Ad Spend", "Commission", "Net Earning", "ACOS"],
+    index=0
+)
+
+# Prepare trend data
 current_trend = (
     sales_f.groupby(pd.Grouper(key="purchased_on", freq="D"))
-    .agg({
-        "revenue": "sum",
-        "no_of_orders": "sum",
-        "selling_commission": "sum"
-    })
+    .agg({"revenue": "sum", "no_of_orders": "sum", "selling_commission": "sum"})
     .reset_index()
 )
 
-# Prepare last year data
 ly_trend = (
     sales_ly.groupby(pd.Grouper(key="purchased_on", freq="D"))
-    .agg({
-        "revenue": "sum",
-        "no_of_orders": "sum",
-        "selling_commission": "sum"
-    })
+    .agg({"revenue": "sum", "no_of_orders": "sum", "selling_commission": "sum"})
     .reset_index()
 )
-
-# Adjust last year dates to align with current year (for visualization)
 ly_trend["display_date"] = ly_trend["purchased_on"] + pd.DateOffset(years=1)
 
-# Calculate ad spend for current period
-if len(channel_spend) > 0:
+# Add ad spend to trends
+if len(channel_spend) > 0 and "date" in channel_spend.columns:
+    # Calculate ad spend for current period
     current_spend_trend = (
-        channel_spend[(channel_spend["date"] >= start_dt) & (channel_spend["date"] < end_dt_next)]
+        channel_spend[channel_spend["date"].between(start_dt, end_dt)]
         .groupby(pd.Grouper(key="date", freq="D"))
         .agg({"ad_spend": "sum"})
         .reset_index()
@@ -588,7 +623,7 @@ with col_left2:
     st.markdown("### 💰 Ad Spend vs Revenue by Channel")
     channel_metrics = sales_f.groupby("channel").agg({"revenue": "sum"}).reset_index()
     
-    if len(channel_spend) > 0:
+    if len(channel_spend) > 0 and "channel" in channel_spend.columns and "date" in channel_spend.columns:
         spend_by_channel = (
             channel_spend[(channel_spend["date"] >= start_dt) & (channel_spend["date"] < end_dt_next)]
             .groupby("channel").agg({"ad_spend": "sum"}).reset_index()
@@ -637,7 +672,7 @@ summary = (
     .reset_index()
 )
 
-if len(channel_spend) > 0:
+if len(channel_spend) > 0 and "channel" in channel_spend.columns and "date" in channel_spend.columns:
     spend_summary = (
         channel_spend[(channel_spend["date"] >= start_dt) & (channel_spend["date"] < end_dt_next)]
         .groupby("channel").agg({"ad_spend": "sum"}).reset_index()
@@ -674,9 +709,9 @@ csv = summary.to_csv(index=False)
 st.download_button(
     label="📥 Export to CSV",
     data=csv,
-    file_name=f"dashboard_{start_date.date()}_{end_date.date()}.csv",
+    file_name=f"dashboard_{start_date}_{end_date}.csv",
     mime="text/csv"
 )
 
 st.markdown("---")
-st.caption(f"Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')} | {start_date.date()} to {end_date.date()} | Margin: {SAFE_MARGIN*100:.0f}%")
+st.caption(f"Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')} | {start_date} to {end_date} | Margin: {SAFE_MARGIN*100:.0f}%")

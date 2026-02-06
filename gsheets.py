@@ -11,6 +11,7 @@ SCOPES = [
 ]
 
 def _clean_headers(headers):
+    """Clean and deduplicate column headers."""
     cleaned, seen = [], {}
     for i, h in enumerate(headers):
         h = h.strip() if h else f"column_{i+1}"
@@ -35,6 +36,9 @@ def load_all_sheets(service_account_file: str, spreadsheet_name: str):
     """
     Load all sheets from a Google Spreadsheet.
     Works both locally (with JSON file) and on Streamlit Cloud (with secrets / env vars).
+    
+    Returns:
+        dict: Dictionary with sheet names as keys and DataFrames as values
     """
     try:
         creds = None
@@ -55,7 +59,7 @@ def load_all_sheets(service_account_file: str, spreadsheet_name: str):
                 credentials_dict = _fix_private_key_newlines(credentials_dict)
                 creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
 
-        except Exception:
+        except Exception as e:
             # secrets not available / malformed -> fall through to env/file methods
             pass
 
@@ -64,15 +68,21 @@ def load_all_sheets(service_account_file: str, spreadsheet_name: str):
         #    GOOGLE_SERVICE_ACCOUNT_JSON = full JSON string
         # ------------------------------------------------------------
         if creds is None and os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"):
-            credentials_dict = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
-            credentials_dict = _fix_private_key_newlines(credentials_dict)
-            creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
+            try:
+                credentials_dict = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
+                credentials_dict = _fix_private_key_newlines(credentials_dict)
+                creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
+            except Exception as e:
+                st.warning(f"⚠️ Failed to load credentials from environment variable: {str(e)}")
 
         # ------------------------------------------------------------
         # 3) Local JSON file (local dev)
         # ------------------------------------------------------------
         if creds is None and service_account_file and os.path.exists(service_account_file):
-            creds = Credentials.from_service_account_file(service_account_file, scopes=SCOPES)
+            try:
+                creds = Credentials.from_service_account_file(service_account_file, scopes=SCOPES)
+            except Exception as e:
+                st.warning(f"⚠️ Failed to load credentials from file: {str(e)}")
 
         # If still no credentials
         if creds is None:
@@ -89,24 +99,76 @@ def load_all_sheets(service_account_file: str, spreadsheet_name: str):
         # ------------------------------------------------------------
         # Connect and load sheets
         # ------------------------------------------------------------
-        client = gspread.authorize(creds)
-        spreadsheet = client.open(spreadsheet_name)
+        try:
+            client = gspread.authorize(creds)
+        except Exception as e:
+            st.error(f"❌ Failed to authorize with Google Sheets: {str(e)}")
+            st.stop()
 
+        try:
+            spreadsheet = client.open(spreadsheet_name)
+        except gspread.exceptions.SpreadsheetNotFound:
+            st.error(f"❌ Spreadsheet '{spreadsheet_name}' not found. Please check the name and sharing permissions.")
+            st.stop()
+        except Exception as e:
+            st.error(f"❌ Error opening spreadsheet: {str(e)}")
+            st.stop()
+
+        # Load all worksheets
         data = {}
-        for ws in spreadsheet.worksheets():
-            values = ws.get_all_values()
-            if len(values) < 2:
-                data[ws.title] = pd.DataFrame()
-                continue
+        failed_sheets = []
+        
+        try:
+            worksheets = spreadsheet.worksheets()
+        except Exception as e:
+            st.error(f"❌ Error retrieving worksheets: {str(e)}")
+            st.stop()
 
-            headers = _clean_headers(values[0])
-            df = pd.DataFrame(values[1:], columns=headers)
-            df = df.apply(pd.to_numeric, errors="ignore")
-            data[ws.title] = df
+        for ws in worksheets:
+            try:
+                values = ws.get_all_values()
+                
+                # Handle empty sheets
+                if not values or len(values) < 1:
+                    st.warning(f"⚠️ Sheet '{ws.title}' is empty, skipping...")
+                    data[ws.title] = pd.DataFrame()
+                    continue
+                
+                # Handle sheets with only headers
+                if len(values) < 2:
+                    st.warning(f"⚠️ Sheet '{ws.title}' has no data rows, creating empty DataFrame with headers...")
+                    headers = _clean_headers(values[0])
+                    data[ws.title] = pd.DataFrame(columns=headers)
+                    continue
+
+                # Normal processing
+                headers = _clean_headers(values[0])
+                df = pd.DataFrame(values[1:], columns=headers)
+                
+                # Try to convert numeric columns
+                df = df.apply(pd.to_numeric, errors="ignore")
+                
+                data[ws.title] = df
+                
+            except Exception as e:
+                st.warning(f"⚠️ Error loading sheet '{ws.title}': {str(e)}")
+                failed_sheets.append(ws.title)
+                # Create empty DataFrame as fallback
+                data[ws.title] = pd.DataFrame()
+
+        # Show summary
+        if data:
+            st.success(f"✅ Successfully loaded {len(data)} sheet(s): {', '.join(data.keys())}")
+            if failed_sheets:
+                st.warning(f"⚠️ Failed to load {len(failed_sheets)} sheet(s): {', '.join(failed_sheets)}")
+        else:
+            st.error("❌ No sheets were loaded successfully")
+            st.stop()
 
         return data
 
     except Exception as e:
-        st.error(f"❌ Error loading Google Sheets: {str(e)}")
+        st.error(f"❌ Unexpected error loading Google Sheets: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
         st.stop()
-    
