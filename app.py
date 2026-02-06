@@ -306,9 +306,9 @@ if len(channel_spend) > 0:
     channel_spend = normalize_columns(channel_spend)
     
     # Ensure required columns exist - handle multiple possible column names
-    # Check for spend/ad_spend columns
+    # Check for spend/ad_spend columns (after normalization, column names are lowercase with underscores)
     spend_col = None
-    possible_spend_cols = ["ad_spend", "spend", "ad spend", "advertising_spend", "ads_spend"]
+    possible_spend_cols = ["ad_spend", "spend", "ad_spend_$", "advertising_spend", "ads_spend", "cost"]
     
     for col in possible_spend_cols:
         if col in channel_spend.columns:
@@ -319,9 +319,10 @@ if len(channel_spend) > 0:
         # Rename to ad_spend if it's something else
         if spend_col != "ad_spend":
             channel_spend["ad_spend"] = channel_spend[spend_col]
+            st.sidebar.info(f"ℹ️ Using '{spend_col}' column as ad_spend")
     else:
         st.error(f"⚠️ No spend column found in spend data. Looking for one of: {', '.join(possible_spend_cols)}")
-        st.info(f"Available columns: {', '.join(channel_spend.columns)}")
+        st.info(f"Available columns after normalization: {', '.join(channel_spend.columns)}")
         channel_spend["ad_spend"] = 0
     
     if "channel" in channel_spend.columns:
@@ -405,22 +406,33 @@ if len(channel_spend) > 0:
         st.info(f"Available columns: {', '.join(channel_spend.columns)}")
         channel_spend = pd.DataFrame(columns=["date", "channel", "ad_spend"])
     
-    # Handle ad_spend column
+    # Handle ad_spend column - works for both dollar-formatted ($1,234.56) and plain numbers (1234.56)
     if "ad_spend" in channel_spend.columns:
-        # Clean and convert ad_spend
-        original_values = channel_spend["ad_spend"].copy()
+        # Convert everything to string first
+        channel_spend["ad_spend"] = channel_spend["ad_spend"].astype(str)
+        
+        # Remove dollar signs, commas, and any whitespace
         channel_spend["ad_spend"] = (
-            channel_spend["ad_spend"].astype(str)
+            channel_spend["ad_spend"]
             .str.replace('$', '', regex=False)
             .str.replace(',', '', regex=False)
+            .str.replace('₹', '', regex=False)  # Also handle rupee symbol if present
+            .str.replace('£', '', regex=False)  # And pound symbol
+            .str.replace('€', '', regex=False)  # And euro symbol
             .str.strip()
         )
-        channel_spend["ad_spend"] = pd.to_numeric(channel_spend["ad_spend"], errors="coerce").fillna(0)
+        
+        # Convert to numeric - this handles both "1234.56" and plain numbers
+        channel_spend["ad_spend"] = pd.to_numeric(channel_spend["ad_spend"], errors="coerce")
+        
+        # Fill NaN with 0 (for any conversion errors or empty cells)
+        channel_spend["ad_spend"] = channel_spend["ad_spend"].fillna(0)
         
         # Check for conversion issues
-        conversion_errors = (channel_spend["ad_spend"] == 0).sum()
-        if conversion_errors > 0:
-            st.sidebar.info(f"ℹ️ {conversion_errors} rows with zero/invalid ad_spend values")
+        zero_values = (channel_spend["ad_spend"] == 0).sum()
+        total_values = len(channel_spend)
+        if zero_values > 0:
+            st.sidebar.info(f"ℹ️ Ad Spend: {total_values - zero_values:,} non-zero / {total_values:,} total rows")
     else:
         st.error("⚠️ 'ad_spend' column not found after normalization!")
         st.info(f"Available columns: {', '.join(channel_spend.columns)}")
@@ -432,10 +444,10 @@ if len(channel_spend) > 0:
         channel_spend = pd.DataFrame(columns=["date", "channel", "ad_spend"])
     
     # Show total spend data info in sidebar
-    if len(channel_spend) > 0:
+    if len(channel_spend) > 0 and "ad_spend" in channel_spend.columns:
         total_spend_all = channel_spend["ad_spend"].sum()
         st.sidebar.info(f"📊 Total Spend Records: {len(channel_spend):,} rows")
-        st.sidebar.success(f"💰 Total Ad Spend (All): ${total_spend_all:,.2f}")
+        st.sidebar.success(f"💰 Total Ad Spend (All Data): ${total_spend_all:,.2f}")
 
 # ---------------- SIDEBAR FILTERS ----------------
 st.sidebar.header("📅 Date Range")
