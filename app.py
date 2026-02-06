@@ -129,14 +129,42 @@ def multiselect_with_all(label, options):
 # ---------------- LOAD DATA ----------------
 @st.cache_data(show_spinner=True, ttl=300)
 def load_data():
+    """Load data from both spreadsheets using the same credentials."""
+    all_data = {}
+    
+    credentials_file = "secret-envoy-486405-j3-03851d061385.json"
+    
+    # Spreadsheet 1: USA - DB for Marketplace Dashboard
     try:
-        return load_all_sheets(
-            "secret-envoy-486405-j3-03851d061385.json",
+        data1 = load_all_sheets(
+            credentials_file,
             "USA - DB for Marketplace Dashboard"
         )
+        if data1:
+            for sheet_name, df in data1.items():
+                all_data[f"USA_{sheet_name}"] = df
+            st.success(f"✅ Loaded {len(data1)} sheets from 'USA - DB for Marketplace Dashboard'")
     except Exception as e:
-        st.error(f"Error loading data: {str(e)}")
+        st.warning(f"⚠️ Could not load 'USA - DB for Marketplace Dashboard': {str(e)}")
+    
+    # Spreadsheet 2: IB Marketplace (update the name below to match your actual spreadsheet name)
+    try:
+        data2 = load_all_sheets(
+            credentials_file,
+            "IB - Database for Marketplace Dashboard"  # ← UPDATE THIS to your actual IB marketplace spreadsheet name
+        )
+        if data2:
+            for sheet_name, df in data2.items():
+                all_data[f"IB_{sheet_name}"] = df
+            st.success(f"✅ Loaded {len(data2)} sheets from 'IB Marketplace'")
+    except Exception as e:
+        st.warning(f"⚠️ Could not load 'IB Marketplace': {str(e)}")
+    
+    if not all_data:
+        st.error("❌ No data loaded from any spreadsheet. Please check your configuration.")
         return None
+    
+    return all_data
 
 # ---------------- HEADER ----------------
 # Check if we should use mobile layout (using session state as workaround)
@@ -166,19 +194,29 @@ if data is None:
     st.stop()
 
 # ---------------- GET REQUIRED SHEETS ----------------
-# Try to find the sales data sheet (handle different possible names)
-sales = None
-sales_sheet_names = ["Sales_data", "Sales Data", "sales_data", "sales data", "Sales"]
+# Collect all sales data from both spreadsheets
+sales_sheets = []
+sales_sheet_keywords = ["sales_data", "sales data", "sales"]
 
-for sheet_name in sales_sheet_names:
-    if sheet_name in data:
-        sales = data[sheet_name].copy()
-        break
+for sheet_name, df in data.items():
+    sheet_lower = sheet_name.lower()
+    # Check if this is a sales sheet
+    if any(keyword in sheet_lower for keyword in sales_sheet_keywords):
+        if not df.empty and len(df) > 0:
+            sales_sheets.append(df.copy())
+            st.info(f"📊 Loading sales data from: {sheet_name}")
 
-if sales is None:
-    st.error("❌ Sales data sheet not found")
+if not sales_sheets:
+    st.error("❌ No sales data sheets found")
     st.info(f"Available sheets: {', '.join(data.keys())}")
-    st.info("Looking for one of: " + ", ".join(sales_sheet_names))
+    st.stop()
+
+# Combine all sales data
+try:
+    sales = pd.concat(sales_sheets, ignore_index=True)
+    st.success(f"✅ Combined {len(sales_sheets)} sales data sheet(s) with {len(sales):,} total rows")
+except Exception as e:
+    st.error(f"❌ Error combining sales data: {str(e)}")
     st.stop()
 
 # Load all spend sheets (including IB marketplace)
@@ -426,7 +464,7 @@ spend_change = ((total_spend - ly_spend) / ly_spend * 100) if ly_spend > 0 else 
 net_change = ((net_earning - ly_net_earning) / ly_net_earning * 100) if ly_net_earning != 0 else 0
 
 st.markdown("### 📈 Key Metrics")
-col1, col2, col3, col4, col5, col6 = st.columns(6)
+col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
 
 with col1:
     kpi("Revenue", f"${total_rev:,.0f}", rev_change)
@@ -437,8 +475,10 @@ with col3:
 with col4:
     kpi("Ad Spend", f"${total_spend:,.0f}", spend_change)
 with col5:
-    kpi("Net Earning", f"${net_earning:,.0f}", net_change)
+    kpi("Commission", f"${total_commission:,.0f}")
 with col6:
+    kpi("Net Earning", f"${net_earning:,.0f}", net_change)
+with col7:
     kpi("ACOS", f"{acos:.1f}%")
 
 # ---------------- YoY COMPARISON CHART ----------------
