@@ -417,7 +417,7 @@ with c1:
     st.title("⚡ Executive Command Center")
     st.caption(f"Analyzing performance from **{start_date.strftime('%b %d, %Y')}** to **{end_date.strftime('%b %d, %Y')}** • {comparison_period}")
 with c2:
-    if st.button("🔄 Refresh Data", use_container_width=True):
+    if st.button("🔄 Refresh Data", key="refresh_btn"):
         st.cache_data.clear()
         st.rerun()
 
@@ -507,7 +507,7 @@ with tabs[0]:
             margin=dict(l=0, r=80, t=60, b=0),
             height=420
         )
-        st.plotly_chart(fig_multi, use_container_width=True)
+        st.plotly_chart(fig_multi, config={'displayModeBar': False})
     
     with col2:
         st.markdown("**AOV Trend Analysis**")
@@ -537,7 +537,7 @@ with tabs[0]:
             margin=dict(l=0, r=0, t=40, b=0),
             height=420
         )
-        st.plotly_chart(fig_aov, use_container_width=True)
+        st.plotly_chart(fig_aov, config={'displayModeBar': False})
     
     # Commission Over Time
     st.markdown("**Commission & Spend Comparison**")
@@ -566,7 +566,7 @@ with tabs[0]:
             margin=dict(l=0, r=0, t=40, b=0),
             height=350
         )
-        st.plotly_chart(fig_costs, use_container_width=True)
+        st.plotly_chart(fig_costs, config={'displayModeBar': False})
 
 # TAB 2: Channel Analysis
 with tabs[1]:
@@ -577,9 +577,13 @@ with tabs[1]:
         
         ch_rev = df_s.groupby("channel").agg({
             "revenue": "sum",
-            "orders": "sum",
-            "selling_commission": "sum" if "selling_commission" in df_s.columns else "count"
+            "orders": "sum"
         }).reset_index()
+        
+        if "selling_commission" in df_s.columns:
+            ch_comm = df_s.groupby("channel")["selling_commission"].sum().reset_index()
+            ch_rev = pd.merge(ch_rev, ch_comm, on="channel", how="left").fillna(0)
+        
         ch_sp = df_sp.groupby("channel")["spend"].sum().reset_index()
         ch_matrix = pd.merge(ch_rev, ch_sp, on="channel", how="outer").fillna(0)
         ch_matrix["roas"] = ch_matrix.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
@@ -605,7 +609,7 @@ with tabs[1]:
             height=500,
             margin=dict(l=0, r=0, t=40, b=0)
         )
-        st.plotly_chart(fig_bubble, use_container_width=True)
+        st.plotly_chart(fig_bubble, config={'displayModeBar': False})
     
     with col2:
         st.markdown("**Channel Revenue Share**")
@@ -623,12 +627,13 @@ with tabs[1]:
             height=250,
             margin=dict(l=0, r=0, t=0, b=0)
         )
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_pie, config={'displayModeBar': False})
         
         st.markdown("**Channel Efficiency Ranking**")
         
-        ch_rank = ch_matrix.sort_values("roas", ascending=False)[["channel", "roas", "acos"]].head(10)
-        ch_rank["acos"] = ch_rank.apply(lambda x: (ch_matrix[ch_matrix["channel"]==x["channel"]]["spend"].sum() / ch_matrix[ch_matrix["channel"]==x["channel"]]["revenue"].sum() * 100) if ch_matrix[ch_matrix["channel"]==x["channel"]]["revenue"].sum() > 0 else 0, axis=1)
+        # Fix: First create the dataframe with necessary columns, THEN calculate acos
+        ch_rank = ch_matrix.sort_values("roas", ascending=False)[["channel", "roas", "revenue", "spend"]].head(10).copy()
+        ch_rank["acos"] = ch_rank.apply(lambda x: (x["spend"] / x["revenue"] * 100) if x["revenue"] > 0 else 0, axis=1)
         
         fig_rank = go.Figure()
         fig_rank.add_trace(go.Bar(
@@ -652,7 +657,7 @@ with tabs[1]:
             margin=dict(l=0, r=0, t=20, b=0),
             height=250
         )
-        st.plotly_chart(fig_rank, use_container_width=True)
+        st.plotly_chart(fig_rank, config={'displayModeBar': False})
 
 # TAB 3: Product Insights
 with tabs[2]:
@@ -684,7 +689,7 @@ with tabs[2]:
                 height=450,
                 margin=dict(l=0, r=0, t=20, b=0)
             )
-            st.plotly_chart(fig_prod, use_container_width=True)
+            st.plotly_chart(fig_prod, config={'displayModeBar': False})
         
         with col2:
             st.markdown("**Product Performance Metrics**")
@@ -720,7 +725,7 @@ with tabs[2]:
                 margin=dict(l=0, r=0, t=20, b=0),
                 height=300
             )
-            st.plotly_chart(fig_tree, use_container_width=True)
+            st.plotly_chart(fig_tree, config={'displayModeBar': False})
     else:
         st.info("📦 Product-level data not available in the current dataset.")
 
@@ -754,7 +759,7 @@ with tabs[3]:
             margin=dict(l=0, r=0, t=40, b=0),
             height=450
         )
-        st.plotly_chart(fig_water, use_container_width=True)
+        st.plotly_chart(fig_water, config={'displayModeBar': False})
     
     with col2:
         st.markdown("**Cost Breakdown Analysis**")
@@ -784,7 +789,7 @@ with tabs[3]:
             margin=dict(l=0, r=0, t=40, b=0),
             annotations=[dict(text=f'${curr["Revenue"]/1000:.0f}k<br>Total', x=0.5, y=0.5, font_size=20, showarrow=False)]
         )
-        st.plotly_chart(fig_costs_pie, use_container_width=True)
+        st.plotly_chart(fig_costs_pie, config={'displayModeBar': False})
     
     # Profitability metrics table
     st.markdown("**Profitability Metrics Summary**")
@@ -803,7 +808,7 @@ with tabs[3]:
         ]
     })
     
-    st.dataframe(profit_metrics, use_container_width=True, hide_index=True)
+    st.dataframe(profit_metrics, hide_index=True)
 
 # TAB 5: Data Explorer
 with tabs[4]:
@@ -811,8 +816,8 @@ with tabs[4]:
     
     # Channel Performance Table
     tbl = ch_matrix.copy()
-    if "selling_commission" in df_s.columns:
-        tbl["commission"] = df_s.groupby("channel")["selling_commission"].sum().values
+    if "selling_commission" in ch_matrix.columns:
+        tbl["commission"] = ch_matrix["selling_commission"]
     else:
         tbl["commission"] = 0
     
@@ -820,11 +825,15 @@ with tabs[4]:
     tbl["net"] = (tbl["revenue"] * SAFE_MARGIN) - tbl["spend"] - tbl.get("commission", 0)
     tbl["profit_margin"] = tbl.apply(lambda x: (x["net"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
     
+    # Select columns to display
+    display_cols = ["channel", "revenue", "orders", "aov", "spend", "commission", "roas", "acos", "net", "profit_margin"]
+    display_tbl = tbl[[col for col in display_cols if col in tbl.columns]]
+    
     st.dataframe(
-        tbl,
+        display_tbl,
         column_config={
             "channel": st.column_config.TextColumn("Channel", width="medium"),
-            "revenue": st.column_config.ProgressColumn("Revenue", format="$%d", min_value=0, max_value=int(tbl["revenue"].max())),
+            "revenue": st.column_config.ProgressColumn("Revenue", format="$%d", min_value=0, max_value=int(display_tbl["revenue"].max()) if "revenue" in display_tbl.columns else 100),
             "orders": st.column_config.NumberColumn("Orders", format="%d"),
             "aov": st.column_config.NumberColumn("AOV", format="$%.2f"),
             "spend": st.column_config.NumberColumn("Ad Spend", format="$%d"),
@@ -835,7 +844,6 @@ with tabs[4]:
             "profit_margin": st.column_config.NumberColumn("Profit Margin", format="%.1f%%"),
         },
         hide_index=True,
-        use_container_width=True,
         height=400
     )
     
@@ -843,18 +851,18 @@ with tabs[4]:
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        csv = tbl.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Channel Report (CSV)", csv, "channel_performance.csv", "text/csv", use_container_width=True)
+        csv = display_tbl.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Download Channel Report (CSV)", csv, "channel_performance.csv", "text/csv", key="download_channel")
     
     with col2:
         if not df_s.empty:
             sales_csv = df_s.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Sales Data (CSV)", sales_csv, "sales_data.csv", "text/csv", use_container_width=True)
+            st.download_button("📥 Download Sales Data (CSV)", sales_csv, "sales_data.csv", "text/csv", key="download_sales")
     
     with col3:
         if not df_sp.empty:
             spend_csv = df_sp.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Spend Data (CSV)", spend_csv, "spend_data.csv", "text/csv", use_container_width=True)
+            st.download_button("📥 Download Spend Data (CSV)", spend_csv, "spend_data.csv", "text/csv", key="download_spend")
 
 # ---------------- FOOTER ----------------
 st.markdown("---")
