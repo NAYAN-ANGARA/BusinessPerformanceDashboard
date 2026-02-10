@@ -152,23 +152,41 @@ sales["type"] = sales.get("type", "Unknown")
 
 # ---------------- PROCESS SPEND ----------------
 if len(channel_spend) > 0:
-    # Find spend column
-    spend_col = next((c for c in ["ad_spend", "spend"] if c in channel_spend.columns), None)
-    if spend_col and spend_col != "ad_spend":
+    # Show what columns we have BEFORE normalization
+    st.sidebar.info(f"Spend columns before norm: {list(channel_spend.columns)}")
+    
+    # Find spend column - check BEFORE normalization for case sensitivity
+    spend_col = None
+    for col in channel_spend.columns:
+        col_lower = col.lower().strip()
+        if col_lower in ['ad_spend', 'spend', 'advertising_spend', 'ad spend']:
+            spend_col = col
+            st.sidebar.success(f"Found: '{col}'")
+            break
+    
+    # If found, copy to ad_spend BEFORE normalization
+    if spend_col:
         channel_spend["ad_spend"] = channel_spend[spend_col]
-    elif not spend_col:
-        channel_spend["ad_spend"] = 0
     
     # Date
-    date_col = next((c for c in ["date", "purchased_on"] if c in channel_spend.columns), None)
+    date_col = next((c for c in ["date", "Date", "purchased_on", "Purchased_on", "Purchased On"] if c in channel_spend.columns), None)
     if date_col:
         channel_spend["date"] = pd.to_datetime(channel_spend[date_col], errors="coerce")
         channel_spend = channel_spend.dropna(subset=["date"])
     
     # Ad spend - handle both $ and plain
     if "ad_spend" in channel_spend.columns:
+        # Show sample before conversion
+        st.sidebar.write("Sample ad_spend before:", channel_spend["ad_spend"].head(3).tolist())
+        
         channel_spend["ad_spend"] = channel_spend["ad_spend"].astype(str).str.replace('[$,₹£€]', '', regex=True)
         channel_spend["ad_spend"] = pd.to_numeric(channel_spend["ad_spend"], errors="coerce").fillna(0)
+        
+        # Show sample after conversion
+        st.sidebar.write("Sample ad_spend after:", channel_spend["ad_spend"].head(3).tolist())
+        st.sidebar.success(f"Total: ${channel_spend['ad_spend'].sum():,.2f}")
+    else:
+        st.sidebar.error("❌ No ad_spend column created!")
 
 # ---------------- SIDEBAR ----------------
 st.sidebar.header("📅 Date Range")
