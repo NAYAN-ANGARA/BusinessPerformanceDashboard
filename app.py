@@ -257,15 +257,15 @@ def load_and_process_data():
     sales["type"] = sales.get("type", "Unknown").astype(str).str.strip()
     
     # Add SKU information
-    if "parent_sku" in sales.columns:
-        sales["parent_sku"] = sales["parent_sku"].astype(str).str.strip()
+    if "Parent" in sales.columns:
+        sales["Parent"] = sales["Parent"].astype(str).str.strip()
     else:
-        sales["parent_sku"] = "Unknown"
+        sales["Parent"] = "Unknown"
     
-    if "child_sku" in sales.columns:
-        sales["child_sku"] = sales["child_sku"].astype(str).str.strip()
+    if "SKU" in sales.columns:
+        sales["SKU"] = sales["SKU"].astype(str).str.strip()
     else:
-        sales["child_sku"] = "Unknown"
+        sales["SKU"] = "Unknown"
     
     sales = sales.dropna(subset=["date"])
 
@@ -659,14 +659,14 @@ with tabs[1]:
 with tabs[2]:
     st.markdown('<div class="section-header">🏷️ SKU Performance Analysis</div>', unsafe_allow_html=True)
     
-    if "parent_sku" in df_s.columns and df_s["parent_sku"].nunique() > 1:
+    if "Parent" in df_s.columns and df_s["Parent"].nunique() > 1:
         # Calculate Parent SKU Performance
-        parent_sku_perf = df_s.groupby("parent_sku").agg({
+        Parent_perf = df_s.groupby("Parent").agg({
             "revenue": "sum",
             "orders": "sum"
         }).reset_index()
-        parent_sku_perf["aov"] = parent_sku_perf["revenue"] / parent_sku_perf["orders"]
-        parent_sku_perf = parent_sku_perf.sort_values("revenue", ascending=False).head(10)
+        Parent_perf["aov"] = Parent_perf["revenue"] / Parent_perf["orders"]
+        Parent_perf = Parent_perf.sort_values("revenue", ascending=False).head(10)
         
         col1, col2 = st.columns([2, 1])
         
@@ -674,13 +674,13 @@ with tabs[2]:
             st.markdown("**Top 10 Parent SKUs by Revenue**")
             
             fig_sku_bar = px.bar(
-                parent_sku_perf, 
+                Parent_perf, 
                 x="revenue", 
-                y="parent_sku",
+                y="Parent",
                 orientation='h',
                 color="orders",
                 color_continuous_scale="Blues",
-                labels={"revenue": "Revenue ($)", "parent_sku": "Parent SKU", "orders": "Orders"}
+                labels={"revenue": "Revenue ($)", "Parent": "Parent SKU", "orders": "Orders"}
             )
             
             fig_sku_bar.update_layout(
@@ -697,8 +697,8 @@ with tabs[2]:
             st.markdown("**SKU Revenue Distribution**")
             
             fig_sku_tree = px.treemap(
-                parent_sku_perf, 
-                path=['parent_sku'], 
+                Parent_perf, 
+                path=['Parent'], 
                 values='revenue',
                 color='aov',
                 color_continuous_scale='Viridis',
@@ -717,19 +717,19 @@ with tabs[2]:
         st.markdown("---")
         st.markdown("**📦 Detailed SKU Breakdown (Click to expand for Child SKUs)**")
         
-        for idx, parent_row in parent_sku_perf.iterrows():
-            parent = parent_row['parent_sku']
+        for idx, parent_row in Parent_perf.iterrows():
+            parent = parent_row['Parent']
             
             # Get child SKUs for this parent
-            if "child_sku" in df_s.columns:
-                child_data = df_s[df_s["parent_sku"] == parent].groupby("child_sku").agg({
+            if "SKU" in df_s.columns:
+                child_data = df_s[df_s["Parent"] == parent].groupby("SKU").agg({
                     "revenue": "sum",
                     "orders": "sum"
                 }).reset_index()
                 child_data["aov"] = child_data["revenue"] / child_data["orders"]
                 child_data = child_data.sort_values("revenue", ascending=False)
                 
-                has_children = len(child_data) > 0 and child_data["child_sku"].iloc[0] != "Unknown"
+                has_children = len(child_data) > 0 and child_data["SKU"].iloc[0] != "Unknown"
             else:
                 has_children = False
                 child_data = pd.DataFrame()
@@ -764,7 +764,7 @@ with tabs[2]:
                     st.dataframe(
                         child_display,
                         column_config={
-                            "child_sku": st.column_config.TextColumn("Child SKU", width="medium"),
+                            "SKU": st.column_config.TextColumn("SKU", width="medium"),
                             "revenue": st.column_config.TextColumn("Revenue", width="small"),
                             "orders": st.column_config.TextColumn("Orders", width="small"),
                             "aov": st.column_config.TextColumn("AOV", width="small"),
@@ -778,7 +778,7 @@ with tabs[2]:
                         fig_child = px.pie(
                             child_data, 
                             values="revenue", 
-                            names="child_sku",
+                            names="SKU",
                             title="Revenue Distribution by Child SKU",
                             color_discrete_sequence=px.colors.sequential.Plasma
                         )
@@ -793,7 +793,7 @@ with tabs[2]:
                     st.info("ℹ️ No child SKU data available for this parent SKU")
         
     else:
-        st.info("📦 SKU data not available in the current dataset. Please ensure 'parent_sku' column exists in your data.")
+        st.info("📦 SKU data not available in the current dataset. Please ensure 'Parent' column exists in your data.")
 
 # TAB 4: Profitability Deep Dive
 with tabs[3]:
