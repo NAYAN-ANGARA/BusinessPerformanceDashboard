@@ -234,15 +234,31 @@ def load_and_process_data():
     # Process Sales
     sales_list = []
     for name, df in all_dfs.items():
+        # Check for sales sheets (usually named 'Sales_data')
         if 'sales' in name.lower() and not df.empty:
+            df = df.copy()
+            
+            # Normalize columns map
+            col_map = {}
+            for col in df.columns:
+                clean_col = col.strip().lower().replace(' ', '_').replace('-', '_')
+                col_map[col] = clean_col
+                
+                # Explicitly map SKU/Parent columns regardless of case
+                if clean_col == 'parent': col_map[col] = 'Parent'
+                elif clean_col == 'sku': col_map[col] = 'SKU'
+                
+            df = df.rename(columns=col_map)
             sales_list.append(df)
             
     if not sales_list: return None, None, "No Sales sheets found."
     
     sales = pd.concat(sales_list, ignore_index=True)
-    sales.columns = sales.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('-', '_')
     
-    # Convert Money
+    # Ensure all required lowercase columns exist
+    sales.columns = [c if c in ['Parent', 'SKU'] else c.lower() for c in sales.columns]
+    
+    # Convert Money & Numbers
     for col in ["discounted_price", "selling_commission"]:
         if col in sales.columns:
             sales[col] = pd.to_numeric(
@@ -256,16 +272,16 @@ def load_and_process_data():
     sales["channel"] = sales.get("channel", "Unknown").astype(str).str.strip()
     sales["type"] = sales.get("type", "Unknown").astype(str).str.strip()
     
-    # Add SKU information
-    if "Parent" in sales.columns:
-        sales["Parent"] = sales["Parent"].astype(str).str.strip()
-    else:
+    # Handle SKU information (Fill missing if not found)
+    if "Parent" not in sales.columns:
         sales["Parent"] = "Unknown"
-    
-    if "SKU" in sales.columns:
-        sales["SKU"] = sales["SKU"].astype(str).str.strip()
     else:
+        sales["Parent"] = sales["Parent"].astype(str).str.strip()
+        
+    if "SKU" not in sales.columns:
         sales["SKU"] = "Unknown"
+    else:
+        sales["SKU"] = sales["SKU"].astype(str).str.strip()
     
     sales = sales.dropna(subset=["date"])
 
