@@ -132,17 +132,6 @@ st.markdown("""
         border-bottom: 2px solid rgba(255, 255, 255, 0.1);
     }
     
-    /* Info Cards */
-    .info-card {
-        background: rgba(59, 130, 246, 0.1);
-        border-left: 4px solid #3b82f6;
-        padding: 16px;
-        border-radius: 8px;
-        margin: 16px 0;
-        color: #e0e7ff;
-        font-size: 14px;
-    }
-    
     /* Tabs Enhancement */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
@@ -180,12 +169,15 @@ st.markdown("""
         display: none !important;
     }
     
-    /* Chart Container */
-    .chart-container {
-        background: rgba(30, 32, 40, 0.4);
-        border-radius: 12px;
-        padding: 16px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
+    /* Expander Styling */
+    .streamlit-expanderHeader {
+        background: rgba(30, 32, 40, 0.6);
+        border-radius: 8px;
+        font-weight: 600;
+    }
+    
+    .streamlit-expanderHeader:hover {
+        background: rgba(42, 45, 58, 0.8);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -264,11 +256,16 @@ def load_and_process_data():
     sales["channel"] = sales.get("channel", "Unknown").astype(str).str.strip()
     sales["type"] = sales.get("type", "Unknown").astype(str).str.strip()
     
-    # Add product info if available
-    if "product_name" in sales.columns:
-        sales["product"] = sales["product_name"].astype(str).str.strip()
+    # Add SKU information
+    if "parent_sku" in sales.columns:
+        sales["parent_sku"] = sales["parent_sku"].astype(str).str.strip()
     else:
-        sales["product"] = "Unknown"
+        sales["parent_sku"] = "Unknown"
+    
+    if "child_sku" in sales.columns:
+        sales["child_sku"] = sales["child_sku"].astype(str).str.strip()
+    else:
+        sales["child_sku"] = "Unknown"
     
     sales = sales.dropna(subset=["date"])
 
@@ -453,7 +450,7 @@ st.markdown("")
 tabs = st.tabs([
     "📈 Performance Trends", 
     "🛒 Channel Analysis", 
-    "🎁 Product Insights",
+    "🏷️ SKU Analysis",
     "📊 Profitability Deep Dive",
     "📋 Data Explorer"
 ])
@@ -473,7 +470,6 @@ with tabs[0]:
         daily_spend = df_sp.groupby(pd.Grouper(key="date", freq="D"))["spend"].sum().reset_index()
         daily_trend = pd.merge(daily_rev, daily_spend, on="date", how="outer").fillna(0)
         daily_trend["roas"] = daily_trend.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
-        daily_trend["aov"] = daily_trend.apply(lambda x: x["revenue"]/x["orders"] if x["orders"]>0 else 0, axis=1)
         
         fig_multi = go.Figure()
         
@@ -541,32 +537,33 @@ with tabs[0]:
     
     # Commission Over Time
     st.markdown("**Commission & Spend Comparison**")
-    daily_comm = df_s.groupby(pd.Grouper(key="date", freq="D"))["selling_commission"].sum().reset_index() if "selling_commission" in df_s.columns else pd.DataFrame()
-    
-    if not daily_comm.empty:
-        daily_costs = pd.merge(daily_spend, daily_comm, on="date", how="outer").fillna(0)
+    if "selling_commission" in df_s.columns:
+        daily_comm = df_s.groupby(pd.Grouper(key="date", freq="D"))["selling_commission"].sum().reset_index()
         
-        fig_costs = go.Figure()
-        fig_costs.add_trace(go.Bar(
-            x=daily_costs["date"], y=daily_costs["spend"],
-            name="Ad Spend", marker_color="#f97316"
-        ))
-        fig_costs.add_trace(go.Bar(
-            x=daily_costs["date"], y=daily_costs["selling_commission"],
-            name="Commission", marker_color="#ec4899"
-        ))
-        
-        fig_costs.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            barmode='stack',
-            yaxis=dict(title="Cost ($)", showgrid=True, gridcolor="#2d303e"),
-            legend=dict(orientation="h", y=1.1, x=0),
-            margin=dict(l=0, r=0, t=40, b=0),
-            height=350
-        )
-        st.plotly_chart(fig_costs, config={'displayModeBar': False})
+        if not daily_comm.empty:
+            daily_costs = pd.merge(daily_spend, daily_comm, on="date", how="outer").fillna(0)
+            
+            fig_costs = go.Figure()
+            fig_costs.add_trace(go.Bar(
+                x=daily_costs["date"], y=daily_costs["spend"],
+                name="Ad Spend", marker_color="#f97316"
+            ))
+            fig_costs.add_trace(go.Bar(
+                x=daily_costs["date"], y=daily_costs["selling_commission"],
+                name="Commission", marker_color="#ec4899"
+            ))
+            
+            fig_costs.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                barmode='stack',
+                yaxis=dict(title="Cost ($)", showgrid=True, gridcolor="#2d303e"),
+                legend=dict(orientation="h", y=1.1, x=0),
+                margin=dict(l=0, r=0, t=40, b=0),
+                height=350
+            )
+            st.plotly_chart(fig_costs, config={'displayModeBar': False})
 
 # TAB 2: Channel Analysis
 with tabs[1]:
@@ -631,7 +628,6 @@ with tabs[1]:
         
         st.markdown("**Channel Efficiency Ranking**")
         
-        # Fix: First create the dataframe with necessary columns, THEN calculate acos
         ch_rank = ch_matrix.sort_values("roas", ascending=False)[["channel", "roas", "revenue", "spend"]].head(10).copy()
         ch_rank["acos"] = ch_rank.apply(lambda x: (x["spend"] / x["revenue"] * 100) if x["revenue"] > 0 else 0, axis=1)
         
@@ -659,75 +655,145 @@ with tabs[1]:
         )
         st.plotly_chart(fig_rank, config={'displayModeBar': False})
 
-# TAB 3: Product Insights
+# TAB 3: SKU Analysis
 with tabs[2]:
-    if "product" in df_s.columns and df_s["product"].nunique() > 1:
-        col1, col2 = st.columns(2)
+    st.markdown('<div class="section-header">🏷️ SKU Performance Analysis</div>', unsafe_allow_html=True)
+    
+    if "parent_sku" in df_s.columns and df_s["parent_sku"].nunique() > 1:
+        # Calculate Parent SKU Performance
+        parent_sku_perf = df_s.groupby("parent_sku").agg({
+            "revenue": "sum",
+            "orders": "sum"
+        }).reset_index()
+        parent_sku_perf["aov"] = parent_sku_perf["revenue"] / parent_sku_perf["orders"]
+        parent_sku_perf = parent_sku_perf.sort_values("revenue", ascending=False).head(10)
+        
+        col1, col2 = st.columns([2, 1])
         
         with col1:
-            st.markdown("**Top 10 Products by Revenue**")
+            st.markdown("**Top 10 Parent SKUs by Revenue**")
             
-            prod_perf = df_s.groupby("product").agg({
-                "revenue": "sum",
-                "orders": "sum"
-            }).reset_index()
-            prod_perf["aov"] = prod_perf["revenue"] / prod_perf["orders"]
-            prod_perf = prod_perf.sort_values("revenue", ascending=False).head(10)
-            
-            fig_prod = px.bar(
-                prod_perf, x="revenue", y="product",
+            fig_sku_bar = px.bar(
+                parent_sku_perf, 
+                x="revenue", 
+                y="parent_sku",
                 orientation='h',
-                color="aov",
+                color="orders",
                 color_continuous_scale="Blues",
-                labels={"revenue": "Revenue ($)", "product": "Product", "aov": "AOV ($)"}
+                labels={"revenue": "Revenue ($)", "parent_sku": "Parent SKU", "orders": "Orders"}
             )
             
-            fig_prod.update_layout(
+            fig_sku_bar.update_layout(
                 template="plotly_dark",
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
                 height=450,
-                margin=dict(l=0, r=0, t=20, b=0)
+                margin=dict(l=0, r=0, t=20, b=0),
+                yaxis=dict(tickmode='linear')
             )
-            st.plotly_chart(fig_prod, config={'displayModeBar': False})
+            st.plotly_chart(fig_sku_bar, config={'displayModeBar': False})
         
         with col2:
-            st.markdown("**Product Performance Metrics**")
+            st.markdown("**SKU Revenue Distribution**")
             
-            top_products = prod_perf.head(5)
-            
-            for idx, row in top_products.iterrows():
-                with st.container():
-                    st.markdown(f"""
-                    <div style="background: rgba(30, 32, 40, 0.5); padding: 12px; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid #3b82f6;">
-                        <div style="font-weight: 600; color: #e5e7eb; margin-bottom: 8px;">{row['product'][:40]}...</div>
-                        <div style="display: flex; justify-content: space-between; font-size: 13px;">
-                            <span style="color: #9ca3af;">Revenue: <strong style="color: #3b82f6;">${row['revenue']:,.0f}</strong></span>
-                            <span style="color: #9ca3af;">Orders: <strong style="color: #10b981;">{row['orders']:,.0f}</strong></span>
-                            <span style="color: #9ca3af;">AOV: <strong style="color: #8b5cf6;">${row['aov']:,.2f}</strong></span>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            st.markdown("**Revenue Distribution**")
-            
-            fig_tree = px.treemap(
-                prod_perf.head(15), 
-                path=['product'], 
+            fig_sku_tree = px.treemap(
+                parent_sku_perf, 
+                path=['parent_sku'], 
                 values='revenue',
                 color='aov',
-                color_continuous_scale='Viridis'
+                color_continuous_scale='Viridis',
+                labels={"revenue": "Revenue", "aov": "AOV"}
             )
             
-            fig_tree.update_layout(
+            fig_sku_tree.update_layout(
                 template="plotly_dark",
                 paper_bgcolor="rgba(0,0,0,0)",
                 margin=dict(l=0, r=0, t=20, b=0),
-                height=300
+                height=450
             )
-            st.plotly_chart(fig_tree, config={'displayModeBar': False})
+            st.plotly_chart(fig_sku_tree, config={'displayModeBar': False})
+        
+        # Detailed SKU Cards with Child SKUs
+        st.markdown("---")
+        st.markdown("**📦 Detailed SKU Breakdown (Click to expand for Child SKUs)**")
+        
+        for idx, parent_row in parent_sku_perf.iterrows():
+            parent = parent_row['parent_sku']
+            
+            # Get child SKUs for this parent
+            if "child_sku" in df_s.columns:
+                child_data = df_s[df_s["parent_sku"] == parent].groupby("child_sku").agg({
+                    "revenue": "sum",
+                    "orders": "sum"
+                }).reset_index()
+                child_data["aov"] = child_data["revenue"] / child_data["orders"]
+                child_data = child_data.sort_values("revenue", ascending=False)
+                
+                has_children = len(child_data) > 0 and child_data["child_sku"].iloc[0] != "Unknown"
+            else:
+                has_children = False
+                child_data = pd.DataFrame()
+            
+            # Create expander for each parent SKU
+            with st.expander(f"🏷️ {parent} - ${parent_row['revenue']:,.0f} Revenue", expanded=False):
+                # Parent SKU metrics
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Revenue", f"${parent_row['revenue']:,.0f}")
+                with col2:
+                    st.metric("Orders", f"{parent_row['orders']:,.0f}")
+                with col3:
+                    st.metric("AOV", f"${parent_row['aov']:,.2f}")
+                with col4:
+                    if has_children:
+                        st.metric("Child SKUs", f"{len(child_data)}")
+                    else:
+                        st.metric("Child SKUs", "N/A")
+                
+                # Show child SKUs if available
+                if has_children:
+                    st.markdown("---")
+                    st.markdown("**Child SKUs Performance:**")
+                    
+                    # Create a nice table for child SKUs
+                    child_display = child_data.copy()
+                    child_display["revenue"] = child_display["revenue"].apply(lambda x: f"${x:,.0f}")
+                    child_display["orders"] = child_display["orders"].apply(lambda x: f"{x:,.0f}")
+                    child_display["aov"] = child_display["aov"].apply(lambda x: f"${x:,.2f}")
+                    
+                    st.dataframe(
+                        child_display,
+                        column_config={
+                            "child_sku": st.column_config.TextColumn("Child SKU", width="medium"),
+                            "revenue": st.column_config.TextColumn("Revenue", width="small"),
+                            "orders": st.column_config.TextColumn("Orders", width="small"),
+                            "aov": st.column_config.TextColumn("AOV", width="small"),
+                        },
+                        hide_index=True,
+                        height=min(300, 50 + len(child_display) * 35)
+                    )
+                    
+                    # Visual breakdown
+                    if len(child_data) > 1:
+                        fig_child = px.pie(
+                            child_data, 
+                            values="revenue", 
+                            names="child_sku",
+                            title="Revenue Distribution by Child SKU",
+                            color_discrete_sequence=px.colors.sequential.Plasma
+                        )
+                        fig_child.update_layout(
+                            template="plotly_dark",
+                            paper_bgcolor="rgba(0,0,0,0)",
+                            height=300,
+                            margin=dict(l=0, r=0, t=40, b=0)
+                        )
+                        st.plotly_chart(fig_child, config={'displayModeBar': False})
+                else:
+                    st.info("ℹ️ No child SKU data available for this parent SKU")
+        
     else:
-        st.info("📦 Product-level data not available in the current dataset.")
+        st.info("📦 SKU data not available in the current dataset. Please ensure 'parent_sku' column exists in your data.")
 
 # TAB 4: Profitability Deep Dive
 with tabs[3]:
