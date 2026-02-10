@@ -15,7 +15,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-
 # Add mobile viewport meta tag for proper scaling
 st.markdown("""
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -176,6 +175,9 @@ except Exception as e:
 spend_sheets = []
 spend_sheet_info = []
 
+st.write("### 🔍 DEBUG: Sheet Detection")
+st.write("**All available sheets:**", sorted(list(data.keys())))
+
 # FIXED: Better detection for spend sheets
 for sheet_name in data.keys():
     sheet_lower = sheet_name.lower()
@@ -185,22 +187,28 @@ for sheet_name in data.keys():
         if 'channel_spend_data' in sheet_lower:
             df = data[sheet_name].copy()
             if not df.empty and len(df) > 0:
+                st.success(f"✓ Loading {sheet_name}: {len(df)} rows, columns: {list(df.columns)[:5]}")
                 spend_sheets.append(df)
                 spend_sheet_info.append({'name': sheet_name, 'rows': len(df), 'columns': list(df.columns)})
     
-    # For IB: Look for spend or marketplace sheets
-    elif 'ib' in sheet_lower or 'marketplace' in sheet_lower:
+    # For IB: Look for spend or marketplace sheets  
+    elif 'ib' in sheet_lower:
         if any(keyword in sheet_lower for keyword in ['spend', 'channel_spend']):
             df = data[sheet_name].copy()
             if not df.empty and len(df) > 0:
+                st.success(f"✓ Loading {sheet_name}: {len(df)} rows, columns: {list(df.columns)[:5]}")
                 spend_sheets.append(df)
                 spend_sheet_info.append({'name': sheet_name, 'rows': len(df), 'columns': list(df.columns)})
+
+st.write(f"**Total spend sheets loaded:** {len(spend_sheets)}")
 
 # Combine spend sheets
 if spend_sheets:
     channel_spend = pd.concat(spend_sheets, ignore_index=True)
+    st.write(f"**Combined spend data:** {len(channel_spend):,} rows")
 else:
     channel_spend = pd.DataFrame(columns=["date", "channel", "spend"])
+    st.error("❌ No spend sheets were loaded!")
 
 # ---------------- NORMALIZE COLUMNS ----------------
 def normalize_columns(df):
@@ -228,19 +236,32 @@ if "channel" in sales.columns:
 
 # Normalize spend data
 if len(channel_spend) > 0:
+    st.write("### 🔍 DEBUG: Before Normalization")
+    st.write(f"Columns before: {list(channel_spend.columns)}")
+    
     channel_spend = normalize_columns(channel_spend)
+    
+    st.write(f"Columns after normalization: {list(channel_spend.columns)}")
     
     # Find spend column (handles different naming)
     spend_col = None
     for col in ["ad_spend", "spend", "advertising_spend", "cost"]:
         if col in channel_spend.columns:
             spend_col = col
+            st.success(f"✓ Found spend column: '{col}'")
             break
     
     if spend_col and spend_col != "ad_spend":
         channel_spend["ad_spend"] = channel_spend[spend_col]
+        st.info(f"Renamed '{spend_col}' to 'ad_spend'")
     elif not spend_col:
+        st.error("❌ No spend column found!")
+        st.write("Available columns:", list(channel_spend.columns))
         channel_spend["ad_spend"] = 0
+    
+    # Show sample of spend data
+    st.write("### 📊 Sample Spend Data (first 5 rows)")
+    st.dataframe(channel_spend.head())
     
     # Clean channel names in spend
     if "channel" in channel_spend.columns:
@@ -297,19 +318,28 @@ if "type" not in sales.columns:
 
 # ---------------- SPEND DATA TYPE CASTING ----------------
 if len(channel_spend) > 0:
+    st.write("### 🔍 DEBUG: Processing Spend Data")
+    
     # Handle date column
     date_col = None
     for col in ["date", "purchased_on"]:
         if col in channel_spend.columns:
             date_col = col
+            st.info(f"Using date column: '{col}'")
             break
     
     if date_col:
         channel_spend["date"] = pd.to_datetime(channel_spend[date_col], format="mixed", errors="coerce")
+        invalid_dates = channel_spend["date"].isna().sum()
         channel_spend = channel_spend.dropna(subset=["date"])
+        if invalid_dates > 0:
+            st.warning(f"Removed {invalid_dates} rows with invalid dates")
     
     # Handle ad_spend - ROBUST conversion for both $ and plain numbers
     if "ad_spend" in channel_spend.columns:
+        st.write("Before conversion - sample ad_spend values:")
+        st.write(channel_spend["ad_spend"].head(10).tolist())
+        
         channel_spend["ad_spend"] = channel_spend["ad_spend"].astype(str)
         # Remove ALL currency symbols and formatting
         channel_spend["ad_spend"] = (
@@ -322,6 +352,13 @@ if len(channel_spend) > 0:
             .str.strip()
         )
         channel_spend["ad_spend"] = pd.to_numeric(channel_spend["ad_spend"], errors="coerce").fillna(0)
+        
+        st.write("After conversion - sample ad_spend values:")
+        st.write(channel_spend["ad_spend"].head(10).tolist())
+        
+        total_spend_check = channel_spend["ad_spend"].sum()
+        non_zero = (channel_spend["ad_spend"] > 0).sum()
+        st.success(f"✓ Ad Spend: {non_zero:,} non-zero rows, Total: ${total_spend_check:,.2f}")
 
 # ---------------- SIDEBAR FILTERS ----------------
 st.sidebar.header("📅 Date Range")
