@@ -179,6 +179,37 @@ st.markdown("""
     .streamlit-expanderHeader:hover {
         background: rgba(42, 45, 58, 0.8);
     }
+
+    /* RECOMMENDATION CARDS */
+    .rec-card {
+        background: rgba(30, 32, 40, 0.6);
+        border-left: 4px solid #3b82f6;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 12px;
+        transition: transform 0.2s;
+    }
+    .rec-card:hover {
+        transform: translateX(5px);
+        background: rgba(42, 45, 58, 0.8);
+    }
+    .rec-title {
+        font-weight: 700;
+        font-size: 16px;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .rec-body {
+        color: #9ca3af;
+        font-size: 14px;
+        margin-top: 4px;
+    }
+    .rec-high { border-left-color: #10b981; } /* Green - Scale */
+    .rec-warn { border-left-color: #f59e0b; } /* Orange - Optimize */
+    .rec-crit { border-left-color: #ef4444; } /* Red - Cut */
+    .rec-info { border-left-color: #3b82f6; } /* Blue - Info */
 </style>
 """, unsafe_allow_html=True)
 
@@ -417,6 +448,58 @@ def calc_metrics(sales, spend):
         "Net": net, "ROAS": roas, "ACOS": acos, "AOV": aov
     }
 
+def generate_insights(df_channel, current_metrics):
+    insights = []
+    
+    # 1. CHANNEL SCALING OPPORTUNITIES (High ROAS)
+    if 'roas' in df_channel.columns:
+        scale_ops = df_channel[df_channel['roas'] >= 3.0]
+        for _, row in scale_ops.iterrows():
+            insights.append({
+                "type": "scale",
+                "title": f"🚀 Scale Up: {row['channel']}",
+                "msg": f"ROAS is strong at {row['roas']:.2f}x. Consider increasing daily budget by 15-20% to maximize volume while maintaining profitability.",
+                "metric": f"{row['roas']:.2f}x ROAS"
+            })
+
+    # 2. BLEEDING CAMPAIGNS (Low ROAS / High Spend)
+    if 'roas' in df_channel.columns and 'spend' in df_channel.columns:
+        bleeding = df_channel[(df_channel['roas'] < 1.5) & (df_channel['spend'] > 500)]
+        for _, row in bleeding.iterrows():
+            insights.append({
+                "type": "crit",
+                "title": f"🛑 High Spend / Low Return: {row['channel']}",
+                "msg": f"This channel has spent ${row['spend']:,.0f} with only {row['roas']:.2f}x ROAS. Review search terms, pause bleeding keywords, or lower bids immediately.",
+                "metric": f"${row['spend']:,.0f} Spend"
+            })
+
+    # 3. PROFITABILITY WARNING
+    if current_metrics['Net'] < 0:
+        insights.append({
+            "type": "crit",
+            "title": "📉 Net Loss Alert",
+            "msg": "The business is currently operating at a net loss for the selected period. Prioritize cutting Ad Spend on channels with < 2.0 ROAS immediately.",
+            "metric": f"${current_metrics['Net']:,.0f}"
+        })
+    elif current_metrics['Revenue'] > 0 and (current_metrics['Net'] / current_metrics['Revenue']) < 0.10:
+        insights.append({
+            "type": "warn",
+            "title": "⚠️ Thin Margins",
+            "msg": "Net Profit margin is below 10%. Keep a close eye on COGS and Commission rates.",
+            "metric": f"{(current_metrics['Net']/current_metrics['Revenue']*100):.1f}% Margin"
+        })
+
+    # 4. AOV OPPORTUNITIES
+    if current_metrics['AOV'] > 0 and current_metrics['AOV'] < 50: # Example threshold
+        insights.append({
+            "type": "info",
+            "title": "📦 Bundle Opportunity",
+            "msg": "AOV is below $50. Consider creating 'Buy 2 Save 10%' bundles or adding post-purchase upsells to increase basket size.",
+            "metric": f"${current_metrics['AOV']:.2f} Avg"
+        })
+
+    return insights
+
 curr = calc_metrics(df_s, df_sp)
 prev = calc_metrics(df_s_ly, df_sp_ly)
 
@@ -464,6 +547,7 @@ with k8:
 # ---------------- UI: ENHANCED ANALYSIS TABS ----------------
 st.markdown("")
 tabs = st.tabs([
+    "🚀 Strategy & Recommendations",
     "📈 Performance Trends", 
     "🛒 Channel Analysis", 
     "🏷️ SKU Analysis",
@@ -471,8 +555,61 @@ tabs = st.tabs([
     "📋 Data Explorer"
 ])
 
-# TAB 1: Performance Trends
+# TAB 1: Strategy & Recommendations
 with tabs[0]:
+    st.markdown('<div class="section-header">🧠 AI Strategic Insights</div>', unsafe_allow_html=True)
+    
+    # Generate insights based on the Channel Matrix
+    ch_rev_rec = df_s.groupby("channel")["revenue"].sum().reset_index()
+    ch_sp_rec = df_sp.groupby("channel")["spend"].sum().reset_index()
+    ch_matrix_rec = pd.merge(ch_rev_rec, ch_sp_rec, on="channel", how="outer").fillna(0)
+    ch_matrix_rec["roas"] = ch_matrix_rec.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
+    
+    recommendations = generate_insights(ch_matrix_rec, curr)
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        if not recommendations:
+            st.info("✅ Business looks stable. No critical alerts found based on current thresholds.")
+        else:
+            for rec in recommendations:
+                # Map type to CSS class and icon
+                css_map = {
+                    "scale": ("rec-high", "📈"),
+                    "warn": ("rec-warn", "⚠️"),
+                    "crit": ("rec-crit", "🚨"),
+                    "info": ("rec-info", "💡")
+                }
+                style_class, icon = css_map.get(rec['type'], ("rec-info", "ℹ️"))
+                
+                st.markdown(f"""
+                <div class="rec-card {style_class}">
+                    <div class="rec-title">{icon} {rec['title']} <span style="margin-left:auto; font-size:12px; opacity:0.8; background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:10px;">{rec['metric']}</span></div>
+                    <div class="rec-body">{rec['msg']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("**🎯 Projected Outcome**")
+        st.caption("If you optimize based on these insights:")
+        
+        # Simple projection logic
+        potential_savings = ch_matrix_rec[ch_matrix_rec['roas'] < 1.5]['spend'].sum() * 0.5 # Assume we cut 50% of bad spend
+        potential_gain = ch_matrix_rec[ch_matrix_rec['roas'] >= 3.0]['revenue'].sum() * 0.2 # Assume 20% growth on good channels
+        
+        new_net = curr['Net'] + potential_savings + (potential_gain * 0.2) # Assuming 20% margin on new rev
+        
+        st.metric("Potential Wasted Ad Spend", f"${potential_savings:,.0f}", help="Spend on channels with < 1.5 ROAS")
+        st.metric("Revenue Growth Opportunity", f"${potential_gain:,.0f}", help="Projected lift from scaling high ROAS channels")
+        
+        st.markdown("---")
+        st.markdown(f"**Projected Net Profit:**")
+        st.markdown(f"<h2 style='color:#10b981'>${new_net:,.0f}</h2>", unsafe_allow_html=True)
+        st.caption(f"Vs Current: ${curr['Net']:,.0f}")
+
+# TAB 2: Performance Trends
+with tabs[1]:
     col1, col2 = st.columns([2, 1])
     
     with col1:
@@ -581,8 +718,8 @@ with tabs[0]:
             )
             st.plotly_chart(fig_costs, config={'displayModeBar': False})
 
-# TAB 2: Channel Analysis
-with tabs[1]:
+# TAB 3: Channel Analysis
+with tabs[2]:
     col1, col2 = st.columns([3, 2])
     
     with col1:
@@ -671,8 +808,8 @@ with tabs[1]:
         )
         st.plotly_chart(fig_rank, config={'displayModeBar': False})
 
-# TAB 3: SKU Analysis
-with tabs[2]:
+# TAB 4: SKU Analysis
+with tabs[3]:
     st.markdown('<div class="section-header">🏷️ SKU Performance Analysis</div>', unsafe_allow_html=True)
     
     if "Parent" in df_s.columns and df_s["Parent"].nunique() > 1:
@@ -811,8 +948,8 @@ with tabs[2]:
     else:
         st.info("📦 SKU data not available in the current dataset. Please ensure 'Parent' column exists in your data.")
 
-# TAB 4: Profitability Deep Dive
-with tabs[3]:
+# TAB 5: Profitability Deep Dive
+with tabs[4]:
     col1, col2 = st.columns([1, 2])
     
     with col1:
@@ -892,8 +1029,8 @@ with tabs[3]:
     
     st.dataframe(profit_metrics, hide_index=True)
 
-# TAB 5: Data Explorer
-with tabs[4]:
+# TAB 6: Data Explorer
+with tabs[5]:
     st.markdown('<div class="section-header">📋 Performance Data Explorer</div>', unsafe_allow_html=True)
     
     # Channel Performance Table
