@@ -12,8 +12,8 @@ pio.templates.default = "plotly_dark"
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
-    page_title="Business Command Center",
-    page_icon="⚡",
+    page_title="Marketplace Business Insights",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -132,17 +132,6 @@ st.markdown("""
         border-bottom: 2px solid rgba(255, 255, 255, 0.1);
     }
     
-    /* Info Cards */
-    .info-card {
-        background: rgba(59, 130, 246, 0.1);
-        border-left: 4px solid #3b82f6;
-        padding: 16px;
-        border-radius: 8px;
-        margin: 16px 0;
-        color: #e0e7ff;
-        font-size: 14px;
-    }
-    
     /* Tabs Enhancement */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
@@ -180,13 +169,47 @@ st.markdown("""
         display: none !important;
     }
     
-    /* Chart Container */
-    .chart-container {
-        background: rgba(30, 32, 40, 0.4);
-        border-radius: 12px;
-        padding: 16px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
+    /* Expander Styling */
+    .streamlit-expanderHeader {
+        background: rgba(30, 32, 40, 0.6);
+        border-radius: 8px;
+        font-weight: 600;
     }
+    
+    .streamlit-expanderHeader:hover {
+        background: rgba(42, 45, 58, 0.8);
+    }
+
+    /* RECOMMENDATION CARDS */
+    .rec-card {
+        background: rgba(30, 32, 40, 0.6);
+        border-left: 4px solid #3b82f6;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 12px;
+        transition: transform 0.2s;
+    }
+    .rec-card:hover {
+        transform: translateX(5px);
+        background: rgba(42, 45, 58, 0.8);
+    }
+    .rec-title {
+        font-weight: 700;
+        font-size: 16px;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .rec-body {
+        color: #9ca3af;
+        font-size: 14px;
+        margin-top: 4px;
+    }
+    .rec-high { border-left-color: #10b981; } /* Green - Scale */
+    .rec-warn { border-left-color: #f59e0b; } /* Orange - Optimize */
+    .rec-crit { border-left-color: #ef4444; } /* Red - Cut */
+    .rec-info { border-left-color: #3b82f6; } /* Blue - Info */
 </style>
 """, unsafe_allow_html=True)
 
@@ -242,15 +265,31 @@ def load_and_process_data():
     # Process Sales
     sales_list = []
     for name, df in all_dfs.items():
+        # Check for sales sheets (usually named 'Sales_data')
         if 'sales' in name.lower() and not df.empty:
+            df = df.copy()
+            
+            # Normalize columns map
+            col_map = {}
+            for col in df.columns:
+                clean_col = col.strip().lower().replace(' ', '_').replace('-', '_')
+                col_map[col] = clean_col
+                
+                # Explicitly map SKU/Parent columns regardless of case
+                if clean_col == 'parent': col_map[col] = 'Parent'
+                elif clean_col == 'sku': col_map[col] = 'SKU'
+                
+            df = df.rename(columns=col_map)
             sales_list.append(df)
             
     if not sales_list: return None, None, "No Sales sheets found."
     
     sales = pd.concat(sales_list, ignore_index=True)
-    sales.columns = sales.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('-', '_')
     
-    # Convert Money
+    # Ensure all required lowercase columns exist
+    sales.columns = [c if c in ['Parent', 'SKU'] else c.lower() for c in sales.columns]
+    
+    # Convert Money & Numbers
     for col in ["discounted_price", "selling_commission"]:
         if col in sales.columns:
             sales[col] = pd.to_numeric(
@@ -264,11 +303,16 @@ def load_and_process_data():
     sales["channel"] = sales.get("channel", "Unknown").astype(str).str.strip()
     sales["type"] = sales.get("type", "Unknown").astype(str).str.strip()
     
-    # Add product info if available
-    if "product_name" in sales.columns:
-        sales["product"] = sales["product_name"].astype(str).str.strip()
+    # Handle SKU information (Fill missing if not found)
+    if "Parent" not in sales.columns:
+        sales["Parent"] = "Unknown"
     else:
-        sales["product"] = "Unknown"
+        sales["Parent"] = sales["Parent"].astype(str).str.strip()
+        
+    if "SKU" not in sales.columns:
+        sales["SKU"] = "Unknown"
+    else:
+        sales["SKU"] = sales["SKU"].astype(str).str.strip()
     
     sales = sales.dropna(subset=["date"])
 
@@ -327,7 +371,7 @@ with col2:
     end_date = st.date_input("End Date", max_date, min_value=min_date, max_value=max_date)
 
 # Multi-Selects
-selected_channels = multiselect_with_all("📺 Channels", sales_df["channel"].unique())
+selected_channels = multiselect_with_all("📺 Marketplaces", sales_df["channel"].unique())
 
 if "type" in sales_df.columns:
     selected_types = multiselect_with_all("🏷️ Product Types", sales_df["type"].unique())
@@ -338,7 +382,7 @@ else:
 st.sidebar.markdown("---")
 comparison_period = st.sidebar.selectbox(
     "📊 Compare Against",
-    ["Year over Year", "Month over Month", "Week over Week", "Previous Period"]
+    ["Year over Year", "Month over Month"]
 )
 
 # ---------------- APPLY FILTERS ----------------
@@ -404,6 +448,58 @@ def calc_metrics(sales, spend):
         "Net": net, "ROAS": roas, "ACOS": acos, "AOV": aov
     }
 
+def generate_insights(df_channel, current_metrics):
+    insights = []
+    
+    # 1. CHANNEL SCALING OPPORTUNITIES (High ROAS)
+    if 'roas' in df_channel.columns:
+        scale_ops = df_channel[df_channel['roas'] >= 3.0]
+        for _, row in scale_ops.iterrows():
+            insights.append({
+                "type": "scale",
+                "title": f"🚀 Scale Up: {row['channel']}",
+                "msg": f"ROAS is strong at {row['roas']:.2f}x. Consider increasing daily budget by 15-20% to maximize volume while maintaining profitability.",
+                "metric": f"{row['roas']:.2f}x ROAS"
+            })
+
+    # 2. BLEEDING CAMPAIGNS (Low ROAS / High Spend)
+    if 'roas' in df_channel.columns and 'spend' in df_channel.columns:
+        bleeding = df_channel[(df_channel['roas'] < 1.5) & (df_channel['spend'] > 500)]
+        for _, row in bleeding.iterrows():
+            insights.append({
+                "type": "crit",
+                "title": f"🛑 High Spend / Low Return: {row['channel']}",
+                "msg": f"This channel has spent ${row['spend']:,.0f} with only {row['roas']:.2f}x ROAS. Review search terms, pause bleeding keywords, or lower bids immediately.",
+                "metric": f"${row['spend']:,.0f} Spend"
+            })
+
+    # 3. PROFITABILITY WARNING
+    if current_metrics['Net'] < 0:
+        insights.append({
+            "type": "crit",
+            "title": "📉 Net Loss Alert",
+            "msg": "The business is currently operating at a net loss for the selected period. Prioritize cutting Ad Spend on channels with < 2.0 ROAS immediately.",
+            "metric": f"${current_metrics['Net']:,.0f}"
+        })
+    elif current_metrics['Revenue'] > 0 and (current_metrics['Net'] / current_metrics['Revenue']) < 0.10:
+        insights.append({
+            "type": "warn",
+            "title": "⚠️ Thin Margins",
+            "msg": "Net Profit margin is below 10%. Keep a close eye on COGS and Commission rates.",
+            "metric": f"{(current_metrics['Net']/current_metrics['Revenue']*100):.1f}% Margin"
+        })
+
+    # 4. AOV OPPORTUNITIES
+    if current_metrics['AOV'] > 0 and current_metrics['AOV'] < 50: # Example threshold
+        insights.append({
+            "type": "info",
+            "title": "📦 Bundle Opportunity",
+            "msg": "AOV is below $50. Consider creating 'Buy 2 Save 10%' bundles or adding post-purchase upsells to increase basket size.",
+            "metric": f"${current_metrics['AOV']:.2f} Avg"
+        })
+
+    return insights
+
 curr = calc_metrics(df_s, df_sp)
 prev = calc_metrics(df_s_ly, df_sp_ly)
 
@@ -414,10 +510,10 @@ def delta(k):
 # ---------------- UI: HEADER ----------------
 c1, c2 = st.columns([3, 1])
 with c1:
-    st.title("⚡ Executive Command Center")
+    st.title("📊 Marketplace Business Insights")
     st.caption(f"Analyzing performance from **{start_date.strftime('%b %d, %Y')}** to **{end_date.strftime('%b %d, %Y')}** • {comparison_period}")
 with c2:
-    if st.button("🔄 Refresh Data", use_container_width=True):
+    if st.button("🔄 Refresh Data", key="refresh_btn"):
         st.cache_data.clear()
         st.rerun()
 
@@ -451,15 +547,69 @@ with k8:
 # ---------------- UI: ENHANCED ANALYSIS TABS ----------------
 st.markdown("")
 tabs = st.tabs([
+    "🚀 Strategy & Recommendations",
     "📈 Performance Trends", 
-    "🛒 Channel Analysis", 
-    "🎁 Product Insights",
+    "🛒 Marketplace Analysis", 
+    "🏷️ SKU Analysis",
     "📊 Profitability Deep Dive",
     "📋 Data Explorer"
 ])
 
-# TAB 1: Performance Trends
+# TAB 1: Strategy & Recommendations
 with tabs[0]:
+    st.markdown('<div class="section-header">🧠 AI Strategic Insights</div>', unsafe_allow_html=True)
+    
+    # Generate insights based on the Channel Matrix
+    ch_rev_rec = df_s.groupby("channel")["revenue"].sum().reset_index()
+    ch_sp_rec = df_sp.groupby("channel")["spend"].sum().reset_index()
+    ch_matrix_rec = pd.merge(ch_rev_rec, ch_sp_rec, on="channel", how="outer").fillna(0)
+    ch_matrix_rec["roas"] = ch_matrix_rec.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
+    
+    recommendations = generate_insights(ch_matrix_rec, curr)
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        if not recommendations:
+            st.info("✅ Business looks stable. No critical alerts found based on current thresholds.")
+        else:
+            for rec in recommendations:
+                # Map type to CSS class and icon
+                css_map = {
+                    "scale": ("rec-high", "📈"),
+                    "warn": ("rec-warn", "⚠️"),
+                    "crit": ("rec-crit", "🚨"),
+                    "info": ("rec-info", "💡")
+                }
+                style_class, icon = css_map.get(rec['type'], ("rec-info", "ℹ️"))
+                
+                st.markdown(f"""
+                <div class="rec-card {style_class}">
+                    <div class="rec-title">{icon} {rec['title']} <span style="margin-left:auto; font-size:12px; opacity:0.8; background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:10px;">{rec['metric']}</span></div>
+                    <div class="rec-body">{rec['msg']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("**🎯 Projected Outcome**")
+        st.caption("If you optimize based on these insights:")
+        
+        # Simple projection logic
+        potential_savings = ch_matrix_rec[ch_matrix_rec['roas'] < 1.5]['spend'].sum() * 0.5 # Assume we cut 50% of bad spend
+        potential_gain = ch_matrix_rec[ch_matrix_rec['roas'] >= 3.0]['revenue'].sum() * 0.2 # Assume 20% growth on good channels
+        
+        new_net = curr['Net'] + potential_savings + (potential_gain * 0.2) # Assuming 20% margin on new rev
+        
+        st.metric("Potential Wasted Ad Spend", f"${potential_savings:,.0f}", help="Spend on channels with < 1.5 ROAS")
+        st.metric("Revenue Growth Opportunity", f"${potential_gain:,.0f}", help="Projected lift from scaling high ROAS channels")
+        
+        st.markdown("---")
+        st.markdown(f"**Projected Net Profit:**")
+        st.markdown(f"<h2 style='color:#10b981'>${new_net:,.0f}</h2>", unsafe_allow_html=True)
+        st.caption(f"Vs Current: ${curr['Net']:,.0f}")
+
+# TAB 2: Performance Trends
+with tabs[1]:
     col1, col2 = st.columns([2, 1])
     
     with col1:
@@ -473,7 +623,6 @@ with tabs[0]:
         daily_spend = df_sp.groupby(pd.Grouper(key="date", freq="D"))["spend"].sum().reset_index()
         daily_trend = pd.merge(daily_rev, daily_spend, on="date", how="outer").fillna(0)
         daily_trend["roas"] = daily_trend.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
-        daily_trend["aov"] = daily_trend.apply(lambda x: x["revenue"]/x["orders"] if x["orders"]>0 else 0, axis=1)
         
         fig_multi = go.Figure()
         
@@ -507,7 +656,7 @@ with tabs[0]:
             margin=dict(l=0, r=80, t=60, b=0),
             height=420
         )
-        st.plotly_chart(fig_multi, use_container_width=True)
+        st.plotly_chart(fig_multi, config={'displayModeBar': False})
     
     with col2:
         st.markdown("**AOV Trend Analysis**")
@@ -537,60 +686,80 @@ with tabs[0]:
             margin=dict(l=0, r=0, t=40, b=0),
             height=420
         )
-        st.plotly_chart(fig_aov, use_container_width=True)
+        st.plotly_chart(fig_aov, config={'displayModeBar': False})
     
     # Commission Over Time
     st.markdown("**Commission & Spend Comparison**")
-    daily_comm = df_s.groupby(pd.Grouper(key="date", freq="D"))["selling_commission"].sum().reset_index() if "selling_commission" in df_s.columns else pd.DataFrame()
-    
-    if not daily_comm.empty:
-        daily_costs = pd.merge(daily_spend, daily_comm, on="date", how="outer").fillna(0)
+    if "selling_commission" in df_s.columns:
+        daily_comm = df_s.groupby(pd.Grouper(key="date", freq="D"))["selling_commission"].sum().reset_index()
         
-        fig_costs = go.Figure()
-        fig_costs.add_trace(go.Bar(
-            x=daily_costs["date"], y=daily_costs["spend"],
-            name="Ad Spend", marker_color="#f97316"
-        ))
-        fig_costs.add_trace(go.Bar(
-            x=daily_costs["date"], y=daily_costs["selling_commission"],
-            name="Commission", marker_color="#ec4899"
-        ))
-        
-        fig_costs.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            barmode='stack',
-            yaxis=dict(title="Cost ($)", showgrid=True, gridcolor="#2d303e"),
-            legend=dict(orientation="h", y=1.1, x=0),
-            margin=dict(l=0, r=0, t=40, b=0),
-            height=350
-        )
-        st.plotly_chart(fig_costs, use_container_width=True)
+        if not daily_comm.empty:
+            daily_costs = pd.merge(daily_spend, daily_comm, on="date", how="outer").fillna(0)
+            
+            fig_costs = go.Figure()
+            fig_costs.add_trace(go.Bar(
+                x=daily_costs["date"], y=daily_costs["spend"],
+                name="Ad Spend", marker_color="#f97316"
+            ))
+            fig_costs.add_trace(go.Bar(
+                x=daily_costs["date"], y=daily_costs["selling_commission"],
+                name="Commission", marker_color="#ec4899"
+            ))
+            
+            fig_costs.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                barmode='stack',
+                yaxis=dict(title="Cost ($)", showgrid=True, gridcolor="#2d303e"),
+                legend=dict(orientation="h", y=1.1, x=0),
+                margin=dict(l=0, r=0, t=40, b=0),
+                height=350
+            )
+            st.plotly_chart(fig_costs, config={'displayModeBar': False})
 
-# TAB 2: Channel Analysis
-with tabs[1]:
+# TAB 3: Marketplace Analysis
+with tabs[2]:
+    st.markdown('<div class="section-header">🛒 Marketplace Performance Analysis</div>', unsafe_allow_html=True)
+    
+    # Info box explaining the analysis
+    st.markdown("""
+    <div class="info-box">
+    📊 <strong>Understanding This Analysis:</strong><br>
+    • <strong>Bubble Size</strong> = ROAS (bigger bubbles = better efficiency)<br>
+    • <strong>Bubble Color</strong> = Average Order Value (darker = higher AOV)<br>
+    • <strong>Top Right</strong> = High revenue + High spend (established channels)<br>
+    • <strong>Top Left</strong> = High revenue + Low spend (highly efficient, scale these!)<br>
+    • <strong>Bottom Right</strong> = Low revenue + High spend (bleeding money, optimize or cut)
+    </div>
+    """, unsafe_allow_html=True)
+    
     col1, col2 = st.columns([3, 2])
     
     with col1:
-        st.markdown("**Channel Performance Matrix**")
+        st.markdown("**Marketplace Performance Matrix**")
         
         ch_rev = df_s.groupby("channel").agg({
             "revenue": "sum",
-            "orders": "sum",
-            "selling_commission": "sum" if "selling_commission" in df_s.columns else "count"
+            "orders": "sum"
         }).reset_index()
+        
+        if "selling_commission" in df_s.columns:
+            ch_comm = df_s.groupby("channel")["selling_commission"].sum().reset_index()
+            ch_rev = pd.merge(ch_rev, ch_comm, on="channel", how="left").fillna(0)
+        
         ch_sp = df_sp.groupby("channel")["spend"].sum().reset_index()
         ch_matrix = pd.merge(ch_rev, ch_sp, on="channel", how="outer").fillna(0)
         ch_matrix["roas"] = ch_matrix.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
         ch_matrix["aov"] = ch_matrix.apply(lambda x: x["revenue"]/x["orders"] if x["orders"]>0 else 0, axis=1)
+        ch_matrix["acos"] = ch_matrix.apply(lambda x: (x["spend"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
         ch_matrix = ch_matrix[ch_matrix["revenue"] > 0]
         
         fig_bubble = px.scatter(
             ch_matrix, x="spend", y="revenue", 
             size="roas", color="aov",
             hover_name="channel",
-            hover_data={"orders": ":,", "roas": ":.2f", "aov": ":$.2f"},
+            hover_data={"orders": ":,", "roas": ":.2f", "aov": ":$.2f", "acos": ":.1f%"},
             labels={"spend": "Ad Spend ($)", "revenue": "Revenue ($)", "aov": "AOV ($)"},
             size_max=80,
             text="channel",
@@ -605,10 +774,11 @@ with tabs[1]:
             height=500,
             margin=dict(l=0, r=0, t=40, b=0)
         )
-        st.plotly_chart(fig_bubble, use_container_width=True)
+        st.plotly_chart(fig_bubble, config={'displayModeBar': False})
     
     with col2:
-        st.markdown("**Channel Revenue Share**")
+        st.markdown("**Marketplace Revenue Share**")
+        st.caption("Distribution of revenue across marketplaces")
         
         fig_pie = px.pie(
             ch_matrix, values="revenue", names="channel",
@@ -623,12 +793,13 @@ with tabs[1]:
             height=250,
             margin=dict(l=0, r=0, t=0, b=0)
         )
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_pie, config={'displayModeBar': False})
         
-        st.markdown("**Channel Efficiency Ranking**")
+        st.markdown("**Marketplace Efficiency Ranking**")
+        st.caption("Ranked by ROAS (Return on Ad Spend)")
         
-        ch_rank = ch_matrix.sort_values("roas", ascending=False)[["channel", "roas", "acos"]].head(10)
-        ch_rank["acos"] = ch_rank.apply(lambda x: (ch_matrix[ch_matrix["channel"]==x["channel"]]["spend"].sum() / ch_matrix[ch_matrix["channel"]==x["channel"]]["revenue"].sum() * 100) if ch_matrix[ch_matrix["channel"]==x["channel"]]["revenue"].sum() > 0 else 0, axis=1)
+        ch_rank = ch_matrix.sort_values("roas", ascending=False)[["channel", "roas", "revenue", "spend"]].head(10).copy()
+        ch_rank["acos"] = ch_rank.apply(lambda x: (x["spend"] / x["revenue"] * 100) if x["revenue"] > 0 else 0, axis=1)
         
         fig_rank = go.Figure()
         fig_rank.add_trace(go.Bar(
@@ -652,80 +823,189 @@ with tabs[1]:
             margin=dict(l=0, r=0, t=20, b=0),
             height=250
         )
-        st.plotly_chart(fig_rank, use_container_width=True)
+        st.plotly_chart(fig_rank, config={'displayModeBar': False})
+        
+        # Quick Actions
+        st.markdown("**⚡ Quick Actions**")
+        st.caption("Recommended actions based on ROAS performance")
+        for _, row in ch_matrix.sort_values('roas', ascending=False).head(3).iterrows():
+            if row['roas'] >= 3.0:
+                st.success(f"**{row['channel']}**: Scale budget +20%")
+            elif row['roas'] < 1.5:
+                st.error(f"**{row['channel']}**: Reduce spend -30%")
+            else:
+                st.info(f"**{row['channel']}**: Optimize campaigns")
+    
+    # Detailed Marketplace Breakdown Table (full width below charts)
+    st.markdown("---")
+    st.markdown("**📋 Detailed Marketplace Metrics**")
+    st.caption("Complete performance breakdown for all marketplaces")
+    
+    display_ch = ch_matrix.copy()
+    display_ch = display_ch.sort_values('revenue', ascending=False)
+    display_ch['profit_margin'] = display_ch.apply(
+        lambda x: ((x['revenue'] * SAFE_MARGIN - x['spend'] - x.get('selling_commission', 0)) / x['revenue'] * 100) if x['revenue'] > 0 else 0, 
+        axis=1
+    )
+    
+    st.dataframe(
+        display_ch[['channel', 'revenue', 'orders', 'aov', 'spend', 'roas', 'acos', 'profit_margin']],
+        column_config={
+            "channel": "Marketplace",
+            "revenue": st.column_config.NumberColumn("Revenue", format="$%d"),
+            "orders": st.column_config.NumberColumn("Orders", format="%d"),
+            "aov": st.column_config.NumberColumn("AOV", format="$%.2f"),
+            "spend": st.column_config.NumberColumn("Ad Spend", format="$%d"),
+            "roas": st.column_config.NumberColumn("ROAS", format="%.2fx"),
+            "acos": st.column_config.NumberColumn("ACOS", format="%.1f%%"),
+            "profit_margin": st.column_config.NumberColumn("Profit %", format="%.1f%%"),
+        },
+        hide_index=True,
+        height=350
+    )
 
-# TAB 3: Product Insights
-with tabs[2]:
-    if "product" in df_s.columns and df_s["product"].nunique() > 1:
-        col1, col2 = st.columns(2)
+# TAB 4: SKU Analysis
+with tabs[3]:
+    st.markdown('<div class="section-header">🏷️ SKU Performance Analysis</div>', unsafe_allow_html=True)
+    
+    if "Parent" in df_s.columns and df_s["Parent"].nunique() > 1:
+        # Calculate Parent SKU Performance
+        Parent_perf = df_s.groupby("Parent").agg({
+            "revenue": "sum",
+            "orders": "sum"
+        }).reset_index()
+        Parent_perf["aov"] = Parent_perf["revenue"] / Parent_perf["orders"]
+        Parent_perf = Parent_perf.sort_values("revenue", ascending=False).head(10)
+        
+        col1, col2 = st.columns([2, 1])
         
         with col1:
-            st.markdown("**Top 10 Products by Revenue**")
+            st.markdown("**Top 10 Parent SKUs by Revenue**")
             
-            prod_perf = df_s.groupby("product").agg({
-                "revenue": "sum",
-                "orders": "sum"
-            }).reset_index()
-            prod_perf["aov"] = prod_perf["revenue"] / prod_perf["orders"]
-            prod_perf = prod_perf.sort_values("revenue", ascending=False).head(10)
-            
-            fig_prod = px.bar(
-                prod_perf, x="revenue", y="product",
+            fig_sku_bar = px.bar(
+                Parent_perf, 
+                x="revenue", 
+                y="Parent",
                 orientation='h',
-                color="aov",
+                color="orders",
                 color_continuous_scale="Blues",
-                labels={"revenue": "Revenue ($)", "product": "Product", "aov": "AOV ($)"}
+                labels={"revenue": "Revenue ($)", "Parent": "Parent SKU", "orders": "Orders"}
             )
             
-            fig_prod.update_layout(
+            fig_sku_bar.update_layout(
                 template="plotly_dark",
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
                 height=450,
-                margin=dict(l=0, r=0, t=20, b=0)
+                margin=dict(l=0, r=0, t=20, b=0),
+                yaxis=dict(tickmode='linear')
             )
-            st.plotly_chart(fig_prod, use_container_width=True)
+            st.plotly_chart(fig_sku_bar, config={'displayModeBar': False})
         
         with col2:
-            st.markdown("**Product Performance Metrics**")
+            st.markdown("**SKU Revenue Distribution**")
             
-            top_products = prod_perf.head(5)
-            
-            for idx, row in top_products.iterrows():
-                with st.container():
-                    st.markdown(f"""
-                    <div style="background: rgba(30, 32, 40, 0.5); padding: 12px; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid #3b82f6;">
-                        <div style="font-weight: 600; color: #e5e7eb; margin-bottom: 8px;">{row['product'][:40]}...</div>
-                        <div style="display: flex; justify-content: space-between; font-size: 13px;">
-                            <span style="color: #9ca3af;">Revenue: <strong style="color: #3b82f6;">${row['revenue']:,.0f}</strong></span>
-                            <span style="color: #9ca3af;">Orders: <strong style="color: #10b981;">{row['orders']:,.0f}</strong></span>
-                            <span style="color: #9ca3af;">AOV: <strong style="color: #8b5cf6;">${row['aov']:,.2f}</strong></span>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            st.markdown("**Revenue Distribution**")
-            
-            fig_tree = px.treemap(
-                prod_perf.head(15), 
-                path=['product'], 
+            fig_sku_tree = px.treemap(
+                Parent_perf, 
+                path=['Parent'], 
                 values='revenue',
                 color='aov',
-                color_continuous_scale='Viridis'
+                color_continuous_scale='Viridis',
+                labels={"revenue": "Revenue", "aov": "AOV"}
             )
             
-            fig_tree.update_layout(
+            fig_sku_tree.update_layout(
                 template="plotly_dark",
                 paper_bgcolor="rgba(0,0,0,0)",
                 margin=dict(l=0, r=0, t=20, b=0),
-                height=300
+                height=450
             )
-            st.plotly_chart(fig_tree, use_container_width=True)
+            st.plotly_chart(fig_sku_tree, config={'displayModeBar': False})
+        
+        # Detailed SKU Cards with Child SKUs
+        st.markdown("---")
+        st.markdown("**📦 Detailed SKU Breakdown (Click to expand for Child SKUs)**")
+        
+        for idx, parent_row in Parent_perf.iterrows():
+            parent = parent_row['Parent']
+            
+            # Get child SKUs for this parent
+            if "SKU" in df_s.columns:
+                child_data = df_s[df_s["Parent"] == parent].groupby("SKU").agg({
+                    "revenue": "sum",
+                    "orders": "sum"
+                }).reset_index()
+                child_data["aov"] = child_data["revenue"] / child_data["orders"]
+                child_data = child_data.sort_values("revenue", ascending=False)
+                
+                has_children = len(child_data) > 0 and child_data["SKU"].iloc[0] != "Unknown"
+            else:
+                has_children = False
+                child_data = pd.DataFrame()
+            
+            # Create expander for each parent SKU
+            with st.expander(f"🏷️ {parent} - ${parent_row['revenue']:,.0f} Revenue", expanded=False):
+                # Parent SKU metrics
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Revenue", f"${parent_row['revenue']:,.0f}")
+                with col2:
+                    st.metric("Orders", f"{parent_row['orders']:,.0f}")
+                with col3:
+                    st.metric("AOV", f"${parent_row['aov']:,.2f}")
+                with col4:
+                    if has_children:
+                        st.metric("Child SKUs", f"{len(child_data)}")
+                    else:
+                        st.metric("Child SKUs", "N/A")
+                
+                # Show child SKUs if available
+                if has_children:
+                    st.markdown("---")
+                    st.markdown("**Child SKUs Performance:**")
+                    
+                    # Create a nice table for child SKUs
+                    child_display = child_data.copy()
+                    child_display["revenue"] = child_display["revenue"].apply(lambda x: f"${x:,.0f}")
+                    child_display["orders"] = child_display["orders"].apply(lambda x: f"{x:,.0f}")
+                    child_display["aov"] = child_display["aov"].apply(lambda x: f"${x:,.2f}")
+                    
+                    st.dataframe(
+                        child_display,
+                        column_config={
+                            "SKU": st.column_config.TextColumn("SKU", width="medium"),
+                            "revenue": st.column_config.TextColumn("Revenue", width="small"),
+                            "orders": st.column_config.TextColumn("Orders", width="small"),
+                            "aov": st.column_config.TextColumn("AOV", width="small"),
+                        },
+                        hide_index=True,
+                        height=min(300, 50 + len(child_display) * 35)
+                    )
+                    
+                    # Visual breakdown
+                    if len(child_data) > 1:
+                        fig_child = px.pie(
+                            child_data, 
+                            values="revenue", 
+                            names="SKU",
+                            title="Revenue Distribution by Child SKU",
+                            color_discrete_sequence=px.colors.sequential.Plasma
+                        )
+                        fig_child.update_layout(
+                            template="plotly_dark",
+                            paper_bgcolor="rgba(0,0,0,0)",
+                            height=300,
+                            margin=dict(l=0, r=0, t=40, b=0)
+                        )
+                        st.plotly_chart(fig_child, config={'displayModeBar': False})
+                else:
+                    st.info("ℹ️ No child SKU data available for this parent SKU")
+        
     else:
-        st.info("📦 Product-level data not available in the current dataset.")
+        st.info("📦 SKU data not available in the current dataset. Please ensure 'Parent' column exists in your data.")
 
-# TAB 4: Profitability Deep Dive
-with tabs[3]:
+# TAB 5: Profitability Deep Dive
+with tabs[4]:
     col1, col2 = st.columns([1, 2])
     
     with col1:
@@ -754,7 +1034,7 @@ with tabs[3]:
             margin=dict(l=0, r=0, t=40, b=0),
             height=450
         )
-        st.plotly_chart(fig_water, use_container_width=True)
+        st.plotly_chart(fig_water, config={'displayModeBar': False})
     
     with col2:
         st.markdown("**Cost Breakdown Analysis**")
@@ -784,7 +1064,7 @@ with tabs[3]:
             margin=dict(l=0, r=0, t=40, b=0),
             annotations=[dict(text=f'${curr["Revenue"]/1000:.0f}k<br>Total', x=0.5, y=0.5, font_size=20, showarrow=False)]
         )
-        st.plotly_chart(fig_costs_pie, use_container_width=True)
+        st.plotly_chart(fig_costs_pie, config={'displayModeBar': False})
     
     # Profitability metrics table
     st.markdown("**Profitability Metrics Summary**")
@@ -803,16 +1083,16 @@ with tabs[3]:
         ]
     })
     
-    st.dataframe(profit_metrics, use_container_width=True, hide_index=True)
+    st.dataframe(profit_metrics, hide_index=True)
 
-# TAB 5: Data Explorer
-with tabs[4]:
+# TAB 6: Data Explorer
+with tabs[5]:
     st.markdown('<div class="section-header">📋 Performance Data Explorer</div>', unsafe_allow_html=True)
     
     # Channel Performance Table
     tbl = ch_matrix.copy()
-    if "selling_commission" in df_s.columns:
-        tbl["commission"] = df_s.groupby("channel")["selling_commission"].sum().values
+    if "selling_commission" in ch_matrix.columns:
+        tbl["commission"] = ch_matrix["selling_commission"]
     else:
         tbl["commission"] = 0
     
@@ -820,11 +1100,15 @@ with tabs[4]:
     tbl["net"] = (tbl["revenue"] * SAFE_MARGIN) - tbl["spend"] - tbl.get("commission", 0)
     tbl["profit_margin"] = tbl.apply(lambda x: (x["net"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
     
+    # Select columns to display
+    display_cols = ["channel", "revenue", "orders", "aov", "spend", "commission", "roas", "acos", "net", "profit_margin"]
+    display_tbl = tbl[[col for col in display_cols if col in tbl.columns]]
+    
     st.dataframe(
-        tbl,
+        display_tbl,
         column_config={
-            "channel": st.column_config.TextColumn("Channel", width="medium"),
-            "revenue": st.column_config.ProgressColumn("Revenue", format="$%d", min_value=0, max_value=int(tbl["revenue"].max())),
+            "channel": st.column_config.TextColumn("Marketplace", width="medium"),
+            "revenue": st.column_config.ProgressColumn("Revenue", format="$%d", min_value=0, max_value=int(display_tbl["revenue"].max()) if "revenue" in display_tbl.columns else 100),
             "orders": st.column_config.NumberColumn("Orders", format="%d"),
             "aov": st.column_config.NumberColumn("AOV", format="$%.2f"),
             "spend": st.column_config.NumberColumn("Ad Spend", format="$%d"),
@@ -835,7 +1119,6 @@ with tabs[4]:
             "profit_margin": st.column_config.NumberColumn("Profit Margin", format="%.1f%%"),
         },
         hide_index=True,
-        use_container_width=True,
         height=400
     )
     
@@ -843,18 +1126,18 @@ with tabs[4]:
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        csv = tbl.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Channel Report (CSV)", csv, "channel_performance.csv", "text/csv", use_container_width=True)
+        csv = display_tbl.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Download Marketplace Report (CSV)", csv, "marketplace_performance.csv", "text/csv", key="download_channel")
     
     with col2:
         if not df_s.empty:
             sales_csv = df_s.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Sales Data (CSV)", sales_csv, "sales_data.csv", "text/csv", use_container_width=True)
+            st.download_button("📥 Download Sales Data (CSV)", sales_csv, "sales_data.csv", "text/csv", key="download_sales")
     
     with col3:
         if not df_sp.empty:
             spend_csv = df_sp.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Spend Data (CSV)", spend_csv, "spend_data.csv", "text/csv", use_container_width=True)
+            st.download_button("📥 Download Spend Data (CSV)", spend_csv, "spend_data.csv", "text/csv", key="download_spend")
 
 # ---------------- FOOTER ----------------
 st.markdown("---")
