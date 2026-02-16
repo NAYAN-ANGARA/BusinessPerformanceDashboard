@@ -1528,6 +1528,8 @@ with tabs[7]:
                 st.metric("AOV", f"${report['metrics']['AOV']:.2f}")
         
         # Marketplace Breakdown
+        ch_report = pd.DataFrame()  # Initialize ch_report to avoid NameError
+        
         if report['sections']['marketplaces']:
             st.markdown("### 🛒 Marketplace Performance")
             
@@ -1590,30 +1592,42 @@ with tabs[7]:
         if report['sections']['recommendations']:
             st.markdown("### 🚀 Strategic Recommendations")
             
-            # Generate recommendations based on report data
-            ch_matrix_rec = ch_report if report['sections']['marketplaces'] else pd.DataFrame()
-            recommendations_list = generate_insights(ch_matrix_rec, report['metrics'], report['sales_data'])
-            
-            if recommendations_list:
-                for rec in recommendations_list[:5]:  # Top 5 recommendations
-                    rec_type_map = {
-                        "scale": ("success", "📈"),
-                        "warn": ("warning", "⚠️"),
-                        "crit": ("error", "🚨"),
-                        "info": ("info", "💡")
-                    }
-                    status, icon = rec_type_map.get(rec['type'], ("info", "💡"))
-                    
-                    if status == "success":
-                        st.success(f"{icon} **{rec['title']}** - {rec['msg']}")
-                    elif status == "warning":
-                        st.warning(f"{icon} **{rec['title']}** - {rec['msg']}")
-                    elif status == "error":
-                        st.error(f"{icon} **{rec['title']}** - {rec['msg']}")
-                    else:
-                        st.info(f"{icon} **{rec['title']}** - {rec['msg']}")
-            else:
-                st.info("✅ No critical recommendations at this time. Performance is stable.")
+            try:
+                # Generate recommendations based on report data
+                # Ensure ch_report has the right structure
+                if len(ch_report) > 0 and 'roas' in ch_report.columns:
+                    ch_matrix_rec = ch_report
+                else:
+                    # Create empty dataframe with expected structure if no marketplace data
+                    ch_matrix_rec = pd.DataFrame(columns=['channel', 'revenue', 'spend', 'roas'])
+                
+                # Call generate_insights with correct number of parameters (only 2)
+                recommendations_list = generate_insights(ch_matrix_rec, report['metrics'])
+                
+                if recommendations_list:
+                    for rec in recommendations_list[:5]:  # Top 5 recommendations
+                        rec_type_map = {
+                            "scale": ("success", "📈"),
+                            "warn": ("warning", "⚠️"),
+                            "crit": ("error", "🚨"),
+                            "info": ("info", "💡")
+                        }
+                        status, icon = rec_type_map.get(rec['type'], ("info", "💡"))
+                        
+                        if status == "success":
+                            st.success(f"{icon} **{rec['title']}** - {rec['msg']}")
+                        elif status == "warning":
+                            st.warning(f"{icon} **{rec['title']}** - {rec['msg']}")
+                        elif status == "error":
+                            st.error(f"{icon} **{rec['title']}** - {rec['msg']}")
+                        else:
+                            st.info(f"{icon} **{rec['title']}** - {rec['msg']}")
+                else:
+                    st.info("✅ No critical recommendations at this time. Performance is stable.")
+            except Exception as e:
+                st.warning(f"⚠️ Could not generate recommendations. Please ensure marketplace data is included in the report.")
+                # Optional: Show error details for debugging
+                # st.error(f"Debug: {str(e)}")
         
         # Performance Trends
         if report['sections']['trends']:
