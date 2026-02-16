@@ -558,6 +558,7 @@ tabs = st.tabs([
     "📊 Profitability Deep Dive",
     "🔮 Forecasting & Predictions",
     "🧪 A/B Test Tracker",
+    "📅 Weekly Reports",
     "📋 Data Explorer"
 ])
 
@@ -1391,8 +1392,304 @@ with tabs[6]:
     else:
         st.info("📝 No A/B tests created yet. Use the form above to create your first test!")
 
-# TAB 8: Data Explorer
+# TAB 8: Weekly Reports
 with tabs[7]:
+    st.markdown('<div class="section-header">📅 Weekly Performance Reports</div>', unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class="info-box">
+    📊 <strong>Generate Weekly Reports:</strong> Create comprehensive performance summaries with key metrics, 
+    marketplace breakdowns, and actionable recommendations. Export as PDF or share the summary.
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Report Configuration
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown("**📋 Report Generator**")
+        
+        # Date range selector for report
+        st.markdown("**Select Report Period:**")
+        col_date1, col_date2 = st.columns(2)
+        with col_date1:
+            report_start = st.date_input(
+                "From Date",
+                value=max_date - timedelta(days=7),
+                min_value=min_date,
+                max_value=max_date,
+                key="report_start"
+            )
+        with col_date2:
+            report_end = st.date_input(
+                "To Date",
+                value=max_date,
+                min_value=min_date,
+                max_value=max_date,
+                key="report_end"
+            )
+        
+        # Report sections to include
+        st.markdown("**📑 Include in Report:**")
+        include_kpis = st.checkbox("Key Performance Indicators", value=True)
+        include_trends = st.checkbox("Performance Trends", value=True)
+        include_marketplaces = st.checkbox("Marketplace Breakdown", value=True)
+        include_skus = st.checkbox("Top SKU Performance", value=True)
+        include_recommendations = st.checkbox("Strategic Recommendations", value=True)
+        
+        # Generate report button
+        if st.button("📊 Generate Report", type="primary", key="generate_report"):
+            # Filter data for report period
+            report_mask_sales = (
+                (sales_df["date"].dt.date >= report_start) & 
+                (sales_df["date"].dt.date <= report_end) &
+                (sales_df["channel"].isin(selected_channels))
+            )
+            report_df_s = sales_df[report_mask_sales]
+            
+            report_mask_spend = (
+                (spend_df["date"].dt.date >= report_start) & 
+                (spend_df["date"].dt.date <= report_end) &
+                (spend_df["channel"].isin(selected_channels))
+            )
+            report_df_sp = spend_df[report_mask_spend]
+            
+            # Calculate metrics for report period
+            report_metrics = calc_metrics(report_df_s, report_df_sp)
+            
+            # Store in session state to display
+            st.session_state.current_report = {
+                'period': f"{report_start.strftime('%b %d, %Y')} - {report_end.strftime('%b %d, %Y')}",
+                'metrics': report_metrics,
+                'sales_data': report_df_s,
+                'spend_data': report_df_sp,
+                'sections': {
+                    'kpis': include_kpis,
+                    'trends': include_trends,
+                    'marketplaces': include_marketplaces,
+                    'skus': include_skus,
+                    'recommendations': include_recommendations
+                }
+            }
+            st.success("✅ Report generated successfully!")
+            st.rerun()
+    
+    with col2:
+        st.markdown("**💡 Report Tips**")
+        st.markdown("""
+        **Best Practices:**
+        - Weekly reports: Use 7-day periods
+        - Monthly reports: Full month data
+        - Include recommendations for action items
+        
+        **Common Report Types:**
+        - **Weekly Summary** (last 7 days)
+        - **Monthly Review** (full month)
+        - **Quarter Analysis** (90 days)
+        - **Campaign Performance** (campaign dates)
+        
+        **Export Options:**
+        - View in dashboard
+        - Copy formatted text
+        - Download as markdown
+        - Share with team
+        """)
+    
+    # Display generated report
+    if 'current_report' in st.session_state:
+        report = st.session_state.current_report
+        
+        st.markdown("---")
+        st.markdown(f"## 📊 Performance Report")
+        st.markdown(f"**Period:** {report['period']}")
+        
+        # KPIs Section
+        if report['sections']['kpis']:
+            st.markdown("### 💎 Key Performance Indicators")
+            
+            kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+            with kpi_col1:
+                st.metric("Total Revenue", f"${report['metrics']['Revenue']:,.0f}")
+            with kpi_col2:
+                st.metric("Total Orders", f"{report['metrics']['Orders']:,.0f}")
+            with kpi_col3:
+                st.metric("ROAS", f"{report['metrics']['ROAS']:.2f}x")
+            with kpi_col4:
+                st.metric("Net Profit", f"${report['metrics']['Net']:,.0f}")
+            
+            kpi_col5, kpi_col6, kpi_col7, kpi_col8 = st.columns(4)
+            with kpi_col5:
+                st.metric("Ad Spend", f"${report['metrics']['Spend']:,.0f}")
+            with kpi_col6:
+                st.metric("Commission", f"${report['metrics']['Commission']:,.0f}")
+            with kpi_col7:
+                st.metric("ACOS", f"{report['metrics']['ACOS']:.1f}%")
+            with kpi_col8:
+                st.metric("AOV", f"${report['metrics']['AOV']:.2f}")
+        
+        # Marketplace Breakdown
+        if report['sections']['marketplaces']:
+            st.markdown("### 🛒 Marketplace Performance")
+            
+            # Calculate marketplace data
+            ch_report = report['sales_data'].groupby("channel").agg({
+                "revenue": "sum",
+                "orders": "sum"
+            }).reset_index()
+            
+            ch_sp_report = report['spend_data'].groupby("channel")["spend"].sum().reset_index()
+            ch_report = pd.merge(ch_report, ch_sp_report, on="channel", how="outer").fillna(0)
+            ch_report["roas"] = ch_report.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
+            ch_report["acos"] = ch_report.apply(lambda x: (x["spend"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
+            ch_report = ch_report.sort_values("revenue", ascending=False)
+            
+            # Display marketplace table
+            st.dataframe(
+                ch_report[['channel', 'revenue', 'orders', 'spend', 'roas', 'acos']],
+                column_config={
+                    "channel": "Marketplace",
+                    "revenue": st.column_config.NumberColumn("Revenue", format="$%d"),
+                    "orders": st.column_config.NumberColumn("Orders", format="%d"),
+                    "spend": st.column_config.NumberColumn("Ad Spend", format="$%d"),
+                    "roas": st.column_config.NumberColumn("ROAS", format="%.2fx"),
+                    "acos": st.column_config.NumberColumn("ACOS", format="%.1f%%"),
+                },
+                hide_index=True,
+                use_container_width=True
+            )
+            
+            # Top performer
+            if len(ch_report) > 0:
+                top_marketplace = ch_report.iloc[0]
+                st.success(f"🏆 **Top Performer:** {top_marketplace['channel']} - ${top_marketplace['revenue']:,.0f} revenue with {top_marketplace['roas']:.2f}x ROAS")
+        
+        # Top SKUs
+        if report['sections']['skus'] and "Parent" in report['sales_data'].columns:
+            st.markdown("### 🏷️ Top Performing SKUs")
+            
+            sku_report = report['sales_data'].groupby("Parent").agg({
+                "revenue": "sum",
+                "orders": "sum"
+            }).reset_index()
+            sku_report["aov"] = sku_report["revenue"] / sku_report["orders"]
+            sku_report = sku_report.sort_values("revenue", ascending=False).head(5)
+            
+            st.dataframe(
+                sku_report,
+                column_config={
+                    "Parent": "SKU",
+                    "revenue": st.column_config.NumberColumn("Revenue", format="$%d"),
+                    "orders": st.column_config.NumberColumn("Orders", format="%d"),
+                    "aov": st.column_config.NumberColumn("AOV", format="$%.2f"),
+                },
+                hide_index=True,
+                use_container_width=True
+            )
+        
+        # Recommendations
+        if report['sections']['recommendations']:
+            st.markdown("### 🚀 Strategic Recommendations")
+            
+            # Generate recommendations based on report data
+            ch_matrix_rec = ch_report if report['sections']['marketplaces'] else pd.DataFrame()
+            recommendations_list = generate_insights(ch_matrix_rec, report['metrics'], report['sales_data'])
+            
+            if recommendations_list:
+                for rec in recommendations_list[:5]:  # Top 5 recommendations
+                    rec_type_map = {
+                        "scale": ("success", "📈"),
+                        "warn": ("warning", "⚠️"),
+                        "crit": ("error", "🚨"),
+                        "info": ("info", "💡")
+                    }
+                    status, icon = rec_type_map.get(rec['type'], ("info", "💡"))
+                    
+                    if status == "success":
+                        st.success(f"{icon} **{rec['title']}** - {rec['msg']}")
+                    elif status == "warning":
+                        st.warning(f"{icon} **{rec['title']}** - {rec['msg']}")
+                    elif status == "error":
+                        st.error(f"{icon} **{rec['title']}** - {rec['msg']}")
+                    else:
+                        st.info(f"{icon} **{rec['title']}** - {rec['msg']}")
+            else:
+                st.info("✅ No critical recommendations at this time. Performance is stable.")
+        
+        # Performance Trends
+        if report['sections']['trends']:
+            st.markdown("### 📈 Performance Trend")
+            
+            # Daily trend for report period
+            daily_report = report['sales_data'].groupby(pd.Grouper(key="date", freq="D")).agg({
+                "revenue": "sum",
+                "orders": "sum"
+            }).reset_index()
+            
+            fig_report_trend = go.Figure()
+            fig_report_trend.add_trace(go.Scatter(
+                x=daily_report["date"],
+                y=daily_report["revenue"],
+                name="Revenue",
+                fill='tozeroy',
+                line=dict(color='#3b82f6', width=2)
+            ))
+            
+            fig_report_trend.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                yaxis=dict(title="Revenue ($)", showgrid=True, gridcolor="#2d303e"),
+                xaxis=dict(title="Date", showgrid=False),
+                margin=dict(l=0, r=0, t=20, b=0),
+                height=300
+            )
+            st.plotly_chart(fig_report_trend, config={'displayModeBar': False})
+        
+        # Export options
+        st.markdown("---")
+        st.markdown("### 📤 Export Report")
+        
+        export_col1, export_col2 = st.columns(2)
+        
+        with export_col1:
+            # Generate markdown report
+            markdown_report = f"""# Performance Report
+**Period:** {report['period']}
+
+## Key Metrics
+- **Revenue:** ${report['metrics']['Revenue']:,.0f}
+- **Orders:** {report['metrics']['Orders']:,.0f}
+- **ROAS:** {report['metrics']['ROAS']:.2f}x
+- **Net Profit:** ${report['metrics']['Net']:,.0f}
+- **ACOS:** {report['metrics']['ACOS']:.1f}%
+- **AOV:** ${report['metrics']['AOV']:.2f}
+"""
+            
+            if report['sections']['marketplaces'] and len(ch_report) > 0:
+                markdown_report += f"\n## Top Marketplaces\n"
+                for _, row in ch_report.head(3).iterrows():
+                    markdown_report += f"- **{row['channel']}**: ${row['revenue']:,.0f} revenue, {row['roas']:.2f}x ROAS\n"
+            
+            if report['sections']['recommendations'] and recommendations_list:
+                markdown_report += f"\n## Recommendations\n"
+                for rec in recommendations_list[:3]:
+                    markdown_report += f"- **{rec['title']}**: {rec['msg']}\n"
+            
+            st.download_button(
+                "📥 Download as Markdown",
+                markdown_report,
+                f"weekly_report_{report_start}_{report_end}.md",
+                "text/markdown",
+                key="download_markdown"
+            )
+        
+        with export_col2:
+            # Copy to clipboard button (show text area)
+            if st.button("📋 Show Copyable Text", key="show_copy"):
+                st.text_area("Copy this report:", markdown_report, height=200)
+
+# TAB 9: Data Explorer
+with tabs[8]:
     st.markdown('<div class="section-header">📋 Performance Data Explorer</div>', unsafe_allow_html=True)
     
     # Channel Performance Table
