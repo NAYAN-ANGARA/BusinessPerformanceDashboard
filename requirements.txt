@@ -1,6 +1,18 @@
-streamlit
-pandas
-gspread
-google-auth
-numpy
-plotly
+# Core Streamlit & Data Processing
+streamlit==1.54.0
+pandas==2.3.3
+numpy==2.4.2
+
+# Visualization
+plotly==6.5.2
+
+# Google Sheets Integration
+gspread==6.2.1
+google-auth==2.48.0
+google-auth-oauthlib==1.2.4
+
+# Machine Learning (for forecasting)
+scikit-learn==1.6.1
+
+# Date Handling
+python-dateutil==2.9.0.post0

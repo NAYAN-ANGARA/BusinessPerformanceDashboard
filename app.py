@@ -3,8 +3,12 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from gsheets import load_all_sheets
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 import numpy as np
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import StandardScaler
+import json
+import hashlib
 
 # Configure Plotly
 import plotly.io as pio
@@ -552,6 +556,8 @@ tabs = st.tabs([
     "🛒 Marketplace Analysis", 
     "🏷️ SKU Analysis",
     "📊 Profitability Deep Dive",
+    "🔮 Forecasting & Predictions",
+    "🧪 A/B Test Tracker",
     "📋 Data Explorer"
 ])
 
@@ -1085,8 +1091,308 @@ with tabs[4]:
     
     st.dataframe(profit_metrics, hide_index=True)
 
-# TAB 6: Data Explorer
+# TAB 6: Forecasting & Predictions
 with tabs[5]:
+    st.markdown('<div class="section-header">🔮 Revenue & Performance Forecasting</div>', unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class="info-box">
+    📊 <strong>Forecasting Model:</strong> Uses Linear Regression on historical trends to predict future performance. 
+    Predictions become more accurate with more historical data (recommended: 3+ months).
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown("**📈 Revenue Forecast (Next 30 Days)**")
+        
+        # Prepare data for forecasting
+        daily_revenue = df_s.groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
+        daily_revenue = daily_revenue.sort_values("date")
+        
+        if len(daily_revenue) >= 14:  # Need at least 2 weeks of data
+            # Prepare features
+            daily_revenue['days_since_start'] = (daily_revenue['date'] - daily_revenue['date'].min()).dt.days
+            X = daily_revenue['days_since_start'].values.reshape(-1, 1)
+            y = daily_revenue['revenue'].values
+            
+            # Train model
+            model = LinearRegression()
+            model.fit(X, y)
+            
+            # Predict next 30 days
+            last_day = daily_revenue['days_since_start'].max()
+            future_days = np.arange(last_day + 1, last_day + 31).reshape(-1, 1)
+            future_dates = pd.date_range(daily_revenue['date'].max() + timedelta(days=1), periods=30)
+            predictions = model.predict(future_days)
+            
+            # Create forecast dataframe
+            forecast_df = pd.DataFrame({
+                'date': future_dates,
+                'predicted_revenue': predictions
+            })
+            
+            # Combine historical and forecast
+            fig_forecast = go.Figure()
+            
+            # Historical data
+            fig_forecast.add_trace(go.Scatter(
+                x=daily_revenue['date'], 
+                y=daily_revenue['revenue'],
+                name='Historical Revenue',
+                line=dict(color='#3b82f6', width=2)
+            ))
+            
+            # Forecast
+            fig_forecast.add_trace(go.Scatter(
+                x=forecast_df['date'],
+                y=forecast_df['predicted_revenue'],
+                name='Forecast',
+                line=dict(color='#10b981', width=2, dash='dash')
+            ))
+            
+            fig_forecast.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                hovermode="x unified",
+                yaxis=dict(title="Revenue ($)", showgrid=True, gridcolor="#2d303e"),
+                xaxis=dict(title="Date", showgrid=False),
+                legend=dict(orientation="h", y=1.1, x=0),
+                margin=dict(l=0, r=0, t=40, b=0),
+                height=400
+            )
+            st.plotly_chart(fig_forecast, config={'displayModeBar': False})
+            
+            # Forecast summary
+            st.markdown("**📊 Forecast Summary**")
+            forecast_total = forecast_df['predicted_revenue'].sum()
+            historical_avg = daily_revenue['revenue'].tail(30).mean()
+            forecast_avg = forecast_df['predicted_revenue'].mean()
+            growth_rate = ((forecast_avg - historical_avg) / historical_avg * 100) if historical_avg > 0 else 0
+            
+            col_a, col_b, col_c = st.columns(3)
+            with col_a:
+                st.metric("Predicted Revenue (30 days)", f"${forecast_total:,.0f}")
+            with col_b:
+                st.metric("Avg Daily Revenue (Forecast)", f"${forecast_avg:,.0f}")
+            with col_c:
+                st.metric("Growth Rate", f"{growth_rate:+.1f}%")
+        else:
+            st.warning("⚠️ Need at least 14 days of historical data for accurate forecasting. Current data: {} days".format(len(daily_revenue)))
+    
+    with col2:
+        st.markdown("**🎯 Key Predictions**")
+        
+        if len(daily_revenue) >= 14:
+            # ROAS prediction
+            daily_full = daily_revenue.merge(
+                df_sp.groupby(pd.Grouper(key="date", freq="D"))["spend"].sum().reset_index(),
+                on="date", how="left"
+            ).fillna(0)
+            daily_full['roas'] = daily_full.apply(lambda x: x['revenue']/x['spend'] if x['spend'] > 0 else 0, axis=1)
+            
+            avg_roas = daily_full['roas'].mean()
+            recent_roas = daily_full['roas'].tail(7).mean()
+            
+            st.metric("Predicted ROAS (7 days)", f"{recent_roas:.2f}x", 
+                     delta=f"{((recent_roas - avg_roas) / avg_roas * 100) if avg_roas > 0 else 0:.1f}%")
+            
+            # Orders prediction
+            daily_orders = df_s.groupby(pd.Grouper(key="date", freq="D"))["orders"].sum().reset_index()
+            avg_orders = daily_orders['orders'].tail(30).mean()
+            
+            st.metric("Predicted Daily Orders", f"{avg_orders:.0f}")
+            
+            # Confidence level
+            confidence = min(100, (len(daily_revenue) / 90) * 100)  # More data = higher confidence
+            st.markdown(f"**Model Confidence:** {confidence:.0f}%")
+            st.progress(confidence / 100)
+            
+            st.markdown("---")
+            st.markdown("**💡 Forecast Insights**")
+            if growth_rate > 10:
+                st.success("📈 Strong growth expected! Consider scaling operations.")
+            elif growth_rate < -10:
+                st.error("📉 Decline predicted. Review marketing strategy.")
+            else:
+                st.info("➡️ Stable performance expected.")
+        else:
+            st.info("Add more historical data to see predictions")
+
+# TAB 7: A/B Test Tracker
+with tabs[6]:
+    st.markdown('<div class="section-header">🧪 A/B Test Performance Tracker</div>', unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class="info-box">
+    💡 <strong>How it works:</strong> Track performance of different campaigns, products, or strategies. 
+    Add test variants below and compare their metrics side-by-side.
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Initialize session state for A/B tests
+    if 'ab_tests' not in st.session_state:
+        st.session_state.ab_tests = []
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown("**➕ Create New A/B Test**")
+        
+        with st.form("ab_test_form"):
+            test_name = st.text_input("Test Name", placeholder="e.g., Holiday Campaign 2024")
+            
+            col_a, col_b = st.columns(2)
+            with col_a:
+                variant_a_name = st.text_input("Variant A Name", value="Control", placeholder="e.g., Original Ad")
+                variant_a_channel = st.selectbox("Variant A Marketplace", df_s["channel"].unique(), key="var_a_ch")
+                var_a_date_start = st.date_input("Variant A Start", value=start_date, key="var_a_start")
+                var_a_date_end = st.date_input("Variant A End", value=end_date, key="var_a_end")
+            
+            with col_b:
+                variant_b_name = st.text_input("Variant B Name", value="Test", placeholder="e.g., New Ad Creative")
+                variant_b_channel = st.selectbox("Variant B Marketplace", df_s["channel"].unique(), key="var_b_ch")
+                var_b_date_start = st.date_input("Variant B Start", value=start_date, key="var_b_start")
+                var_b_date_end = st.date_input("Variant B End", value=end_date, key="var_b_end")
+            
+            submitted = st.form_submit_button("🚀 Create Test")
+            
+            if submitted and test_name:
+                # Calculate metrics for both variants
+                # Variant A
+                mask_a = (
+                    (sales_df["date"].dt.date >= var_a_date_start) & 
+                    (sales_df["date"].dt.date <= var_a_date_end) &
+                    (sales_df["channel"] == variant_a_channel)
+                )
+                df_a = sales_df[mask_a]
+                mask_spend_a = (
+                    (spend_df["date"].dt.date >= var_a_date_start) & 
+                    (spend_df["date"].dt.date <= var_a_date_end) &
+                    (spend_df["channel"] == variant_a_channel)
+                )
+                spend_a = spend_df[mask_spend_a]["spend"].sum()
+                
+                # Variant B
+                mask_b = (
+                    (sales_df["date"].dt.date >= var_b_date_start) & 
+                    (sales_df["date"].dt.date <= var_b_date_end) &
+                    (sales_df["channel"] == variant_b_channel)
+                )
+                df_b = sales_df[mask_b]
+                mask_spend_b = (
+                    (spend_df["date"].dt.date >= var_b_date_start) & 
+                    (spend_df["date"].dt.date <= var_b_date_end) &
+                    (spend_df["channel"] == variant_b_channel)
+                )
+                spend_b = spend_df[mask_spend_b]["spend"].sum()
+                
+                test_data = {
+                    'test_name': test_name,
+                    'created_at': datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    'variant_a': {
+                        'name': variant_a_name,
+                        'channel': variant_a_channel,
+                        'revenue': df_a['revenue'].sum(),
+                        'orders': df_a['orders'].sum(),
+                        'spend': spend_a,
+                        'roas': (df_a['revenue'].sum() / spend_a) if spend_a > 0 else 0
+                    },
+                    'variant_b': {
+                        'name': variant_b_name,
+                        'channel': variant_b_channel,
+                        'revenue': df_b['revenue'].sum(),
+                        'orders': df_b['orders'].sum(),
+                        'spend': spend_b,
+                        'roas': (df_b['revenue'].sum() / spend_b) if spend_b > 0 else 0
+                    }
+                }
+                
+                st.session_state.ab_tests.append(test_data)
+                st.success(f"✅ Test '{test_name}' created successfully!")
+                st.rerun()
+    
+    with col2:
+        st.markdown("**📊 Test Guidelines**")
+        st.markdown("""
+        **Best Practices:**
+        - Run tests for at least 7 days
+        - Keep one variable different
+        - Use same date ranges when possible
+        - Track statistical significance
+        
+        **Metrics to Compare:**
+        - Revenue & Orders
+        - ROAS & ACOS
+        - AOV (Average Order Value)
+        - Conversion Rate
+        """)
+    
+    # Display existing tests
+    if st.session_state.ab_tests:
+        st.markdown("---")
+        st.markdown("**🔬 Active & Completed Tests**")
+        
+        for idx, test in enumerate(st.session_state.ab_tests):
+            with st.expander(f"🧪 {test['test_name']} - Created: {test['created_at']}", expanded=True):
+                # Comparison metrics
+                col1, col2, col3 = st.columns(3)
+                
+                var_a = test['variant_a']
+                var_b = test['variant_b']
+                
+                # Calculate improvements
+                revenue_improvement = ((var_b['revenue'] - var_a['revenue']) / var_a['revenue'] * 100) if var_a['revenue'] > 0 else 0
+                orders_improvement = ((var_b['orders'] - var_a['orders']) / var_a['orders'] * 100) if var_a['orders'] > 0 else 0
+                roas_improvement = ((var_b['roas'] - var_a['roas']) / var_a['roas'] * 100) if var_a['roas'] > 0 else 0
+                
+                # Display comparison
+                st.markdown(f"**{var_a['name']}** vs **{var_b['name']}**")
+                
+                comparison_data = pd.DataFrame({
+                    'Metric': ['Revenue', 'Orders', 'Ad Spend', 'ROAS'],
+                    var_a['name']: [
+                        f"${var_a['revenue']:,.0f}",
+                        f"{var_a['orders']:,.0f}",
+                        f"${var_a['spend']:,.0f}",
+                        f"{var_a['roas']:.2f}x"
+                    ],
+                    var_b['name']: [
+                        f"${var_b['revenue']:,.0f}",
+                        f"{var_b['orders']:,.0f}",
+                        f"${var_b['spend']:,.0f}",
+                        f"{var_b['roas']:.2f}x"
+                    ],
+                    'Change': [
+                        f"{revenue_improvement:+.1f}%",
+                        f"{orders_improvement:+.1f}%",
+                        f"{((var_b['spend'] - var_a['spend']) / var_a['spend'] * 100) if var_a['spend'] > 0 else 0:+.1f}%",
+                        f"{roas_improvement:+.1f}%"
+                    ]
+                })
+                
+                st.dataframe(comparison_data, hide_index=True, use_container_width=True)
+                
+                # Winner determination
+                st.markdown("**🏆 Test Result:**")
+                if revenue_improvement > 10 and roas_improvement > 5:
+                    st.success(f"✅ **{var_b['name']} is the clear winner!** (+{revenue_improvement:.1f}% revenue, +{roas_improvement:.1f}% ROAS)")
+                elif revenue_improvement < -10 or roas_improvement < -5:
+                    st.error(f"❌ **{var_a['name']} performs better.** Stick with control.")
+                else:
+                    st.info(f"➡️ **Results are inconclusive.** Consider running test longer or with larger sample size.")
+                
+                # Delete button
+                if st.button(f"🗑️ Delete Test", key=f"delete_{idx}"):
+                    st.session_state.ab_tests.pop(idx)
+                    st.rerun()
+    else:
+        st.info("📝 No A/B tests created yet. Use the form above to create your first test!")
+
+# TAB 8: Data Explorer
+with tabs[7]:
     st.markdown('<div class="section-header">📋 Performance Data Explorer</div>', unsafe_allow_html=True)
     
     # Channel Performance Table
@@ -1138,6 +1444,8 @@ with tabs[5]:
         if not df_sp.empty:
             spend_csv = df_sp.to_csv(index=False).encode('utf-8')
             st.download_button("📥 Download Spend Data (CSV)", spend_csv, "spend_data.csv", "text/csv", key="download_spend")
+
+
 
 # ---------------- FOOTER ----------------
 st.markdown("---")
