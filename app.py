@@ -1360,208 +1360,208 @@ with tabs[5]:
     
     # ========== SKU PERFORMANCE FORECASTING ==========
     elif forecast_type == "SKU Performance":
-        st.markdown(f"**🏷️ SKU Performance Forecast - {forecast_period}**")
-        
+        st.markdown(f"**🏷️ Top SKU Performance Forecast - {forecast_period}**")
+        st.markdown("""
+        <div class="info-box">
+        🤖 <strong>Auto-Ranked SKU Predictions:</strong> The model runs on all SKUs with sufficient data, 
+        scores each by predicted growth momentum, and ranks the <strong>Top 20 Best Opportunity SKUs</strong> for you — no manual selection needed.
+        </div>
+        """, unsafe_allow_html=True)
+
         if "Parent" in df_s.columns:
-            # Get top SKUs
-            sku_historical = df_s.groupby("Parent").agg({
-                "revenue": "sum",
-                "orders": "sum"
-            }).reset_index().sort_values("revenue", ascending=False).head(10)
-            
-            # Select SKU to forecast
-            selected_sku = st.selectbox(
-                "Select SKU to Forecast",
-                sku_historical["Parent"].tolist()
-            )
-            
-            if selected_sku:
-                # Get SKU-specific data
-                sku_data = df_s[df_s["Parent"] == selected_sku].copy()
-                sku_daily = sku_data.groupby(pd.Grouper(key="date", freq="D")).agg({
-                    "revenue": "sum",
-                    "orders": "sum"
-                }).reset_index().sort_values("date")
-                
-                if len(sku_daily) >= 7:
-                    col1, col2 = st.columns([2, 1])
-                    
-                    with col1:
-                        # Prepare features
-                        sku_daily['days_since_start'] = (sku_daily['date'] - sku_daily['date'].min()).dt.days
-                        sku_daily['day_of_week'] = sku_daily['date'].dt.dayofweek
-                        
-                        X_sku = sku_daily[['days_since_start', 'day_of_week']].values
-                        y_sku_revenue = sku_daily['revenue'].values
-                        
-                        # Train model
-                        sku_model = LinearRegression()
-                        sku_model.fit(X_sku, y_sku_revenue)
-                        
-                        # Get YoY data
-                        yoy_sku_data = None
-                        if use_yoy:
-                            one_year_ago = sku_daily['date'].max() - pd.DateOffset(years=1)
-                            yoy_sku_mask = (sku_data['date'].dt.date >= (one_year_ago - timedelta(days=forecast_days)).date()) & \
-                                          (sku_data['date'].dt.date <= one_year_ago.date())
-                            yoy_sku = sku_data[yoy_sku_mask]
-                            if len(yoy_sku) > 0:
-                                yoy_sku_data = yoy_sku.groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum()
-                        
-                        # Predict
-                        last_day_sku = sku_daily['days_since_start'].max()
-                        future_days_sku = np.arange(last_day_sku + 1, last_day_sku + forecast_days + 1)
-                        future_dates_sku = pd.date_range(
-                            sku_daily['date'].max() + timedelta(days=1),
-                            periods=forecast_days
-                        )
-                        
-                        X_future_sku = np.column_stack([
-                            future_days_sku,
-                            [d.dayofweek for d in future_dates_sku]
+            all_parent_skus = df_s["Parent"].dropna().unique().tolist()
+            all_sku_forecasts = []
+
+            with st.spinner(f"🤖 Running ML forecasts on {len(all_parent_skus)} SKUs..."):
+                for sku in all_parent_skus:
+                    sku_df = df_s[df_s["Parent"] == sku].groupby(
+                        pd.Grouper(key="date", freq="D")
+                    ).agg({"revenue": "sum", "orders": "sum"}).reset_index().sort_values("date")
+
+                    if len(sku_df) < 7:
+                        continue
+
+                    sku_df["days"] = (sku_df["date"] - sku_df["date"].min()).dt.days
+                    sku_df["dow"]  = sku_df["date"].dt.dayofweek
+                    sku_df["month"] = sku_df["date"].dt.month
+
+                    X_s = sku_df[["days", "dow", "month"]].values
+                    y_s = sku_df["revenue"].values
+
+                    # Ridge regression with polynomial features for better accuracy
+                    from sklearn.linear_model import Ridge
+                    from sklearn.preprocessing import PolynomialFeatures
+                    poly_s = PolynomialFeatures(degree=2, include_bias=False)
+                    X_s_poly = poly_s.fit_transform(X_s)
+                    m = Ridge(alpha=1.0)
+                    m.fit(X_s_poly, y_s)
+
+                    last_d = sku_df["days"].max()
+                    future_dates_s = pd.date_range(sku_df["date"].max() + timedelta(days=1), periods=forecast_days)
+                    X_fut = poly_s.transform(
+                        np.column_stack([
+                            np.arange(last_d + 1, last_d + forecast_days + 1),
+                            [d.dayofweek for d in future_dates_s],
+                            [d.month for d in future_dates_s]
                         ])
-                        
-                        sku_pred = sku_model.predict(X_future_sku)
-                        sku_pred = np.maximum(sku_pred, 0)  # No negative predictions
-                        
-                        # Adjust with YoY if available
-                        if yoy_sku_data is not None and len(yoy_sku_data) > 0:
-                            yoy_avg_sku = yoy_sku_data.mean()
-                            current_avg_sku = sku_daily['revenue'].tail(30).mean()
-                            if yoy_avg_sku > 0:
-                                yoy_growth_sku = current_avg_sku / yoy_avg_sku
-                                sku_pred = sku_pred * (0.8 + 0.2 * yoy_growth_sku)
-                        
-                        # Visualization
-                        fig_sku = go.Figure()
-                        
-                        # Historical
-                        fig_sku.add_trace(go.Bar(
-                            x=sku_daily['date'],
-                            y=sku_daily['revenue'],
-                            name='Historical Revenue',
-                            marker_color='#3b82f6',
-                            opacity=0.7
-                        ))
-                        
-                        # Forecast
-                        fig_sku.add_trace(go.Scatter(
-                            x=future_dates_sku,
-                            y=sku_pred,
-                            name='Forecasted Revenue',
-                            line=dict(color='#10b981', width=3),
-                            mode='lines+markers'
-                        ))
-                        
-                        # YoY comparison
-                        if yoy_sku_data is not None and len(yoy_sku_data) > 0:
-                            yoy_dates_sku = pd.date_range(
-                                sku_daily['date'].max() - pd.DateOffset(years=1) + timedelta(days=1),
-                                periods=min(len(yoy_sku_data), forecast_days)
+                    )
+                    pred_s = np.maximum(m.predict(X_fut), 0)
+
+                    hist_avg  = sku_df["revenue"].mean()
+                    hist_last = sku_df["revenue"].tail(14).mean()   # recent 2-week avg
+                    fore_avg  = pred_s.mean()
+                    growth    = ((fore_avg - hist_avg) / hist_avg * 100) if hist_avg > 0 else 0
+                    momentum  = ((fore_avg - hist_last) / hist_last * 100) if hist_last > 0 else 0
+
+                    # YoY comparison
+                    yoy_rev = None
+                    if use_yoy:
+                        one_yr_ago = sku_df["date"].max() - pd.DateOffset(years=1)
+                        yoy_mask = (
+                            df_s["Parent"].eq(sku) &
+                            df_s["date"].dt.date.between(
+                                (one_yr_ago - timedelta(days=forecast_days)).date(),
+                                one_yr_ago.date()
                             )
-                            fig_sku.add_trace(go.Scatter(
-                                x=yoy_dates_sku,
-                                y=yoy_sku_data.values[:len(yoy_dates_sku)],
-                                name='Last Year Same Period',
-                                line=dict(color='#f59e0b', width=2, dash='dot')
-                            ))
-                        
-                        fig_sku.update_layout(
+                        )
+                        yoy_chunk = df_s[yoy_mask]["revenue"].sum()
+                        yoy_rev = yoy_chunk if yoy_chunk > 0 else None
+
+                    yoy_change = None
+                    if yoy_rev:
+                        yoy_change = ((pred_s.sum() - yoy_rev) / yoy_rev * 100)
+
+                    # Confidence score
+                    conf = min(100, (len(sku_df) / 90) * 100)
+
+                    all_sku_forecasts.append({
+                        "SKU":             sku,
+                        "Historical Avg":  hist_avg,
+                        "Recent 2wk Avg":  hist_last,
+                        "Forecast Avg":    fore_avg,
+                        f"Total Forecast ({forecast_days}d)": pred_s.sum(),
+                        "Growth %":        growth,
+                        "Momentum %":      momentum,
+                        "YoY Change %":    yoy_change if yoy_change is not None else float("nan"),
+                        "Confidence %":    conf,
+                        "_pred":           pred_s,          # stored for chart
+                        "_dates":          future_dates_s,
+                        "_hist":           sku_df[["date","revenue"]]
+                    })
+
+            if not all_sku_forecasts:
+                st.warning("⚠️ No SKUs had enough data (7+ days) to forecast.")
+            else:
+                df_sku_rank = pd.DataFrame(all_sku_forecasts)
+
+                # Rank by composite score: growth + momentum + confidence
+                df_sku_rank["_score"] = (
+                    df_sku_rank["Growth %"].clip(-200, 200) * 0.4 +
+                    df_sku_rank["Momentum %"].clip(-200, 200) * 0.4 +
+                    df_sku_rank["Confidence %"] * 0.2
+                )
+                df_sku_rank = df_sku_rank.sort_values("_score", ascending=False).head(20).reset_index(drop=True)
+                df_sku_rank["Rank"] = df_sku_rank.index + 1
+
+                # ── TOP 20 SUMMARY TABLE ──────────────────────────────────────
+                display_cols = [
+                    "Rank", "SKU", "Historical Avg", "Recent 2wk Avg",
+                    "Forecast Avg", f"Total Forecast ({forecast_days}d)",
+                    "Growth %", "Momentum %", "YoY Change %", "Confidence %"
+                ]
+                df_display = df_sku_rank[display_cols].copy()
+
+                st.markdown(f"### 🏆 Top 20 SKUs by ML Forecast Score")
+                st.caption("Ranked by composite score: Growth (40%) + Short-term Momentum (40%) + Model Confidence (20%)")
+
+                st.dataframe(
+                    df_display,
+                    column_config={
+                        "Rank":         st.column_config.NumberColumn("Rank", format="%d"),
+                        "SKU":          st.column_config.TextColumn("SKU"),
+                        "Historical Avg":      st.column_config.NumberColumn("Hist. Avg/Day", format="$%.0f"),
+                        "Recent 2wk Avg":      st.column_config.NumberColumn("Recent 2wk Avg", format="$%.0f"),
+                        "Forecast Avg":        st.column_config.NumberColumn("Forecast Avg/Day", format="$%.0f"),
+                        f"Total Forecast ({forecast_days}d)": st.column_config.NumberColumn(f"Total Forecast", format="$%.0f"),
+                        "Growth %":            st.column_config.NumberColumn("Growth %", format="%.1f%%"),
+                        "Momentum %":          st.column_config.NumberColumn("Momentum %", format="%.1f%%"),
+                        "YoY Change %":        st.column_config.NumberColumn("YoY Change %", format="%.1f%%"),
+                        "Confidence %":        st.column_config.NumberColumn("Confidence %", format="%.0f%%"),
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                    height=550
+                )
+
+                # ── TOP 5 VISUAL CHARTS ───────────────────────────────────────
+                st.markdown("---")
+                st.markdown("### 📈 Forecast Charts — Top 5 SKUs")
+
+                top5 = df_sku_rank.head(5)
+                chart_cols = st.columns(min(len(top5), 5))
+
+                for i, (_, row) in enumerate(top5.iterrows()):
+                    with chart_cols[i]:
+                        fig_mini = go.Figure()
+                        hist = row["_hist"]
+                        fig_mini.add_trace(go.Bar(
+                            x=hist["date"], y=hist["revenue"],
+                            name="Historical", marker_color="#3b82f6", opacity=0.7,
+                            showlegend=False
+                        ))
+                        fig_mini.add_trace(go.Scatter(
+                            x=row["_dates"], y=row["_pred"],
+                            name="Forecast", line=dict(color="#10b981", width=2),
+                            mode="lines", showlegend=False
+                        ))
+                        fig_mini.update_layout(
+                            title=dict(text=f"#{row['Rank']} {row['SKU']}", font_size=12),
                             template="plotly_dark",
                             paper_bgcolor="rgba(0,0,0,0)",
                             plot_bgcolor="rgba(0,0,0,0)",
-                            yaxis=dict(title="Revenue ($)", showgrid=True, gridcolor="#2d303e"),
-                            xaxis=dict(title="Date"),
-                            legend=dict(orientation="h", y=1.1),
-                            margin=dict(l=0, r=0, t=40, b=0),
-                            height=400
+                            margin=dict(l=0, r=0, t=30, b=0),
+                            height=200,
+                            yaxis=dict(showgrid=False, showticklabels=False),
+                            xaxis=dict(showgrid=False, showticklabels=False)
                         )
-                        st.plotly_chart(fig_sku, config={'displayModeBar': False})
-                    
-                    with col2:
-                        st.markdown(f"**📦 {selected_sku}**")
-                        
-                        sku_forecast_total = sku_pred.sum()
-                        sku_forecast_avg = sku_pred.mean()
-                        sku_historical_avg = sku_daily['revenue'].tail(forecast_days).mean()
-                        sku_growth = ((sku_forecast_avg - sku_historical_avg) / sku_historical_avg * 100) if sku_historical_avg > 0 else 0
-                        
-                        st.metric(
-                            f"Predicted Revenue ({forecast_days}d)",
-                            f"${sku_forecast_total:,.0f}"
+                        st.plotly_chart(fig_mini, config={"displayModeBar": False}, use_container_width=True)
+                        growth_val = row["Growth %"]
+                        color = "green" if growth_val >= 0 else "red"
+                        st.markdown(
+                            f"<p style='text-align:center; color:{color}; font-size:13px; font-weight:700;'>"
+                            f"${row[f'Total Forecast ({forecast_days}d)']:,.0f} | {growth_val:+.1f}%</p>",
+                            unsafe_allow_html=True
                         )
-                        
-                        st.metric(
-                            "Daily Avg (Forecast)",
-                            f"${sku_forecast_avg:,.0f}"
-                        )
-                        
-                        st.metric(
-                            "Growth vs Historical",
-                            f"{sku_growth:+.1f}%"
-                        )
-                        
-                        st.markdown("---")
-                        
-                        if yoy_sku_data is not None and len(yoy_sku_data) > 0:
-                            yoy_total_sku = yoy_sku_data.sum()
-                            yoy_vs_pred = ((sku_forecast_total - yoy_total_sku) / yoy_total_sku * 100) if yoy_total_sku > 0 else 0
-                            st.metric(
-                                "vs Last Year",
-                                f"{yoy_vs_pred:+.1f}%"
-                            )
-                        
-                        if sku_growth > 15:
-                            st.success("🚀 Strong growth! Consider increasing inventory.")
-                        elif sku_growth < -15:
-                            st.warning("📉 Declining trend. Review product strategy.")
-                        else:
-                            st.info("➡️ Stable performance expected.")
-                    
-                    # Show all SKU forecasts
-                    st.markdown("---")
-                    st.markdown("**📊 All Top SKUs Forecast Summary**")
-                    
-                    all_sku_forecasts = []
-                    for sku in sku_historical["Parent"].head(5):
-                        sku_df = df_s[df_s["Parent"] == sku].groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
-                        if len(sku_df) >= 7:
-                            sku_df['days'] = (sku_df['date'] - sku_df['date'].min()).dt.days
-                            X_s = sku_df['days'].values.reshape(-1, 1)
-                            y_s = sku_df['revenue'].values
-                            
-                            m = LinearRegression()
-                            m.fit(X_s, y_s)
-                            
-                            last_d = sku_df['days'].max()
-                            future_d = np.arange(last_d + 1, last_d + forecast_days + 1).reshape(-1, 1)
-                            pred_s = m.predict(future_d)
-                            pred_s = np.maximum(pred_s, 0)
-                            
-                            all_sku_forecasts.append({
-                                'SKU': sku,
-                                'Historical Avg': sku_df['revenue'].mean(),
-                                'Forecast Avg': pred_s.mean(),
-                                'Total Forecast': pred_s.sum(),
-                                'Growth': ((pred_s.mean() - sku_df['revenue'].mean()) / sku_df['revenue'].mean() * 100) if sku_df['revenue'].mean() > 0 else 0
-                            })
-                    
-                    if all_sku_forecasts:
-                        df_all_sku = pd.DataFrame(all_sku_forecasts)
-                        st.dataframe(
-                            df_all_sku,
-                            column_config={
-                                "SKU": "Product",
-                                "Historical Avg": st.column_config.NumberColumn("Historical Avg", format="$%.0f"),
-                                "Forecast Avg": st.column_config.NumberColumn("Forecast Avg", format="$%.0f"),
-                                "Total Forecast": st.column_config.NumberColumn(f"Total ({forecast_days}d)", format="$%.0f"),
-                                "Growth": st.column_config.NumberColumn("Growth %", format="%.1f%%"),
-                            },
-                            hide_index=True,
-                            use_container_width=True
-                        )
-                else:
-                    st.warning(f"⚠️ SKU '{selected_sku}' needs at least 7 days of data. Current: {len(sku_daily)} days")
+
+                # ── GROWTH vs REVENUE SCATTER ─────────────────────────────────
+                st.markdown("---")
+                st.markdown("### 🔵 Opportunity Matrix — Growth vs Forecasted Revenue")
+                st.caption("Top-right = High growth + High revenue = Best opportunities to scale")
+
+                fig_scatter = px.scatter(
+                    df_sku_rank,
+                    x=f"Total Forecast ({forecast_days}d)",
+                    y="Growth %",
+                    text="SKU",
+                    size="Confidence %",
+                    color="Momentum %",
+                    color_continuous_scale="RdYlGn",
+                    labels={
+                        f"Total Forecast ({forecast_days}d)": "Forecasted Revenue ($)",
+                        "Growth %": "Growth vs Historical (%)"
+                    },
+                    size_max=30
+                )
+                fig_scatter.update_traces(textposition="top center", textfont_size=9)
+                fig_scatter.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(255,255,255,0.03)",
+                    height=450,
+                    margin=dict(l=0, r=0, t=20, b=0)
+                )
+                st.plotly_chart(fig_scatter, config={"displayModeBar": False})
+
         else:
             st.info("📦 SKU data not available. Ensure 'Parent' column exists in your data.")
     
@@ -2160,312 +2160,466 @@ with tabs[6]:
 # TAB 8: Weekly Reports
 with tabs[7]:
     st.markdown('<div class="section-header">📅 Weekly Performance Reports</div>', unsafe_allow_html=True)
-    
+
     st.markdown("""
     <div class="info-box">
-    📊 <strong>Generate Weekly Reports:</strong> Create comprehensive performance summaries with key metrics, 
-    marketplace breakdowns, and actionable recommendations. Export as PDF or share the summary.
+    📊 <strong>Generate Weekly Reports with Year-over-Year Comparison:</strong> Every metric is automatically 
+    compared against the <strong>exact same period last year</strong> so you instantly see whether you're growing or declining.
     </div>
     """, unsafe_allow_html=True)
-    
-    # Report Configuration
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
+
+    # ── CONTROLS ─────────────────────────────────────────────────────────────
+    cfg_col1, cfg_col2 = st.columns([2, 1])
+
+    with cfg_col1:
         st.markdown("**📋 Report Generator**")
-        
-        # Date range selector for report
-        st.markdown("**Select Report Period:**")
         col_date1, col_date2 = st.columns(2)
         with col_date1:
             report_start = st.date_input(
                 "From Date",
                 value=max_date - timedelta(days=7),
-                min_value=min_date,
-                max_value=max_date,
+                min_value=min_date, max_value=max_date,
                 key="report_start"
             )
         with col_date2:
             report_end = st.date_input(
                 "To Date",
                 value=max_date,
-                min_value=min_date,
-                max_value=max_date,
+                min_value=min_date, max_value=max_date,
                 key="report_end"
             )
-        
-        # Report sections to include
-        st.markdown("**📑 Include in Report:**")
-        include_kpis = st.checkbox("Key Performance Indicators", value=True)
-        include_trends = st.checkbox("Performance Trends", value=True)
-        include_marketplaces = st.checkbox("Marketplace Breakdown", value=True)
-        include_skus = st.checkbox("Top SKU Performance", value=True)
-        include_recommendations = st.checkbox("Strategic Recommendations", value=True)
-        
-        # Generate report button
+
+        st.markdown("**📑 Include Sections:**")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            include_kpis            = st.checkbox("KPI Summary",          value=True)
+            include_trends          = st.checkbox("Trend Chart",           value=True)
+        with c2:
+            include_marketplaces    = st.checkbox("Marketplace Breakdown", value=True)
+            include_skus            = st.checkbox("Top SKUs",              value=True)
+        with c3:
+            include_recommendations = st.checkbox("Recommendations",       value=True)
+            include_yoy             = st.checkbox("YoY Comparison",        value=True)
+
         if st.button("📊 Generate Report", type="primary", key="generate_report"):
-            # Filter data for report period
-            report_mask_sales = (
-                (sales_df["date"].dt.date >= report_start) & 
+            period_len = (report_end - report_start).days + 1
+
+            # ── Current period ──────────────────────────────────────────────
+            mask_s = (
+                (sales_df["date"].dt.date >= report_start) &
                 (sales_df["date"].dt.date <= report_end) &
                 (sales_df["channel"].isin(selected_channels))
             )
-            report_df_s = sales_df[report_mask_sales]
-            
-            report_mask_spend = (
-                (spend_df["date"].dt.date >= report_start) & 
+            mask_sp = (
+                (spend_df["date"].dt.date >= report_start) &
                 (spend_df["date"].dt.date <= report_end) &
                 (spend_df["channel"].isin(selected_channels))
             )
-            report_df_sp = spend_df[report_mask_spend]
-            
-            # Calculate metrics for report period
+            report_df_s  = sales_df[mask_s]
+            report_df_sp = spend_df[mask_sp]
             report_metrics = calc_metrics(report_df_s, report_df_sp)
-            
-            # Store in session state to display
+
+            # ── Same period LAST YEAR ───────────────────────────────────────
+            yoy_start = report_start - timedelta(days=365)
+            yoy_end   = report_end   - timedelta(days=365)
+            mask_yoy_s = (
+                (sales_df["date"].dt.date >= yoy_start) &
+                (sales_df["date"].dt.date <= yoy_end) &
+                (sales_df["channel"].isin(selected_channels))
+            )
+            mask_yoy_sp = (
+                (spend_df["date"].dt.date >= yoy_start) &
+                (spend_df["date"].dt.date <= yoy_end) &
+                (spend_df["channel"].isin(selected_channels))
+            )
+            yoy_df_s  = sales_df[mask_yoy_s]
+            yoy_df_sp = spend_df[mask_yoy_sp]
+            yoy_metrics = calc_metrics(yoy_df_s, yoy_df_sp) if len(yoy_df_s) > 0 else None
+
             st.session_state.current_report = {
-                'period': f"{report_start.strftime('%b %d, %Y')} - {report_end.strftime('%b %d, %Y')}",
-                'metrics': report_metrics,
-                'sales_data': report_df_s,
-                'spend_data': report_df_sp,
+                'period':       f"{report_start.strftime('%b %d, %Y')} – {report_end.strftime('%b %d, %Y')}",
+                'yoy_period':   f"{yoy_start.strftime('%b %d, %Y')} – {yoy_end.strftime('%b %d, %Y')}",
+                'metrics':      report_metrics,
+                'yoy_metrics':  yoy_metrics,
+                'sales_data':   report_df_s,
+                'spend_data':   report_df_sp,
+                'yoy_sales':    yoy_df_s,
+                'yoy_spend':    yoy_df_sp,
+                'report_start': report_start,
+                'report_end':   report_end,
                 'sections': {
-                    'kpis': include_kpis,
-                    'trends': include_trends,
-                    'marketplaces': include_marketplaces,
-                    'skus': include_skus,
-                    'recommendations': include_recommendations
+                    'kpis':            include_kpis,
+                    'trends':          include_trends,
+                    'marketplaces':    include_marketplaces,
+                    'skus':            include_skus,
+                    'recommendations': include_recommendations,
+                    'yoy':             include_yoy,
                 }
             }
-            st.success("✅ Report generated successfully!")
+            st.success("✅ Report generated!")
             st.rerun()
-    
-    with col2:
-        st.markdown("**💡 Report Tips**")
+
+    with cfg_col2:
+        st.markdown("**💡 Tips**")
         st.markdown("""
-        **Best Practices:**
-        - Weekly reports: Use 7-day periods
-        - Monthly reports: Full month data
-        - Include recommendations for action items
-        
-        **Common Report Types:**
-        - **Weekly Summary** (last 7 days)
-        - **Monthly Review** (full month)
-        - **Quarter Analysis** (90 days)
-        - **Campaign Performance** (campaign dates)
-        
-        **Export Options:**
-        - View in dashboard
-        - Copy formatted text
-        - Download as markdown
-        - Share with team
+        **Periods:**
+        - Last 7 days → Weekly
+        - Last 30 days → Monthly
+        - Last 90 days → Quarter
+
+        **YoY Comparison:**
+        Automatically uses exact same
+        calendar period one year ago.
+
+        **No data last year?**
+        YoY section is hidden gracefully.
+
+        **Export:**
+        Download full markdown report
+        or copy text for email/Slack.
         """)
-    
-    # Display generated report
+
+    # ── RENDER REPORT ─────────────────────────────────────────────────────────
     if 'current_report' in st.session_state:
         report = st.session_state.current_report
-        
+        m      = report['metrics']
+        ym     = report['yoy_metrics']   # None if no last-year data
+        has_yoy = ym is not None and report['sections']['yoy']
+
+        def _delta(curr, prev, fmt="$"):
+            if prev is None or prev == 0:
+                return None
+            pct = (curr - prev) / abs(prev) * 100
+            if fmt == "$":
+                return f"{pct:+.1f}% vs last year (was ${prev:,.0f})"
+            elif fmt == "x":
+                return f"{pct:+.1f}% vs last year (was {prev:.2f}x)"
+            else:
+                return f"{pct:+.1f}% vs last year (was {prev:.1f}{fmt})"
+
         st.markdown("---")
-        st.markdown(f"## 📊 Performance Report")
-        st.markdown(f"**Period:** {report['period']}")
-        
-        # KPIs Section
+
+        # ── HEADER BANNER ────────────────────────────────────────────────────
+        st.markdown(
+            f"<h2 style='margin:0'>📊 Performance Report</h2>"
+            f"<p style='color:#9ca3af; margin:4px 0 16px 0;'>"
+            f"📅 <strong>This period:</strong> {report['period']} &nbsp;|&nbsp; "
+            f"📅 <strong>Last year same period:</strong> {report['yoy_period']}"
+            f"</p>",
+            unsafe_allow_html=True
+        )
+
+        # ── KPI SECTION ───────────────────────────────────────────────────────
         if report['sections']['kpis']:
             st.markdown("### 💎 Key Performance Indicators")
-            
-            kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
-            with kpi_col1:
-                st.metric("Total Revenue", f"${report['metrics']['Revenue']:,.0f}")
-            with kpi_col2:
-                st.metric("Total Orders", f"{report['metrics']['Orders']:,.0f}")
-            with kpi_col3:
-                st.metric("ROAS", f"{report['metrics']['ROAS']:.2f}x")
-            with kpi_col4:
-                st.metric("Net Profit", f"${report['metrics']['Net']:,.0f}")
-            
-            kpi_col5, kpi_col6, kpi_col7, kpi_col8 = st.columns(4)
-            with kpi_col5:
-                st.metric("Ad Spend", f"${report['metrics']['Spend']:,.0f}")
-            with kpi_col6:
-                st.metric("Commission", f"${report['metrics']['Commission']:,.0f}")
-            with kpi_col7:
-                st.metric("ACOS", f"{report['metrics']['ACOS']:.1f}%")
-            with kpi_col8:
-                st.metric("AOV", f"${report['metrics']['AOV']:.2f}")
-        
-        # Marketplace Breakdown
-        ch_report = pd.DataFrame()  # Initialize ch_report to avoid NameError
-        
-        if report['sections']['marketplaces']:
-            st.markdown("### 🛒 Marketplace Performance")
-            
-            # Calculate marketplace data
-            ch_report = report['sales_data'].groupby("channel").agg({
-                "revenue": "sum",
-                "orders": "sum"
-            }).reset_index()
-            
-            ch_sp_report = report['spend_data'].groupby("channel")["spend"].sum().reset_index()
-            ch_report = pd.merge(ch_report, ch_sp_report, on="channel", how="outer").fillna(0)
-            ch_report["roas"] = ch_report.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
-            ch_report["acos"] = ch_report.apply(lambda x: (x["spend"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
-            ch_report = ch_report.sort_values("revenue", ascending=False)
-            
-            # Display marketplace table
+            st.caption("Delta shown vs same period last year. Green = improvement, Red = decline.")
+
+            k1, k2, k3, k4 = st.columns(4)
+            with k1:
+                st.metric("💰 Revenue",   f"${m['Revenue']:,.0f}",
+                          delta=_delta(m['Revenue'], ym['Revenue'] if has_yoy else None) if has_yoy else None)
+            with k2:
+                st.metric("🛒 Orders",    f"{m['Orders']:,.0f}",
+                          delta=_delta(m['Orders'], ym['Orders'] if has_yoy else None, fmt="") if has_yoy else None)
+            with k3:
+                st.metric("🎯 ROAS",      f"{m['ROAS']:.2f}x",
+                          delta=_delta(m['ROAS'], ym['ROAS'] if has_yoy else None, fmt="x") if has_yoy else None)
+            with k4:
+                st.metric("💹 Net Profit", f"${m['Net']:,.0f}",
+                          delta=_delta(m['Net'], ym['Net'] if has_yoy else None) if has_yoy else None)
+
+            k5, k6, k7, k8 = st.columns(4)
+            with k5:
+                st.metric("📢 Ad Spend",   f"${m['Spend']:,.0f}",
+                          delta=_delta(m['Spend'], ym['Spend'] if has_yoy else None) if has_yoy else None,
+                          delta_color="inverse")
+            with k6:
+                st.metric("🏪 Commission", f"${m['Commission']:,.0f}",
+                          delta=_delta(m['Commission'], ym['Commission'] if has_yoy else None) if has_yoy else None,
+                          delta_color="inverse")
+            with k7:
+                st.metric("📊 ACOS",       f"{m['ACOS']:.1f}%",
+                          delta=_delta(m['ACOS'], ym['ACOS'] if has_yoy else None, fmt="%") if has_yoy else None,
+                          delta_color="inverse")
+            with k8:
+                st.metric("🧾 AOV",        f"${m['AOV']:.2f}",
+                          delta=_delta(m['AOV'], ym['AOV'] if has_yoy else None) if has_yoy else None)
+
+        # ── YoY VISUAL COMPARISON ─────────────────────────────────────────────
+        if has_yoy and report['sections']['yoy']:
+            st.markdown("### 📅 This Week vs Same Week Last Year")
+
+            metrics_to_compare = {
+                "Revenue": ("$", m['Revenue'], ym['Revenue']),
+                "Orders":  ("",  m['Orders'],  ym['Orders']),
+                "Ad Spend":("$", m['Spend'],   ym['Spend']),
+                "Net Profit":("$",m['Net'],    ym['Net']),
+                "ROAS":    ("x", m['ROAS'],    ym['ROAS']),
+                "ACOS %":  ("%", m['ACOS'],    ym['ACOS']),
+            }
+
+            yoy_rows = []
+            for metric_name, (unit, curr_val, prev_val) in metrics_to_compare.items():
+                pct = ((curr_val - prev_val) / abs(prev_val) * 100) if prev_val != 0 else 0
+                if unit == "$":
+                    curr_str = f"${curr_val:,.0f}"
+                    prev_str = f"${prev_val:,.0f}"
+                elif unit == "x":
+                    curr_str = f"{curr_val:.2f}x"
+                    prev_str = f"{prev_val:.2f}x"
+                elif unit == "%":
+                    curr_str = f"{curr_val:.1f}%"
+                    prev_str = f"{prev_val:.1f}%"
+                else:
+                    curr_str = f"{curr_val:,.0f}"
+                    prev_str = f"{prev_val:,.0f}"
+                yoy_rows.append({
+                    "Metric":         metric_name,
+                    "This Period":    curr_str,
+                    "Last Year":      prev_str,
+                    "Change %":       pct,
+                    "Trend":          "📈" if pct > 0 else ("📉" if pct < 0 else "➡️")
+                })
+
+            df_yoy = pd.DataFrame(yoy_rows)
             st.dataframe(
-                ch_report[['channel', 'revenue', 'orders', 'spend', 'roas', 'acos']],
+                df_yoy,
                 column_config={
-                    "channel": "Marketplace",
-                    "revenue": st.column_config.NumberColumn("Revenue", format="$%d"),
-                    "orders": st.column_config.NumberColumn("Orders", format="%d"),
-                    "spend": st.column_config.NumberColumn("Ad Spend", format="$%d"),
-                    "roas": st.column_config.NumberColumn("ROAS", format="%.2fx"),
-                    "acos": st.column_config.NumberColumn("ACOS", format="%.1f%%"),
+                    "Metric":      st.column_config.TextColumn("Metric"),
+                    "This Period": st.column_config.TextColumn("This Period"),
+                    "Last Year":   st.column_config.TextColumn("Same Period Last Year"),
+                    "Change %":    st.column_config.NumberColumn("Change %", format="%.1f%%"),
+                    "Trend":       st.column_config.TextColumn(""),
                 },
                 hide_index=True,
                 use_container_width=True
             )
-            
-            # Top performer
-            if len(ch_report) > 0:
-                top_marketplace = ch_report.iloc[0]
-                st.success(f"🏆 **Top Performer:** {top_marketplace['channel']} - ${top_marketplace['revenue']:,.0f} revenue with {top_marketplace['roas']:.2f}x ROAS")
-        
-        # Top SKUs
-        if report['sections']['skus'] and "Parent" in report['sales_data'].columns:
-            st.markdown("### 🏷️ Top Performing SKUs")
-            
-            sku_report = report['sales_data'].groupby("Parent").agg({
-                "revenue": "sum",
-                "orders": "sum"
-            }).reset_index()
-            sku_report["aov"] = sku_report["revenue"] / sku_report["orders"]
-            sku_report = sku_report.sort_values("revenue", ascending=False).head(5)
-            
-            st.dataframe(
-                sku_report,
-                column_config={
-                    "Parent": "SKU",
-                    "revenue": st.column_config.NumberColumn("Revenue", format="$%d"),
-                    "orders": st.column_config.NumberColumn("Orders", format="%d"),
-                    "aov": st.column_config.NumberColumn("AOV", format="$%.2f"),
-                },
-                hide_index=True,
-                use_container_width=True
-            )
-        
-        # Recommendations
-        if report['sections']['recommendations']:
-            st.markdown("### 🚀 Strategic Recommendations")
-            
-            try:
-                # Generate recommendations based on report data
-                # Ensure ch_report has the right structure
-                if len(ch_report) > 0 and 'roas' in ch_report.columns:
-                    ch_matrix_rec = ch_report
-                else:
-                    # Create empty dataframe with expected structure if no marketplace data
-                    ch_matrix_rec = pd.DataFrame(columns=['channel', 'revenue', 'spend', 'roas'])
-                
-                # Call generate_insights with correct number of parameters (only 2)
-                recommendations_list = generate_insights(ch_matrix_rec, report['metrics'])
-                
-                if recommendations_list:
-                    for rec in recommendations_list[:5]:  # Top 5 recommendations
-                        rec_type_map = {
-                            "scale": ("success", "📈"),
-                            "warn": ("warning", "⚠️"),
-                            "crit": ("error", "🚨"),
-                            "info": ("info", "💡")
-                        }
-                        status, icon = rec_type_map.get(rec['type'], ("info", "💡"))
-                        
-                        if status == "success":
-                            st.success(f"{icon} **{rec['title']}** - {rec['msg']}")
-                        elif status == "warning":
-                            st.warning(f"{icon} **{rec['title']}** - {rec['msg']}")
-                        elif status == "error":
-                            st.error(f"{icon} **{rec['title']}** - {rec['msg']}")
-                        else:
-                            st.info(f"{icon} **{rec['title']}** - {rec['msg']}")
-                else:
-                    st.info("✅ No critical recommendations at this time. Performance is stable.")
-            except Exception as e:
-                st.warning(f"⚠️ Could not generate recommendations. Please ensure marketplace data is included in the report.")
-                # Optional: Show error details for debugging
-                # st.error(f"Debug: {str(e)}")
-        
-        # Performance Trends
-        if report['sections']['trends']:
-            st.markdown("### 📈 Performance Trend")
-            
-            # Daily trend for report period
-            daily_report = report['sales_data'].groupby(pd.Grouper(key="date", freq="D")).agg({
-                "revenue": "sum",
-                "orders": "sum"
-            }).reset_index()
-            
-            fig_report_trend = go.Figure()
-            fig_report_trend.add_trace(go.Scatter(
-                x=daily_report["date"],
-                y=daily_report["revenue"],
-                name="Revenue",
-                fill='tozeroy',
-                line=dict(color='#3b82f6', width=2)
+
+            # YoY revenue trend chart side-by-side
+            daily_curr = report['sales_data'].groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
+            daily_yoy  = report['yoy_sales'].groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
+
+            # Align on day-offset so both plot on the same x-axis
+            daily_curr["day"] = range(len(daily_curr))
+            daily_yoy["day"]  = range(len(daily_yoy))
+            max_days = max(len(daily_curr), len(daily_yoy))
+
+            fig_yoy = go.Figure()
+            fig_yoy.add_trace(go.Scatter(
+                x=daily_curr["day"], y=daily_curr["revenue"],
+                name=f"This Period ({report['period'][:6]})",
+                line=dict(color="#3b82f6", width=3),
+                fill="tozeroy", fillcolor="rgba(59,130,246,0.15)"
             ))
-            
-            fig_report_trend.update_layout(
+            fig_yoy.add_trace(go.Scatter(
+                x=daily_yoy["day"], y=daily_yoy["revenue"],
+                name=f"Last Year ({report['yoy_period'][:6]})",
+                line=dict(color="#f59e0b", width=2, dash="dot")
+            ))
+            fig_yoy.update_layout(
                 template="plotly_dark",
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
+                xaxis=dict(title="Day of Period", showgrid=False),
                 yaxis=dict(title="Revenue ($)", showgrid=True, gridcolor="#2d303e"),
-                xaxis=dict(title="Date", showgrid=False),
-                margin=dict(l=0, r=0, t=20, b=0),
-                height=300
+                legend=dict(orientation="h", y=1.12),
+                margin=dict(l=0, r=0, t=30, b=0),
+                height=320
             )
-            st.plotly_chart(fig_report_trend, config={'displayModeBar': False})
-        
-        # Export options
+            st.plotly_chart(fig_yoy, config={"displayModeBar": False})
+
+            # Overall YoY summary callout
+            rev_growth = ((m['Revenue'] - ym['Revenue']) / ym['Revenue'] * 100) if ym['Revenue'] > 0 else 0
+            if rev_growth > 10:
+                st.success(f"🎉 **Strong YoY Growth!** Revenue is up **{rev_growth:.1f}%** vs same period last year.")
+            elif rev_growth > 0:
+                st.info(f"📈 **Positive YoY Growth.** Revenue up {rev_growth:.1f}% vs last year.")
+            elif rev_growth > -10:
+                st.warning(f"⚠️ **Slight YoY Decline.** Revenue down {abs(rev_growth):.1f}% vs last year.")
+            else:
+                st.error(f"🚨 **Significant YoY Decline.** Revenue down {abs(rev_growth):.1f}% — review strategy.")
+
+        # ── TREND CHART ───────────────────────────────────────────────────────
+        if report['sections']['trends']:
+            st.markdown("### 📈 Revenue Trend — This Period")
+            daily_r = report['sales_data'].groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
+            fig_trend = go.Figure()
+            fig_trend.add_trace(go.Scatter(
+                x=daily_r["date"], y=daily_r["revenue"],
+                fill="tozeroy", line=dict(color="#3b82f6", width=2)
+            ))
+            fig_trend.update_layout(
+                template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                yaxis=dict(title="Revenue ($)", showgrid=True, gridcolor="#2d303e"),
+                xaxis=dict(showgrid=False),
+                margin=dict(l=0, r=0, t=10, b=0), height=260
+            )
+            st.plotly_chart(fig_trend, config={"displayModeBar": False})
+
+        # ── MARKETPLACE BREAKDOWN ─────────────────────────────────────────────
+        ch_report = pd.DataFrame()
+        if report['sections']['marketplaces']:
+            st.markdown("### 🛒 Marketplace Performance")
+
+            ch_now = report['sales_data'].groupby("channel").agg({"revenue":"sum","orders":"sum"}).reset_index()
+            ch_sp_now = report['spend_data'].groupby("channel")["spend"].sum().reset_index()
+            ch_report = pd.merge(ch_now, ch_sp_now, on="channel", how="outer").fillna(0)
+            ch_report["roas"] = ch_report.apply(lambda r: r["revenue"]/r["spend"] if r["spend"]>0 else 0, axis=1)
+            ch_report["acos"] = ch_report.apply(lambda r: r["spend"]/r["revenue"]*100 if r["revenue"]>0 else 0, axis=1)
+            ch_report = ch_report.sort_values("revenue", ascending=False)
+
+            if has_yoy:
+                # Merge in YoY revenue per channel
+                ch_yoy = report['yoy_sales'].groupby("channel")["revenue"].sum().reset_index().rename(columns={"revenue":"yoy_revenue"})
+                ch_report = ch_report.merge(ch_yoy, on="channel", how="left").fillna(0)
+                ch_report["yoy_growth"] = ch_report.apply(
+                    lambda r: (r["revenue"]-r["yoy_revenue"])/r["yoy_revenue"]*100 if r["yoy_revenue"]>0 else float("nan"), axis=1
+                )
+
+                display_mp_cols = ["channel","revenue","orders","spend","roas","acos","yoy_revenue","yoy_growth"]
+                col_cfg_mp = {
+                    "channel":     "Marketplace",
+                    "revenue":     st.column_config.NumberColumn("Revenue",        format="$%d"),
+                    "orders":      st.column_config.NumberColumn("Orders",         format="%d"),
+                    "spend":       st.column_config.NumberColumn("Ad Spend",       format="$%d"),
+                    "roas":        st.column_config.NumberColumn("ROAS",           format="%.2fx"),
+                    "acos":        st.column_config.NumberColumn("ACOS",           format="%.1f%%"),
+                    "yoy_revenue": st.column_config.NumberColumn("Last Year Rev",  format="$%d"),
+                    "yoy_growth":  st.column_config.NumberColumn("YoY Growth",     format="%.1f%%"),
+                }
+            else:
+                display_mp_cols = ["channel","revenue","orders","spend","roas","acos"]
+                col_cfg_mp = {
+                    "channel": "Marketplace",
+                    "revenue": st.column_config.NumberColumn("Revenue",  format="$%d"),
+                    "orders":  st.column_config.NumberColumn("Orders",   format="%d"),
+                    "spend":   st.column_config.NumberColumn("Ad Spend", format="$%d"),
+                    "roas":    st.column_config.NumberColumn("ROAS",     format="%.2fx"),
+                    "acos":    st.column_config.NumberColumn("ACOS",     format="%.1f%%"),
+                }
+
+            st.dataframe(ch_report[display_mp_cols], column_config=col_cfg_mp,
+                         hide_index=True, use_container_width=True)
+
+            if len(ch_report) > 0:
+                top_mp = ch_report.iloc[0]
+                st.success(f"🏆 **Top Marketplace:** {top_mp['channel']} — ${top_mp['revenue']:,.0f} revenue | {top_mp['roas']:.2f}x ROAS")
+
+        # ── TOP SKUs ──────────────────────────────────────────────────────────
+        if report['sections']['skus'] and "Parent" in report['sales_data'].columns:
+            st.markdown("### 🏷️ Top SKU Performance")
+
+            sku_now = report['sales_data'].groupby("Parent").agg({"revenue":"sum","orders":"sum"}).reset_index()
+            sku_now["aov"] = sku_now["revenue"] / sku_now["orders"].replace(0, np.nan)
+            sku_now = sku_now.sort_values("revenue", ascending=False).head(10)
+
+            if has_yoy and "Parent" in report['yoy_sales'].columns:
+                sku_yoy = report['yoy_sales'].groupby("Parent")["revenue"].sum().reset_index().rename(columns={"revenue":"yoy_revenue"})
+                sku_now = sku_now.merge(sku_yoy, on="Parent", how="left").fillna(0)
+                sku_now["yoy_growth"] = sku_now.apply(
+                    lambda r: (r["revenue"]-r["yoy_revenue"])/r["yoy_revenue"]*100 if r["yoy_revenue"]>0 else float("nan"), axis=1
+                )
+                st.dataframe(sku_now, column_config={
+                    "Parent":      "SKU",
+                    "revenue":     st.column_config.NumberColumn("Revenue",       format="$%d"),
+                    "orders":      st.column_config.NumberColumn("Orders",        format="%d"),
+                    "aov":         st.column_config.NumberColumn("AOV",           format="$%.2f"),
+                    "yoy_revenue": st.column_config.NumberColumn("Last Year Rev", format="$%d"),
+                    "yoy_growth":  st.column_config.NumberColumn("YoY Growth",    format="%.1f%%"),
+                }, hide_index=True, use_container_width=True)
+            else:
+                st.dataframe(sku_now[["Parent","revenue","orders","aov"]], column_config={
+                    "Parent":  "SKU",
+                    "revenue": st.column_config.NumberColumn("Revenue", format="$%d"),
+                    "orders":  st.column_config.NumberColumn("Orders",  format="%d"),
+                    "aov":     st.column_config.NumberColumn("AOV",     format="$%.2f"),
+                }, hide_index=True, use_container_width=True)
+
+        # ── RECOMMENDATIONS ───────────────────────────────────────────────────
+        recommendations_list = []
+        if report['sections']['recommendations']:
+            st.markdown("### 🚀 Strategic Recommendations")
+            try:
+                ch_matrix_rec = ch_report if (len(ch_report) > 0 and 'roas' in ch_report.columns) \
+                    else pd.DataFrame(columns=['channel','revenue','spend','roas'])
+                recommendations_list = generate_insights(ch_matrix_rec, m)
+                for rec in recommendations_list[:5]:
+                    icon_map = {"scale":"📈","warn":"⚠️","crit":"🚨","info":"💡"}
+                    icon = icon_map.get(rec['type'], "💡")
+                    if rec['type'] == "scale":   st.success(f"{icon} **{rec['title']}** — {rec['msg']}")
+                    elif rec['type'] == "warn":  st.warning(f"{icon} **{rec['title']}** — {rec['msg']}")
+                    elif rec['type'] == "crit":  st.error(f"{icon} **{rec['title']}** — {rec['msg']}")
+                    else:                        st.info(f"{icon} **{rec['title']}** — {rec['msg']}")
+                if not recommendations_list:
+                    st.info("✅ No critical issues. Performance is stable.")
+            except Exception:
+                st.warning("⚠️ Could not generate recommendations. Include Marketplace Breakdown for best results.")
+
+        # ── EXPORT ────────────────────────────────────────────────────────────
         st.markdown("---")
         st.markdown("### 📤 Export Report")
-        
-        export_col1, export_col2 = st.columns(2)
-        
-        with export_col1:
-            # Generate markdown report
-            markdown_report = f"""# Performance Report
+
+        # Build markdown text
+        yoy_md = ""
+        if has_yoy:
+            yoy_md = f"""
+## 📅 Year-over-Year Comparison
+Same period last year: **{report['yoy_period']}**
+
+| Metric | This Period | Last Year | Change |
+|--------|------------|-----------|--------|
+| Revenue | ${m['Revenue']:,.0f} | ${ym['Revenue']:,.0f} | {((m['Revenue']-ym['Revenue'])/ym['Revenue']*100) if ym['Revenue'] else 0:+.1f}% |
+| Orders | {m['Orders']:,.0f} | {ym['Orders']:,.0f} | {((m['Orders']-ym['Orders'])/ym['Orders']*100) if ym['Orders'] else 0:+.1f}% |
+| ROAS | {m['ROAS']:.2f}x | {ym['ROAS']:.2f}x | {((m['ROAS']-ym['ROAS'])/ym['ROAS']*100) if ym['ROAS'] else 0:+.1f}% |
+| Net Profit | ${m['Net']:,.0f} | ${ym['Net']:,.0f} | {((m['Net']-ym['Net'])/abs(ym['Net'])*100) if ym['Net'] else 0:+.1f}% |
+| ACOS | {m['ACOS']:.1f}% | {ym['ACOS']:.1f}% | {((m['ACOS']-ym['ACOS'])/ym['ACOS']*100) if ym['ACOS'] else 0:+.1f}% |
+"""
+
+        mp_md = ""
+        if report['sections']['marketplaces'] and len(ch_report) > 0:
+            mp_md = "\n## 🛒 Marketplace Breakdown\n"
+            for _, row in ch_report.head(5).iterrows():
+                yoy_str = f" | Last Year: ${row.get('yoy_revenue', 0):,.0f} ({row.get('yoy_growth', float('nan')):+.1f}%)" \
+                          if 'yoy_revenue' in ch_report.columns else ""
+                mp_md += f"- **{row['channel']}**: ${row['revenue']:,.0f} rev | {row['roas']:.2f}x ROAS{yoy_str}\n"
+
+        rec_md = ""
+        if recommendations_list:
+            rec_md = "\n## 🚀 Recommendations\n"
+            for rec in recommendations_list[:5]:
+                rec_md += f"- **{rec['title']}**: {rec['msg']}\n"
+
+        markdown_report = f"""# 📊 Performance Report
 **Period:** {report['period']}
 
-## Key Metrics
-- **Revenue:** ${report['metrics']['Revenue']:,.0f}
-- **Orders:** {report['metrics']['Orders']:,.0f}
-- **ROAS:** {report['metrics']['ROAS']:.2f}x
-- **Net Profit:** ${report['metrics']['Net']:,.0f}
-- **ACOS:** {report['metrics']['ACOS']:.1f}%
-- **AOV:** ${report['metrics']['AOV']:.2f}
+## 💎 Key Metrics
+| Metric | This Period |
+|--------|------------|
+| Revenue | ${m['Revenue']:,.0f} |
+| Orders | {m['Orders']:,.0f} |
+| ROAS | {m['ROAS']:.2f}x |
+| Net Profit | ${m['Net']:,.0f} |
+| Ad Spend | ${m['Spend']:,.0f} |
+| ACOS | {m['ACOS']:.1f}% |
+| AOV | ${m['AOV']:.2f} |
+{yoy_md}{mp_md}{rec_md}
+---
+*Generated by Marketplace Business Insights Dashboard*
 """
-            
-            if report['sections']['marketplaces'] and len(ch_report) > 0:
-                markdown_report += f"\n## Top Marketplaces\n"
-                for _, row in ch_report.head(3).iterrows():
-                    markdown_report += f"- **{row['channel']}**: ${row['revenue']:,.0f} revenue, {row['roas']:.2f}x ROAS\n"
-            
-            if report['sections']['recommendations'] and recommendations_list:
-                markdown_report += f"\n## Recommendations\n"
-                for rec in recommendations_list[:3]:
-                    markdown_report += f"- **{rec['title']}**: {rec['msg']}\n"
-            
+
+        ex1, ex2 = st.columns(2)
+        with ex1:
             st.download_button(
-                "📥 Download as Markdown",
+                "📥 Download Markdown",
                 markdown_report,
-                f"weekly_report_{report_start}_{report_end}.md",
+                f"report_{report['report_start']}_{report['report_end']}.md",
                 "text/markdown",
-                key="download_markdown"
+                key="download_md"
             )
-        
-        with export_col2:
-            # Copy to clipboard button (show text area)
+        with ex2:
             if st.button("📋 Show Copyable Text", key="show_copy"):
-                st.text_area("Copy this report:", markdown_report, height=200)
+                st.text_area("Select all & copy:", markdown_report, height=200)
 
 # TAB 9: Data Explorer
 with tabs[8]:
