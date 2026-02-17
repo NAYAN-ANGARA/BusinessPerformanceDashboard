@@ -1144,10 +1144,22 @@ with tabs[5]:
         y_hist_series: pass historical values so lag features can be computed.
         For future dates y_hist_series=None → lags filled with last known values.
         """
+        # --- FIX START: Ensure input is a Series ---
+        # The .dt accessor is only available on Series. If dates_series is an Index 
+        # (e.g. from pd.date_range), subtraction results in TimedeltaIndex which lacks .dt
+        if not isinstance(dates_series, pd.Series):
+            dates_series = pd.Series(dates_series)
+        
+        # Reset index to ensure alignment with the DataFrame we are about to create
+        dates_series = dates_series.reset_index(drop=True)
+        # --- FIX END ---
+
         if origin_date is None:
             origin_date = dates_series.min()
 
         df_feat = pd.DataFrame(index=range(len(dates_series)))
+        
+        # Now this will work because dates_series is guaranteed to be a Series
         df_feat["days"]       = (dates_series - origin_date).dt.days.values
         df_feat["dow"]        = dates_series.dt.dayofweek.values
         df_feat["month"]      = dates_series.dt.month.values
