@@ -5,7 +5,6 @@ import plotly.graph_objects as go
 from gsheets import load_all_sheets
 from datetime import date, timedelta, datetime
 import numpy as np
-from forecast_engine import ensemble_forecast, forecast_all_skus  # ML logic lives in forecast_engine.py
 import json
 import hashlib
 
@@ -248,19 +247,14 @@ def multiselect_with_all(label, options):
 # ---------------- DATA LOADER ----------------
 @st.cache_data(show_spinner=True, ttl=600)
 def load_and_process_data():
-    # ── Credentials: read from Streamlit Secrets, write to a temp file ──
-    # This avoids committing the JSON key to GitHub and works on Streamlit Cloud.
     import tempfile, json as _json, os as _os
     try:
         creds_dict = dict(st.secrets["gcp_service_account"])
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
             _json.dump(creds_dict, tmp)
             creds = tmp.name
     except Exception as e:
-        return None, None, f"Credentials error: {e}. Add [gcp_service_account] to Streamlit Secrets."
-
+        return None, None, f"Credentials error: {e}"
     try:
         data1 = load_all_sheets(creds, "USA - DB for Marketplace Dashboard")
         data2 = load_all_sheets(creds, "IB - Database for Marketplace Dashboard")
@@ -274,11 +268,8 @@ def load_and_process_data():
     except Exception as e:
         return None, None, str(e)
     finally:
-        # Clean up temp credentials file
-        try:
-            _os.unlink(creds)
-        except Exception:
-            pass
+        try: _os.unlink(creds)
+        except Exception: pass
 
     if not all_dfs: return None, None, "No data found."
 
@@ -1142,6 +1133,13 @@ with tabs[5]:
     forecast_days = {"Next 7 Days": 7, "Next 30 Days": 30, "Next Quarter (90 Days)": 90}[forecast_period]
 
 
+    # ── Lazy import: ML only loads when this tab is first opened ─────────
+    try:
+        from forecast_engine import ensemble_forecast, forecast_all_skus
+    except Exception as _fe_err:
+        st.error(f"⚠️ Forecasting engine failed to load: {_fe_err}")
+        st.stop()
+
     st.markdown("---")
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -1313,14 +1311,15 @@ with tabs[5]:
         """, unsafe_allow_html=True)
 
         if "Parent" in df_s.columns:
-            all_parent_skus = tuple(sorted(df_s["Parent"].dropna().unique()))
+            all_parent_skus = df_s["Parent"].dropna().unique().tolist()
+            all_sku_forecasts = []
 
-            with st.spinner(f"\u26a1 Forecasting {len(all_parent_skus)} SKUs in parallel (cached after first run)..."):
+            with st.spinner(f"⚡ Forecasting {len(all_parent_skus)} SKUs in parallel..."):
                 all_sku_forecasts = forecast_all_skus(
                     df_s["revenue"].values,
                     df_s["date"].values,
                     df_s["Parent"].values,
-                    all_parent_skus,
+                    tuple(sorted(all_parent_skus)),
                     forecast_days,
                     use_yoy,
                 )
