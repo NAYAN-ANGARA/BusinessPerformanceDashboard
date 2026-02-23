@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from gsheets import load_all_sheets
 from datetime import date, timedelta, datetime
 import numpy as np
-from forecast_engine import ensemble_forecast  # ML logic lives in forecast_engine.py
+from forecast_engine import ensemble_forecast, forecast_all_skus  # ML logic lives in forecast_engine.py
 import json
 import hashlib
 
@@ -248,8 +248,19 @@ def multiselect_with_all(label, options):
 # ---------------- DATA LOADER ----------------
 @st.cache_data(show_spinner=True, ttl=600)
 def load_and_process_data():
-    creds = "secret-envoy-486405-j3-03851d061385.json"
-    
+    # ── Credentials: read from Streamlit Secrets, write to a temp file ──
+    # This avoids committing the JSON key to GitHub and works on Streamlit Cloud.
+    import tempfile, json as _json, os as _os
+    try:
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False
+        ) as tmp:
+            _json.dump(creds_dict, tmp)
+            creds = tmp.name
+    except Exception as e:
+        return None, None, f"Credentials error: {e}. Add [gcp_service_account] to Streamlit Secrets."
+
     try:
         data1 = load_all_sheets(creds, "USA - DB for Marketplace Dashboard")
         data2 = load_all_sheets(creds, "IB - Database for Marketplace Dashboard")
@@ -262,6 +273,12 @@ def load_and_process_data():
             
     except Exception as e:
         return None, None, str(e)
+    finally:
+        # Clean up temp credentials file
+        try:
+            _os.unlink(creds)
+        except Exception:
+            pass
 
     if not all_dfs: return None, None, "No data found."
 
@@ -1296,88 +1313,17 @@ with tabs[5]:
         """, unsafe_allow_html=True)
 
         if "Parent" in df_s.columns:
-            all_parent_skus = df_s["Parent"].dropna().unique().tolist()
-            all_sku_forecasts = []
+            all_parent_skus = tuple(sorted(df_s["Parent"].dropna().unique()))
 
-            with st.spinner(f"🤖 Running ML forecasts on {len(all_parent_skus)} SKUs..."):
-                for sku in all_parent_skus:
-                    sku_df = df_s[df_s["Parent"] == sku].groupby(
-                        pd.Grouper(key="date", freq="D")
-                    ).agg({"revenue": "sum", "orders": "sum"}).reset_index().sort_values("date")
-
-                    if len(sku_df) < 7:
-                        continue
-
-                    sku_df["days"] = (sku_df["date"] - sku_df["date"].min()).dt.days
-                    sku_df["dow"]  = sku_df["date"].dt.dayofweek
-                    sku_df["month"] = sku_df["date"].dt.month
-
-                    X_s = sku_df[["days", "dow", "month"]].values
-                    y_s = sku_df["revenue"].values
-
-                    # Use full ensemble for each SKU
-                    sku_dates_hist   = sku_df["date"]
-                    sku_dates_future = pd.date_range(sku_df["date"].max() + timedelta(days=1), periods=forecast_days)
-
-                    yoy_sku_vals = None
-                    if use_yoy:
-                        yoy_sku_mask = (
-                            df_s["Parent"].eq(sku) &
-                            df_s["date"].dt.date.between(
-                                (sku_df["date"].max() - pd.DateOffset(years=1) - timedelta(days=forecast_days)).date(),
-                                (sku_df["date"].max() - pd.DateOffset(years=1)).date()
-                            )
-                        )
-                        yoy_sku_chunk = df_s[yoy_sku_mask]["revenue"].values
-                        if len(yoy_sku_chunk) > 0:
-                            yoy_sku_vals = yoy_sku_chunk
-
-                    pred_s, pred_std_s, sku_conf, sku_r2, _ = ensemble_forecast(
-                        sku_dates_hist, y_s, sku_dates_future, yoy_sku_vals
-                    )
-                    pred_s = np.maximum(pred_s, 0)
-
-                    hist_avg  = sku_df["revenue"].mean()
-                    hist_last = sku_df["revenue"].tail(14).mean()   # recent 2-week avg
-                    fore_avg  = pred_s.mean()
-                    growth    = ((fore_avg - hist_avg) / hist_avg * 100) if hist_avg > 0 else 0
-                    momentum  = ((fore_avg - hist_last) / hist_last * 100) if hist_last > 0 else 0
-
-                    # YoY comparison
-                    yoy_rev = None
-                    if use_yoy:
-                        one_yr_ago = sku_df["date"].max() - pd.DateOffset(years=1)
-                        yoy_mask = (
-                            df_s["Parent"].eq(sku) &
-                            df_s["date"].dt.date.between(
-                                (one_yr_ago - timedelta(days=forecast_days)).date(),
-                                one_yr_ago.date()
-                            )
-                        )
-                        yoy_chunk = df_s[yoy_mask]["revenue"].sum()
-                        yoy_rev = yoy_chunk if yoy_chunk > 0 else None
-
-                    yoy_change = None
-                    if yoy_rev:
-                        yoy_change = ((pred_s.sum() - yoy_rev) / yoy_rev * 100)
-
-                    # Confidence score — use the actual ensemble R², not just data length
-                    conf = sku_conf  # comes from ensemble_forecast()
-
-                    all_sku_forecasts.append({
-                        "SKU":             sku,
-                        "Historical Avg":  hist_avg,
-                        "Recent 2wk Avg":  hist_last,
-                        "Forecast Avg":    fore_avg,
-                        f"Total Forecast ({forecast_days}d)": pred_s.sum(),
-                        "Growth %":        growth,
-                        "Momentum %":      momentum,
-                        "YoY Change %":    yoy_change if yoy_change is not None else float("nan"),
-                        "Confidence %":    conf,
-                        "_pred":           pred_s,
-                        "_dates":          sku_dates_future,
-                        "_hist":           sku_df[["date","revenue"]]
-                    })
+            with st.spinner(f"\u26a1 Forecasting {len(all_parent_skus)} SKUs in parallel (cached after first run)..."):
+                all_sku_forecasts = forecast_all_skus(
+                    df_s["revenue"].values,
+                    df_s["date"].values,
+                    df_s["Parent"].values,
+                    all_parent_skus,
+                    forecast_days,
+                    use_yoy,
+                )
 
             if not all_sku_forecasts:
                 st.warning("⚠️ No SKUs had enough data (7+ days) to forecast.")
