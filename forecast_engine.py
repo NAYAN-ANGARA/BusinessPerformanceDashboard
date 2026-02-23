@@ -1,17 +1,12 @@
 """
-forecast_engine.py  — OPTIMIZED
-================================
-Key performance improvements over v1:
-  1. Vectorized build_features  — numpy operations replace Python for-loop
-                                   (10-50x faster feature engineering)
-  2. fast_forecast              — 3 lightweight models (Ridge, Huber, Holt)
-                                   used per-SKU instead of the full 6-model
-                                   ensemble. Cuts per-SKU time by ~70%.
-  3. Parallel SKU processing    — joblib Parallel over all SKUs simultaneously
-  4. forecast_all_skus          — single cached function wrapping the whole
-                                   SKU loop so Streamlit never recomputes on
-                                   widget interactions.
-  5. No deepcopy in hot path    — model cloned once per fit, not per CV fold
+forecast_engine.py — LAZY IMPORTS EDITION
+==========================================
+ALL sklearn and joblib imports are inside functions.
+Nothing heavy is imported at module load time.
+This prevents Streamlit Cloud from crashing on startup due to RAM limits.
+
+Startup cost of importing this module: ~0 MB (only stdlib + numpy + pandas)
+Heavy deps (sklearn, joblib) load only when the Forecasting tab is opened.
 
 Public API
 ----------
@@ -22,6 +17,7 @@ Public API
 
 from __future__ import annotations
 
+# ── ONLY lightweight stdlib + numpy + pandas at module level ────────────────
 import copy
 import pickle
 import warnings
@@ -31,32 +27,33 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 import streamlit as st
-from joblib import Parallel, delayed
-
-from sklearn.model_selection import TimeSeriesSplit
-from sklearn.metrics         import r2_score
 
 warnings.filterwarnings("ignore")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Model loaders — cached once per server session
+# Model loaders — sklearn imported INSIDE, cached after first call
 # ─────────────────────────────────────────────────────────────────────────────
 MODELS_PKL_PATH = os.path.join(os.path.dirname(__file__), "models.pkl")
 
 
 @st.cache_resource(show_spinner=False)
 def _load_model_templates() -> dict:
-    """Full 6-model set for Revenue & Orders forecasting."""
-    if os.path.exists(MODELS_PKL_PATH):
-        with open(MODELS_PKL_PATH, "rb") as f:
-            return pickle.load(f)
-
-    st.warning("⚠️ `models.pkl` not found — run `python train_model.py` once.")
+    """
+    Full 6-model set for Revenue & Orders forecasting.
+    sklearn is imported here (lazy) — not at module load time.
+    """
+    # ── sklearn imported lazily here, NOT at module top ───────────────────
     from sklearn.linear_model  import Ridge, HuberRegressor
     from sklearn.ensemble      import (GradientBoostingRegressor,
                                        RandomForestRegressor, ExtraTreesRegressor)
     from sklearn.preprocessing import PolynomialFeatures, RobustScaler
     from sklearn.pipeline      import Pipeline
+
+    if os.path.exists(MODELS_PKL_PATH):
+        with open(MODELS_PKL_PATH, "rb") as f:
+            return pickle.load(f)
+
+    # Fallback: build templates in memory if pkl missing
     return {
         "Gradient Boosting": GradientBoostingRegressor(
             n_estimators=100, max_depth=4, learning_rate=0.05,
@@ -83,10 +80,14 @@ def _load_model_templates() -> dict:
 
 @st.cache_resource(show_spinner=False)
 def _load_fast_templates() -> dict:
-    """Lightweight 3-model set — fast enough for per-SKU batch runs."""
+    """
+    Lightweight 3-model set for per-SKU batch forecasting.
+    sklearn imported lazily — not at module load time.
+    """
     from sklearn.linear_model  import Ridge, HuberRegressor
     from sklearn.preprocessing import PolynomialFeatures, RobustScaler
     from sklearn.pipeline      import Pipeline
+
     return {
         "Ridge Poly-2": Pipeline([
             ("poly",   PolynomialFeatures(degree=2, include_bias=False)),
@@ -102,13 +103,13 @@ def _load_fast_templates() -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Feature engineering — fully vectorized, no Python for-loops
+# Feature engineering — fully vectorized numpy, no sklearn needed
 # ─────────────────────────────────────────────────────────────────────────────
 
 def build_features(dates_series, y_hist_series=None, origin_date=None) -> pd.DataFrame:
     """
-    Build 25-feature matrix using only vectorized numpy operations.
-    No Python for-loops — 10-50x faster than the loop-based v1.
+    25-feature matrix built with pure numpy — no sklearn, no for-loops.
+    Safe to call at any time; does not trigger heavy imports.
     """
     if not isinstance(dates_series, pd.Series):
         dates_series = pd.Series(dates_series)
@@ -145,43 +146,43 @@ def build_features(dates_series, y_hist_series=None, origin_date=None) -> pd.Dat
     })
 
     if y_hist_series is not None:
-        y = np.asarray(y_hist_series, dtype=float)
+        y  = np.asarray(y_hist_series, dtype=float)
+        cs = np.concatenate([[0.0], np.cumsum(y)])
+        idx = np.arange(n)
 
-        # Lag features — O(1) index shift
-        lag7  = np.full(n, np.nan); lag7[7:]  = y[:-7]  if n > 7  else lag7[7:]
-        lag14 = np.full(n, np.nan); lag14[14:] = y[:-14] if n > 14 else lag14[14:]
-        lag28 = np.full(n, np.nan); lag28[28:] = y[:-28] if n > 28 else lag28[28:]
+        # Lags — O(1) index shift
+        lag7  = np.full(n, np.nan)
+        lag14 = np.full(n, np.nan)
+        lag28 = np.full(n, np.nan)
+        if n > 7:  lag7[7:]  = y[:-7]
+        if n > 14: lag14[14:] = y[:-14]
+        if n > 28: lag28[28:] = y[:-28]
 
         # Rolling means via cumsum — O(n) total
-        cs     = np.concatenate([[0.0], np.cumsum(y)])
-        idx    = np.arange(n)
-
         def _roll(w):
             out = np.full(n, np.nan)
-            mask = idx >= w
-            out[mask] = (cs[idx[mask]] - cs[idx[mask] - w]) / w
+            m   = idx >= w
+            out[m] = (cs[idx[m]] - cs[idx[m] - w]) / w
             return out
 
-        roll7  = _roll(7)
-        roll14 = _roll(14)
-        roll28 = _roll(28)
+        roll7, roll14, roll28 = _roll(7), _roll(14), _roll(28)
 
         # Trend: recent 7-day avg minus prior 7-day avg
         trend7 = np.full(n, np.nan)
         if n >= 14:
-            r7  = _roll(7)
-            r7b = np.full(n, np.nan)
-            r7b[7:] = r7[:-7]
-            trend7 = r7 - r7b
+            r7       = _roll(7)
+            r7b      = np.full(n, np.nan)
+            r7b[7:]  = r7[:-7]
+            trend7   = r7 - r7b
 
-        # Volatility: rolling std, computed via E[x²] - E[x]²
+        # Volatility via E[x²] - E[x]²
         vol7 = np.full(n, np.nan)
         cs2  = np.concatenate([[0.0], np.cumsum(y ** 2)])
-        mask14 = idx >= 7
-        if mask14.any():
-            ex2 = (cs2[idx[mask14]] - cs2[idx[mask14] - 7]) / 7
-            ex  = (cs[idx[mask14]]  - cs[idx[mask14]  - 7]) / 7
-            vol7[mask14] = np.sqrt(np.maximum(ex2 - ex**2, 0)) + 1e-9
+        m7   = idx >= 7
+        if m7.any():
+            ex2         = (cs2[idx[m7]] - cs2[idx[m7] - 7]) / 7
+            ex          = (cs[idx[m7]]  - cs[idx[m7]  - 7]) / 7
+            vol7[m7]    = np.sqrt(np.maximum(ex2 - ex**2, 0)) + 1e-9
 
         def _fill(arr):
             mask = np.isnan(arr)
@@ -204,7 +205,7 @@ def build_features(dates_series, y_hist_series=None, origin_date=None) -> pd.Dat
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Shared blend + confidence scoring
+# Shared blend + confidence scoring — pure numpy, no sklearn
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _blend_and_score(results, X_future, y, use_yoy_data, n):
@@ -228,28 +229,60 @@ def _blend_and_score(results, X_future, y, use_yoy_data, n):
 
     pred_std    = pred_matrix.std(axis=0)
     weighted_r2 = float(np.dot(weights, r2_vals))
-    data_bonus  = np.clip((n - 14) / 180, 0, 0.12)
+    data_bonus  = float(np.clip((n - 14) / 180, 0, 0.12))
     yoy_bonus   = 0.06 if (use_yoy_data is not None and len(use_yoy_data) > 0) else 0
-    agree_bonus = np.clip(1.0 - pred_std.mean() / (np.mean(y) + 1e-9), 0, 0.08)
+    agree_bonus = float(np.clip(1.0 - pred_std.mean() / (float(np.mean(y)) + 1e-9), 0, 0.08))
     confidence  = float(np.clip(
         45 + (weighted_r2 + data_bonus + yoy_bonus + agree_bonus) * 55, 45, 97))
 
-    model_detail = {nm: {"r2": round(float(rv)*100, 1)}
+    model_detail = {nm: {"r2": round(float(rv) * 100, 1)}
                     for nm, rv in zip(results.keys(), r2_vals)}
-    model_detail["_weights"] = {nm: round(float(w)*100, 1)
+    model_detail["_weights"] = {nm: round(float(w) * 100, 1)
                                  for nm, w in zip(results.keys(), weights)}
     return blended, pred_std, confidence, weighted_r2, model_detail
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Full ensemble — used for Revenue & Orders (runs once, accuracy priority)
+# Holt Double Exponential Smoothing — pure Python, no sklearn
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _holt_forecast(y, n_future):
+    """Returns (preds, r2_on_last_20pct). Pure Python — zero sklearn cost."""
+    # Import r2_score lazily only when called
+    from sklearn.metrics import r2_score as _r2
+
+    n = len(y)
+    alpha, beta = 0.4, 0.2
+    l_t = float(y[0])
+    b_t = float(y[1] - y[0]) if n > 1 else 0.0
+    for v in y[1:]:
+        l_prev, b_prev = l_t, b_t
+        l_t = alpha * v + (1 - alpha) * (l_prev + b_prev)
+        b_t = beta * (l_t - l_prev) + (1 - beta) * b_prev
+
+    preds  = np.maximum([l_t + (i + 1) * b_t for i in range(n_future)], 0)
+    eval_n = max(3, n // 5)
+    h_eval = np.maximum([l_t + (i + 1) * b_t for i in range(eval_n)], 0)
+    try:
+        r2 = float(np.clip(_r2(y[-eval_n:], h_eval[:eval_n]), 0.0, 1.0))
+    except Exception:
+        r2 = 0.0
+    return np.array(preds), r2
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Full ensemble — Revenue & Orders (runs once, accuracy priority)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def ensemble_forecast(dates_hist, y_hist, dates_future, use_yoy_data=None):
     """
-    7-model ensemble (6 sklearn + Holt) with walk-forward CV.
-    Use this for Revenue & Orders where you call it once.
+    7-model ensemble with walk-forward CV.
+    sklearn/joblib load here on first call — NOT at app startup.
     """
+    # ── Lazy imports — only loaded when this function is first called ──────
+    from sklearn.model_selection import TimeSeriesSplit
+    from sklearn.metrics         import r2_score
+
     model_templates = _load_model_templates()
 
     dates_hist = pd.Series(dates_hist) if not isinstance(dates_hist, pd.Series) else dates_hist
@@ -287,16 +320,7 @@ def ensemble_forecast(dates_hist, y_hist, dates_future, use_yoy_data=None):
 
     # Holt smoothing
     try:
-        alpha, beta = 0.4, 0.2
-        l_t = float(y[0]); b_t = float(y[1] - y[0]) if n > 1 else 0.0
-        for v in y[1:]:
-            l_prev, b_prev = l_t, b_t
-            l_t = alpha * v + (1 - alpha) * (l_prev + b_prev)
-            b_t = beta * (l_t - l_prev) + (1 - beta) * b_prev
-        holt_preds = np.maximum([l_t + (i+1)*b_t for i in range(len(X_future))], 0)
-        eval_n     = max(3, n // 5)
-        h_eval     = np.maximum([l_t + (i+1)*b_t for i in range(eval_n)], 0)
-        holt_r2    = float(np.clip(r2_score(y[-eval_n:], h_eval[:eval_n]), 0.0, 1.0))
+        holt_preds, holt_r2 = _holt_forecast(y, len(X_future))
         results["Holt Smoothing"] = {"r2": holt_r2, "preds": holt_preds}
     except Exception:
         pass
@@ -310,9 +334,12 @@ def ensemble_forecast(dates_hist, y_hist, dates_future, use_yoy_data=None):
 
 def fast_forecast(dates_hist, y_hist, dates_future, use_yoy_data=None):
     """
-    3 fast models + Holt. Holdout eval (no CV). ~70% faster than ensemble_forecast.
-    Used exclusively for per-SKU batch forecasting.
+    3 fast models + Holt. Single holdout eval (no CV).
+    sklearn loaded lazily — not at app startup.
     """
+    # ── Lazy imports ───────────────────────────────────────────────────────
+    from sklearn.metrics import r2_score
+
     fast_templates = _load_fast_templates()
 
     dates_hist = pd.Series(dates_hist) if not isinstance(dates_hist, pd.Series) else dates_hist
@@ -322,9 +349,9 @@ def fast_forecast(dates_hist, y_hist, dates_future, use_yoy_data=None):
     X_hist     = build_features(dates_hist,   y_hist_series=y, origin_date=origin).values
     X_future   = build_features(dates_future, y_hist_series=None, origin_date=origin).values
 
-    holdout_n = max(3, n // 5)
-    X_tr, X_val = X_hist[:-holdout_n], X_hist[-holdout_n:]
-    y_tr, y_val = y[:-holdout_n],      y[-holdout_n:]
+    holdout_n        = max(3, n // 5)
+    X_tr, X_val      = X_hist[:-holdout_n], X_hist[-holdout_n:]
+    y_tr, y_val      = y[:-holdout_n],      y[-holdout_n:]
 
     results = {}
     for name, template in fast_templates.items():
@@ -340,16 +367,7 @@ def fast_forecast(dates_hist, y_hist, dates_future, use_yoy_data=None):
 
     # Holt smoothing
     try:
-        alpha, beta = 0.4, 0.2
-        l_t = float(y[0]); b_t = float(y[1] - y[0]) if n > 1 else 0.0
-        for v in y[1:]:
-            l_prev, b_prev = l_t, b_t
-            l_t = alpha * v + (1 - alpha) * (l_prev + b_prev)
-            b_t = beta * (l_t - l_prev) + (1 - beta) * b_prev
-        holt_preds = np.maximum([l_t + (i+1)*b_t for i in range(len(X_future))], 0)
-        eval_n     = max(3, n // 5)
-        h_eval     = np.maximum([l_t + (i+1)*b_t for i in range(eval_n)], 0)
-        holt_r2    = float(np.clip(r2_score(y[-eval_n:], h_eval[:eval_n]), 0.0, 1.0))
+        holt_preds, holt_r2 = _holt_forecast(y, len(X_future))
         results["Holt Smoothing"] = {"r2": holt_r2, "preds": holt_preds}
     except Exception:
         pass
@@ -358,11 +376,12 @@ def fast_forecast(dates_hist, y_hist, dates_future, use_yoy_data=None):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Worker — forecasts a single SKU (called in parallel threads)
+# Worker — single SKU forecast (runs inside parallel threads)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _forecast_one_sku(sku, df_s_values, df_s_dates, df_s_parents,
                       forecast_days, use_yoy):
+    """joblib/sklearn already loaded by the time this is called — no extra cost."""
     mask = df_s_parents == sku
     if mask.sum() == 0:
         return None
@@ -409,8 +428,9 @@ def _forecast_one_sku(sku, df_s_values, df_s_dates, df_s_parents,
         cutoff   = sku_daily["date"].max()
         one_yr   = cutoff - pd.DateOffset(years=1)
         date_arr = pd.DatetimeIndex(df_s_dates)
-        ym_mask  = mask & (date_arr.date >= (one_yr - timedelta(days=forecast_days)).date()) \
-                        & (date_arr.date <= one_yr.date())
+        ym_mask  = (mask
+                    & (date_arr.date >= (one_yr - timedelta(days=forecast_days)).date())
+                    & (date_arr.date <= one_yr.date()))
         yoy_rev  = float(df_s_values[ym_mask].sum())
         if yoy_rev > 0:
             yoy_change = (pred_s.sum() - yoy_rev) / yoy_rev * 100
@@ -432,7 +452,7 @@ def _forecast_one_sku(sku, df_s_values, df_s_dates, df_s_parents,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Main cached entry point — call this from app.py for SKU forecasting
+# Main cached entry point — the only function app.py needs for SKUs
 # ─────────────────────────────────────────────────────────────────────────────
 
 @st.cache_data(show_spinner=False, ttl=600)
@@ -440,16 +460,15 @@ def forecast_all_skus(
     _df_s_values:  np.ndarray,
     _df_s_dates:   np.ndarray,
     _df_s_parents: np.ndarray,
-    all_skus:      tuple,        # hashable so Streamlit can cache it
+    all_skus:      tuple,
     forecast_days: int,
     use_yoy:       bool,
 ) -> list:
     """
     Parallel + cached SKU forecasting.
+    joblib is imported lazily here — not at module load time.
 
     Usage in app.py:
-        from forecast_engine import forecast_all_skus
-
         results = forecast_all_skus(
             df_s["revenue"].values,
             df_s["date"].values,
@@ -459,6 +478,9 @@ def forecast_all_skus(
             use_yoy,
         )
     """
+    # ── joblib imported lazily — does NOT load at app startup ─────────────
+    from joblib import Parallel, delayed
+
     raw = Parallel(n_jobs=-1, backend="threading")(
         delayed(_forecast_one_sku)(
             sku,
