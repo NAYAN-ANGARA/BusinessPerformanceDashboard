@@ -2972,18 +2972,123 @@ with tabs[9]:
             help="When ON, only Parent SKUs found in both sales and merchandising data are shown."
         )
 
-    # Apply filters
-    df_m = df_enriched.copy()
-    if matched_only:
-        df_m = df_m[df_m["design_code"].notna()]
-    if sel_jtype:
-        df_m = df_m[df_m["jewelry_type"].isin(sel_jtype)]
-    if sel_stone:
-        df_m = df_m[df_m["stone"].isin(sel_stone)]
+        # Apply filters + heavy aggregations (cached for snappy interactions)
+    FILTER_COLS = ["Parent", "design_code", "jewelry_type", "stone", "revenue", "orders"]
 
-    if df_m.empty:
+    # Make groupbys faster (especially for repeated filter changes)
+    for _c in ["jewelry_type", "stone", "design_code"]:
+        if _c in df_enriched.columns and not pd.api.types.is_categorical_dtype(df_enriched[_c]):
+            df_enriched[_c] = df_enriched[_c].astype("category")
+
+    @st.cache_data(show_spinner=False, ttl=900)
+    def _compute_merch_views(_df_enriched: pd.DataFrame, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple):
+        df = _df_enriched[FILTER_COLS]
+
+        mask = pd.Series(True, index=df.index)
+        if _matched_only:
+            mask &= df["design_code"].notna() & (df["design_code"].astype(str) != "nan")
+        if _sel_jtype:
+            mask &= df["jewelry_type"].isin(_sel_jtype)
+        if _sel_stone:
+            mask &= df["stone"].isin(_sel_stone)
+
+        df_m = df.loc[mask, FILTER_COLS]
+
+        if df_m.empty:
+            return None
+
+        # KPI metrics
+        metrics = {
+            "sku_count": int(df_m["Parent"].nunique()),
+            "design_count": int(df_m["design_code"].nunique()),
+            "rev_sum": float(df_m["revenue"].sum()),
+            "ord_sum": float(df_m["orders"].sum()),
+        }
+
+        # Revenue by jewelry type
+        jtype_agg = (
+            df_m.groupby("jewelry_type", dropna=False, observed=True)
+            .agg(revenue=("revenue", "sum"), orders=("orders", "sum"))
+            .reset_index()
+        )
+        jtype_agg["aov"] = (jtype_agg["revenue"] / jtype_agg["orders"].replace(0, np.nan)).fillna(0)
+        jtype_agg = jtype_agg.sort_values("revenue", ascending=True)
+
+        # Top stones by revenue
+        stone_agg = (
+            df_m.groupby("stone", dropna=False, observed=True)["revenue"]
+            .sum()
+            .reset_index()
+            .sort_values("revenue", ascending=False)
+            .head(15)
+        )
+
+        # Parent SKU performance (fast attrs extraction)
+        parent_sum = (
+            df_m.groupby("Parent", observed=True)
+            .agg(revenue=("revenue", "sum"), orders=("orders", "sum"))
+            .reset_index()
+        )
+        parent_attr = (
+            df_m[["Parent", "design_code", "jewelry_type", "stone"]]
+            .drop_duplicates(subset="Parent", keep="first")
+        )
+        parent_agg = parent_sum.merge(parent_attr, on="Parent", how="left")
+        parent_agg[["design_code", "jewelry_type", "stone"]] = parent_agg[["design_code", "jewelry_type", "stone"]].fillna("—")
+        parent_agg["aov"] = (parent_agg["revenue"] / parent_agg["orders"].replace(0, np.nan)).fillna(0)
+        parent_agg["revenue_share"] = (parent_agg["revenue"] / parent_agg["revenue"].sum() * 100).round(2)
+        parent_agg = parent_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
+
+        # Design code performance
+        ddf = df_m[df_m["design_code"].notna() & (df_m["design_code"].astype(str) != "nan")].copy()
+        if ddf.empty:
+            design_agg = pd.DataFrame(columns=["design_code","revenue","orders","variants","jewelry_type","stones","aov","revenue_share"])
+        else:
+            design_sum = (
+                ddf.groupby("design_code", observed=True)
+                .agg(revenue=("revenue", "sum"), orders=("orders", "sum"), variants=("Parent", "nunique"))
+                .reset_index()
+            )
+            design_jtype = (
+                ddf[["design_code", "jewelry_type"]]
+                .drop_duplicates(subset="design_code", keep="first")
+            )
+            stones_series = (
+                ddf[["design_code", "stone"]]
+                .dropna(subset=["stone"])
+                .astype({"stone": str})
+                .groupby("design_code", observed=True)["stone"]
+                .apply(lambda s: ", ".join(sorted(set(s.tolist()))))
+                .reset_index(name="stones")
+            )
+            design_agg = design_sum.merge(design_jtype, on="design_code", how="left").merge(stones_series, on="design_code", how="left")
+            design_agg[["jewelry_type", "stones"]] = design_agg[["jewelry_type", "stones"]].fillna("—")
+            design_agg["aov"] = (design_agg["revenue"] / design_agg["orders"].replace(0, np.nan)).fillna(0)
+            design_agg["revenue_share"] = (design_agg["revenue"] / design_agg["revenue"].sum() * 100).round(2)
+            design_agg = design_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
+
+        # Heatmap data
+        heat_raw = (
+            df_m.groupby(["jewelry_type", "stone"], dropna=False, observed=True)["revenue"]
+            .sum()
+            .reset_index()
+        )
+        top15_stones = (
+            heat_raw.groupby("stone", observed=True)["revenue"].sum().nlargest(15).index.tolist()
+        )
+
+        return df_m, metrics, jtype_agg, stone_agg, parent_agg, design_agg, heat_raw, top15_stones
+
+    _sel_jtype_t = tuple(sel_jtype)
+    _sel_stone_t = tuple(sel_stone)
+
+    _views = _compute_merch_views(df_enriched, matched_only, _sel_jtype_t, _sel_stone_t)
+
+    if _views is None:
         st.warning("No records match the current filters. Try removing some filter selections.")
         st.stop()
+
+    df_m, _m_metrics, jtype_agg, stone_agg, parent_agg, design_agg, heat_raw, top15_stones = _views
 
     # Active filter badges
     active = []
@@ -2991,8 +3096,8 @@ with tabs[9]:
     if sel_stone: active.append(f"💠 {', '.join(sel_stone[:3])}{'…+more' if len(sel_stone) > 3 else ''}")
     if active:
         st.info("📌 Active: " + "  |  ".join(active) +
-                f"  ·  **{df_m['Parent'].nunique():,} SKUs** · "
-                f"**${df_m['revenue'].sum():,.0f}** revenue")
+                f"  ·  **{_m_metrics['sku_count']:,} SKUs** · "
+                f"**${_m_metrics['rev_sum']:,.0f}** revenue")
 
     st.markdown("---")
 
@@ -3038,12 +3143,7 @@ with tabs[9]:
     # ── Stone pie ────────────────────────────────────────────────────────────
     with ov_right:
         st.markdown("**💠 Top 15 Stones by Revenue**")
-        stone_agg = (
-            df_m.groupby("stone", dropna=False)["revenue"]
-            .sum().reset_index()
-            .sort_values("revenue", ascending=False)
-            .head(15)
-        )
+        # stone_agg is precomputed (cached) based on filters
         fig_stone = px.pie(
             stone_agg, values="revenue", names="stone", hole=0.48,
             color_discrete_sequence=px.colors.qualitative.Pastel
@@ -3078,20 +3178,7 @@ with tabs[9]:
     st.markdown("### 🏷️ Parent SKU Performance")
     st.caption("Each Parent SKU mapped to its Design Code, Jewelry Type and Stone from the merchandising catalogue.")
 
-    parent_agg = (
-        df_m.groupby("Parent")
-        .agg(
-            revenue     =("revenue","sum"),
-            orders      =("orders","sum"),
-            design_code =("design_code",  lambda x: x.dropna().iloc[0] if not x.dropna().empty else "—"),
-            jewelry_type=("jewelry_type", lambda x: x.dropna().iloc[0] if not x.dropna().empty else "—"),
-            stone       =("stone",        lambda x: x.dropna().iloc[0] if not x.dropna().empty else "—"),
-        )
-        .reset_index()
-    )
-    parent_agg["aov"]           = (parent_agg["revenue"] / parent_agg["orders"].replace(0, np.nan)).fillna(0)
-    parent_agg["revenue_share"] = (parent_agg["revenue"] / parent_agg["revenue"].sum() * 100).round(2)
-    parent_agg = parent_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
+    # parent_agg is precomputed (cached) based on filters
 
     # Inline search
     ps1, ps2 = st.columns([3,1])
@@ -3146,21 +3233,7 @@ with tabs[9]:
     st.markdown("### 🎨 Design Code Performance")
     st.caption("A Design Code groups multiple Parent SKUs (different stones/variants of the same design). Revenue is aggregated across all its variants.")
 
-    design_agg = (
-        df_m[df_m["design_code"].notna() & (df_m["design_code"] != "nan")]
-        .groupby("design_code")
-        .agg(
-            revenue     =("revenue","sum"),
-            orders      =("orders","sum"),
-            variants    =("Parent","nunique"),
-            jewelry_type=("jewelry_type", lambda x: x.dropna().iloc[0] if not x.dropna().empty else "—"),
-            stones      =("stone",        lambda x: ", ".join(sorted(set(x.dropna().astype(str).tolist())))),
-        )
-        .reset_index()
-    )
-    design_agg["aov"]           = (design_agg["revenue"] / design_agg["orders"].replace(0, np.nan)).fillna(0)
-    design_agg["revenue_share"] = (design_agg["revenue"] / design_agg["revenue"].sum() * 100).round(2)
-    design_agg = design_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
+    # design_agg is precomputed (cached) based on filters
 
     # Top 20 chart
     top20 = design_agg.head(20).copy()
@@ -3246,16 +3319,7 @@ with tabs[9]:
     st.markdown("### 🔥 Revenue Heatmap — Jewelry Type × Stone")
     st.caption("Top 15 stones shown. Colour intensity and label = revenue. Hover for exact figure.")
 
-    heat_raw = (
-        df_m.groupby(["jewelry_type","stone"])["revenue"]
-        .sum().reset_index()
-    )
-    # Keep top 15 stones by total revenue so the chart stays readable
-    top15_stones = (
-        heat_raw.groupby("stone")["revenue"].sum()
-        .nlargest(15).index.tolist()
-    )
-    heat_raw = heat_raw[heat_raw["stone"].isin(top15_stones)]
+    # heat_raw and top15_stones are precomputed (cached) based on filters
     pivot = heat_raw.pivot(index="jewelry_type", columns="stone", values="revenue").fillna(0)
 
     text_matrix = [
