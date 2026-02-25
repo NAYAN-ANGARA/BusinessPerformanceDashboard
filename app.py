@@ -3034,6 +3034,10 @@ with tabs[9]:
             .drop_duplicates(subset="Parent", keep="first")
         )
         parent_agg = parent_sum.merge(parent_attr, on="Parent", how="left")
+        # Ensure categorical columns can accept the placeholder (avoids pandas Categorical fillna TypeError)
+        for _c in ["design_code", "jewelry_type", "stone"]:
+            if _c in parent_agg.columns:
+                parent_agg[_c] = parent_agg[_c].astype("string")
         parent_agg[["design_code", "jewelry_type", "stone"]] = parent_agg[["design_code", "jewelry_type", "stone"]].fillna("—")
         parent_agg["aov"] = (parent_agg["revenue"] / parent_agg["orders"].replace(0, np.nan)).fillna(0)
         parent_agg["revenue_share"] = (parent_agg["revenue"] / parent_agg["revenue"].sum() * 100).round(2)
@@ -3062,6 +3066,10 @@ with tabs[9]:
                 .reset_index(name="stones")
             )
             design_agg = design_sum.merge(design_jtype, on="design_code", how="left").merge(stones_series, on="design_code", how="left")
+            # Ensure categorical columns can accept the placeholder (avoids pandas Categorical fillna TypeError)
+            for _c in ["jewelry_type", "stones"]:
+                if _c in design_agg.columns:
+                    design_agg[_c] = design_agg[_c].astype("string")
             design_agg[["jewelry_type", "stones"]] = design_agg[["jewelry_type", "stones"]].fillna("—")
             design_agg["aov"] = (design_agg["revenue"] / design_agg["orders"].replace(0, np.nan)).fillna(0)
             design_agg["revenue_share"] = (design_agg["revenue"] / design_agg["revenue"].sum() * 100).round(2)
