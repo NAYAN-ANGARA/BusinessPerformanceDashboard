@@ -2981,48 +2981,50 @@ with tabs[9]:
         if _c in df_enriched.columns and not pd.api.types.is_categorical_dtype(df_enriched[_c]):
             df_enriched[_c] = df_enriched[_c].astype("category")
 
-    @st.cache_data(show_spinner=False, ttl=900)
-    def _compute_merch_views(_df_enriched: pd.DataFrame, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple):
-        # IMPORTANT: normalize columns to plain strings for filtering.
-        # Without this, mixed dtypes / categoricals can cause filters to look like
-        # they "don't change" the aggregates.
-        df = _df_enriched[FILTER_COLS].copy()
+    # Prepare a slim base frame once per rerun for this tab (keeps UI identical, speeds up filtering)
+    _df_merch_base = df_enriched[FILTER_COLS].copy()
 
+    # A tiny signature so cache invalidates if underlying data changes (date range, file, etc.)
+    _data_sig = (int(_df_merch_base.shape[0]), float(_df_merch_base["revenue"].sum()), float(_df_merch_base["orders"].sum()))
+
+    @st.cache_data(show_spinner=False, ttl=900, max_entries=128)
+    def _compute_merch_views(_data_sig_key: tuple, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple):
+        # Use the outer-scope base df; cache key is driven by _data_sig_key + filters only.
+        df = _df_merch_base.copy()
+
+        # Normalize columns to robust plain strings for reliable filtering
         for _c in ["design_code", "jewelry_type", "stone"]:
             if _c in df.columns:
-                df[_c] = df[_c].astype("string").str.strip()
+                df[_c] = df[_c].astype("string").fillna("").str.strip()
 
-        # Normalised columns for robust, case-insensitive filtering
-        if "jewelry_type" in df.columns:
-            df["_jewelry_type_norm"] = df["jewelry_type"].str.lower().str.strip()
-        else:
-            df["_jewelry_type_norm"] = ""
+        # Normalised helper cols (case-insensitive)
+        df["_jewelry_type_norm"] = df.get("jewelry_type", "").astype("string").str.lower().str.strip()
+        df["_stone_norm"] = df.get("stone", "").astype("string").str.lower().str.strip()
 
-        if "stone" in df.columns:
-            df["_stone_norm"] = df["stone"].fillna("").astype("string").str.lower().str.strip()
-        else:
-            df["_stone_norm"] = ""
-
-        _sel_jtype_norm = tuple(str(x).strip().lower() for x in _sel_jtype if str(x).strip() != "")
-        _sel_stone_norm = tuple(str(x).strip().lower() for x in _sel_stone if str(x).strip() != "")
+        # Normalize selection values too
+        _sel_jtype_norm = tuple(sorted({str(x).strip().lower() for x in _sel_jtype if str(x).strip()}))
+        _sel_stone_norm = tuple(sorted({str(x).strip().lower() for x in _sel_stone if str(x).strip()}))
 
         mask = pd.Series(True, index=df.index)
+
         if _matched_only:
-            mask &= df["design_code"].notna() & (df["design_code"] != "") & (df["design_code"].str.lower() != "nan")
+            # matched == has a real design_code from merch lookup
+            dc = df.get("design_code", "")
+            mask &= dc.notna() & (dc.astype("string").str.strip() != "") & (dc.astype("string").str.lower() != "nan")
 
         if _sel_jtype_norm:
             mask &= df["_jewelry_type_norm"].isin(_sel_jtype_norm)
 
         if _sel_stone_norm:
-            # Support comma-separated stones by matching whole tokens (case-insensitive via _stone_norm).
-            # Example value: "Diamond, Ruby" should match selection "ruby".
+            # Support comma-separated stones by matching whole tokens.
+            # Example: "Diamond, Ruby" should match selection "ruby".
             stone_str = df["_stone_norm"].fillna("")
             pat = r"(?:^|,\s*)({})(?:\s*,|$)".format("|".join(re.escape(s) for s in _sel_stone_norm))
-            mask &= stone_str.str.contains(pat, case=True, na=False, regex=True)
-
+            mask &= stone_str.str.contains(pat, na=False, regex=True)
 
         df_m = df.loc[mask, FILTER_COLS]
 
+        # If filters produce nothing, return None so UI can show a warning
         if df_m.empty:
             return None
 
@@ -3036,7 +3038,7 @@ with tabs[9]:
 
         # Revenue by jewelry type
         jtype_agg = (
-            df_m.groupby("jewelry_type", dropna=False, observed=True)
+            df_m.groupby("jewelry_type", dropna=False)
             .agg(revenue=("revenue", "sum"), orders=("orders", "sum"))
             .reset_index()
         )
@@ -3045,7 +3047,7 @@ with tabs[9]:
 
         # Top stones by revenue
         stone_agg = (
-            df_m.groupby("stone", dropna=False, observed=True)["revenue"]
+            df_m.groupby("stone", dropna=False)["revenue"]
             .sum()
             .reset_index()
             .sort_values("revenue", ascending=False)
@@ -3054,7 +3056,7 @@ with tabs[9]:
 
         # Parent SKU performance (fast attrs extraction)
         parent_sum = (
-            df_m.groupby("Parent", observed=True)
+            df_m.groupby("Parent")
             .agg(revenue=("revenue", "sum"), orders=("orders", "sum"))
             .reset_index()
         )
@@ -3063,22 +3065,20 @@ with tabs[9]:
             .drop_duplicates(subset="Parent", keep="first")
         )
         parent_agg = parent_sum.merge(parent_attr, on="Parent", how="left")
-        # Ensure categorical columns can accept the placeholder (avoids pandas Categorical fillna TypeError)
         for _c in ["design_code", "jewelry_type", "stone"]:
             if _c in parent_agg.columns:
-                parent_agg[_c] = parent_agg[_c].astype("string")
-        parent_agg[["design_code", "jewelry_type", "stone"]] = parent_agg[["design_code", "jewelry_type", "stone"]].fillna("—")
+                parent_agg[_c] = parent_agg[_c].astype("string").fillna("—")
         parent_agg["aov"] = (parent_agg["revenue"] / parent_agg["orders"].replace(0, np.nan)).fillna(0)
         parent_agg["revenue_share"] = (parent_agg["revenue"] / parent_agg["revenue"].sum() * 100).round(2)
         parent_agg = parent_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
 
         # Design code performance
-        ddf = df_m[df_m["design_code"].notna() & (df_m["design_code"].astype(str) != "nan")].copy()
+        ddf = df_m[df_m["design_code"].notna() & (df_m["design_code"].astype(str).str.lower() != "nan") & (df_m["design_code"].astype(str).str.strip() != "")].copy()
         if ddf.empty:
             design_agg = pd.DataFrame(columns=["design_code","revenue","orders","variants","jewelry_type","stones","aov","revenue_share"])
         else:
             design_sum = (
-                ddf.groupby("design_code", observed=True)
+                ddf.groupby("design_code")
                 .agg(revenue=("revenue", "sum"), orders=("orders", "sum"), variants=("Parent", "nunique"))
                 .reset_index()
             )
@@ -3090,36 +3090,31 @@ with tabs[9]:
                 ddf[["design_code", "stone"]]
                 .dropna(subset=["stone"])
                 .astype({"stone": str})
-                .groupby("design_code", observed=True)["stone"]
-                .apply(lambda s: ", ".join(sorted(set(s.tolist()))))
+                .groupby("design_code")["stone"]
+                .apply(lambda s: ", ".join(sorted(set([x.strip() for x in s.tolist() if str(x).strip()]))))
                 .reset_index(name="stones")
             )
             design_agg = design_sum.merge(design_jtype, on="design_code", how="left").merge(stones_series, on="design_code", how="left")
-            # Ensure categorical columns can accept the placeholder (avoids pandas Categorical fillna TypeError)
-            for _c in ["jewelry_type", "stones"]:
-                if _c in design_agg.columns:
-                    design_agg[_c] = design_agg[_c].astype("string")
-            design_agg[["jewelry_type", "stones"]] = design_agg[["jewelry_type", "stones"]].fillna("—")
+            design_agg["jewelry_type"] = design_agg["jewelry_type"].astype("string").fillna("—")
+            design_agg["stones"] = design_agg["stones"].astype("string").fillna("—")
             design_agg["aov"] = (design_agg["revenue"] / design_agg["orders"].replace(0, np.nan)).fillna(0)
             design_agg["revenue_share"] = (design_agg["revenue"] / design_agg["revenue"].sum() * 100).round(2)
             design_agg = design_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
 
         # Heatmap data
         heat_raw = (
-            df_m.groupby(["jewelry_type", "stone"], dropna=False, observed=True)["revenue"]
+            df_m.groupby(["jewelry_type", "stone"], dropna=False)["revenue"]
             .sum()
             .reset_index()
         )
-        top15_stones = (
-            heat_raw.groupby("stone", observed=True)["revenue"].sum().nlargest(15).index.tolist()
-        )
+        top15_stones = heat_raw.groupby("stone")["revenue"].sum().nlargest(15).index.tolist()
 
         return df_m, metrics, jtype_agg, stone_agg, parent_agg, design_agg, heat_raw, top15_stones
 
-    _sel_jtype_t = tuple(sel_jtype)
-    _sel_stone_t = tuple(sel_stone)
+    _sel_jtype_t = tuple(sel_jtype or [])
+    _sel_stone_t = tuple(sel_stone or [])
 
-    _views = _compute_merch_views(df_enriched, matched_only, _sel_jtype_t, _sel_stone_t)
+    _views = _compute_merch_views(_data_sig, matched_only, _sel_jtype_t, _sel_stone_t)
 
     if _views is None:
         st.warning("No records match the current filters. Try removing some filter selections.")
