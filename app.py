@@ -2992,21 +2992,34 @@ with tabs[9]:
             if _c in df.columns:
                 df[_c] = df[_c].astype("string").str.strip()
 
-        _sel_jtype_norm = tuple(str(x).strip() for x in _sel_jtype if str(x).strip() != "")
-        _sel_stone_norm = tuple(str(x).strip() for x in _sel_stone if str(x).strip() != "")
+        # Normalised columns for robust, case-insensitive filtering
+        if "jewelry_type" in df.columns:
+            df["_jewelry_type_norm"] = df["jewelry_type"].str.lower().str.strip()
+        else:
+            df["_jewelry_type_norm"] = ""
+
+        if "stone" in df.columns:
+            df["_stone_norm"] = df["stone"].fillna("").astype("string").str.lower().str.strip()
+        else:
+            df["_stone_norm"] = ""
+
+        _sel_jtype_norm = tuple(str(x).strip().lower() for x in _sel_jtype if str(x).strip() != "")
+        _sel_stone_norm = tuple(str(x).strip().lower() for x in _sel_stone if str(x).strip() != "")
 
         mask = pd.Series(True, index=df.index)
         if _matched_only:
             mask &= df["design_code"].notna() & (df["design_code"] != "") & (df["design_code"].str.lower() != "nan")
 
         if _sel_jtype_norm:
-            mask &= df["jewelry_type"].isin(_sel_jtype_norm)
+            mask &= df["_jewelry_type_norm"].isin(_sel_jtype_norm)
 
         if _sel_stone_norm:
-            # Support comma-separated stones by matching whole tokens.
-            stone_str = df["stone"].fillna("")
+            # Support comma-separated stones by matching whole tokens (case-insensitive via _stone_norm).
+            # Example value: "Diamond, Ruby" should match selection "ruby".
+            stone_str = df["_stone_norm"].fillna("")
             pat = r"(?:^|,\s*)({})(?:\s*,|$)".format("|".join(re.escape(s) for s in _sel_stone_norm))
-            mask &= stone_str.str.contains(pat, case=False, na=False, regex=True)
+            mask &= stone_str.str.contains(pat, case=True, na=False, regex=True)
+
 
         df_m = df.loc[mask, FILTER_COLS]
 
