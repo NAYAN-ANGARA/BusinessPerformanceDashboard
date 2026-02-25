@@ -7,6 +7,7 @@ from datetime import date, timedelta, datetime
 import numpy as np
 import json
 import hashlib
+import re
 
 # Configure Plotly
 import plotly.io as pio
@@ -2982,15 +2983,30 @@ with tabs[9]:
 
     @st.cache_data(show_spinner=False, ttl=900)
     def _compute_merch_views(_df_enriched: pd.DataFrame, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple):
-        df = _df_enriched[FILTER_COLS]
+        # IMPORTANT: normalize columns to plain strings for filtering.
+        # Without this, mixed dtypes / categoricals can cause filters to look like
+        # they "don't change" the aggregates.
+        df = _df_enriched[FILTER_COLS].copy()
+
+        for _c in ["design_code", "jewelry_type", "stone"]:
+            if _c in df.columns:
+                df[_c] = df[_c].astype("string").str.strip()
+
+        _sel_jtype_norm = tuple(str(x).strip() for x in _sel_jtype if str(x).strip() != "")
+        _sel_stone_norm = tuple(str(x).strip() for x in _sel_stone if str(x).strip() != "")
 
         mask = pd.Series(True, index=df.index)
         if _matched_only:
-            mask &= df["design_code"].notna() & (df["design_code"].astype(str) != "nan")
-        if _sel_jtype:
-            mask &= df["jewelry_type"].isin(_sel_jtype)
-        if _sel_stone:
-            mask &= df["stone"].isin(_sel_stone)
+            mask &= df["design_code"].notna() & (df["design_code"] != "") & (df["design_code"].str.lower() != "nan")
+
+        if _sel_jtype_norm:
+            mask &= df["jewelry_type"].isin(_sel_jtype_norm)
+
+        if _sel_stone_norm:
+            # Support comma-separated stones by matching whole tokens.
+            stone_str = df["stone"].fillna("")
+            pat = r"(?:^|,\s*)({})(?:\s*,|$)".format("|".join(re.escape(s) for s in _sel_stone_norm))
+            mask &= stone_str.str.contains(pat, case=False, na=False, regex=True)
 
         df_m = df.loc[mask, FILTER_COLS]
 
