@@ -2887,8 +2887,18 @@ with tabs[9]:
         st.error(f"⚠️ Failed to load merchandising data: {merch_status}")
         st.stop()
 
-    # ── Mapping stats ─────────────────────────────────────────────────────────
-    sales_parents  = set(df_s["Parent"].dropna().unique())
+    # ── Sales base for this tab (ignore sidebar Product Types filter) ────────────
+    # Merchandising Intelligence has its own Jewelry Type / Stone filters.
+    # We still respect the global Date Range + Marketplaces filters.
+    mask_merch_sales = (
+    (sales_df["date"].dt.date >= start_date) &
+    (sales_df["date"].dt.date <= end_date) &
+    (sales_df["channel"].isin(selected_channels))
+    )
+    df_s_merch = sales_df[mask_merch_sales]
+
+# ── Mapping stats ─────────────────────────────────────────────────────────
+    sales_parents  = set(df_s_merch["Parent"].dropna().unique())
     merch_parents  = set(merch_lookup["Parent"].unique())
     matched_parents = sales_parents & merch_parents
 
@@ -2907,7 +2917,7 @@ with tabs[9]:
     st.markdown("---")
 
     # ── Enrich sales data with merch attributes ───────────────────────────────
-    df_enriched = df_s.merge(
+    df_enriched = df_s_merch.merge(
         merch_lookup[["Parent","design_code","jewelry_type","stone"]],
         on="Parent", how="left", suffixes=("_sales", "_merch")
     )
@@ -3023,10 +3033,17 @@ with tabs[9]:
             mask &= stone_str.str.contains(pat, na=False, regex=True)
 
         df_m = df.loc[mask, FILTER_COLS]
-
-        # If filters produce nothing, return None so UI can show a warning
+        # If filters produce nothing, return empty-but-well-formed views.
+        # The UI will show 0s and "no data" messages instead of sticking or erroring.
         if df_m.empty:
-            return None
+            metrics = {"sku_count": 0, "design_count": 0, "rev_sum": 0.0, "ord_sum": 0.0}
+            jtype_agg = pd.DataFrame(columns=["jewelry_type","revenue","orders","aov"])
+            stone_agg = pd.DataFrame(columns=["stone","revenue"])
+            parent_agg = pd.DataFrame(columns=["Parent","revenue","orders","design_code","jewelry_type","stone","aov","revenue_share"])
+            design_agg = pd.DataFrame(columns=["design_code","revenue","orders","variants","jewelry_type","stones","aov","revenue_share"])
+            heat_raw = pd.DataFrame(columns=["jewelry_type","stone","revenue"])
+            top15_stones = []
+            return df_m, metrics, jtype_agg, stone_agg, parent_agg, design_agg, heat_raw, top15_stones
 
         # KPI metrics
         metrics = {
@@ -3116,11 +3133,9 @@ with tabs[9]:
 
     _views = _compute_merch_views(_data_sig, matched_only, _sel_jtype_t, _sel_stone_t)
 
-    if _views is None:
-        st.warning("No records match the current filters. Try removing some filter selections.")
-        st.stop()
-
     df_m, _m_metrics, jtype_agg, stone_agg, parent_agg, design_agg, heat_raw, top15_stones = _views
+    if df_m.empty:
+        st.warning("No sales match the current Merchandising filters. Showing 0s for this selection.")
 
     # Active filter badges
     active = []
@@ -3151,47 +3166,53 @@ with tabs[9]:
         )
         jtype_agg["aov"] = (jtype_agg["revenue"] / jtype_agg["orders"].replace(0, np.nan)).fillna(0)
 
-        fig_jtype = px.bar(
-            jtype_agg, x="revenue", y="jewelry_type", orientation="h",
-            color="aov", color_continuous_scale="Blues",
-            custom_data=["orders","aov"],
-            labels={"revenue":"Revenue ($)","jewelry_type":"","aov":"AOV ($)"},
-            text=jtype_agg["revenue"].apply(lambda v: f"${v/1000:.0f}k")
-        )
-        fig_jtype.update_traces(
-            textposition="outside",
-            hovertemplate="<b>%{y}</b><br>Revenue: $%{x:,.0f}<br>Orders: %{customdata[0]:,.0f}<br>AOV: $%{customdata[1]:.2f}<extra></extra>"
-        )
-        fig_jtype.update_layout(
-            template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)", height=max(350, len(jtype_agg)*35+60),
-            margin=dict(l=0, r=70, t=10, b=0),
-            coloraxis_showscale=False,
-            xaxis=dict(showgrid=True, gridcolor="#2d303e"),
-            yaxis=dict(showgrid=False)
-        )
-        st.plotly_chart(fig_jtype, config={"displayModeBar":False}, use_container_width=True)
+        if jtype_agg.empty:
+            st.info("No jewelry type sales for the current selection.")
+        else:
+            fig_jtype = px.bar(
+                jtype_agg, x="revenue", y="jewelry_type", orientation="h",
+                color="aov", color_continuous_scale="Blues",
+                custom_data=["orders","aov"],
+                labels={"revenue":"Revenue ($)","jewelry_type":"","aov":"AOV ($)"},
+                text=jtype_agg["revenue"].apply(lambda v: f"${v/1000:.0f}k")
+            )
+            fig_jtype.update_traces(
+                textposition="outside",
+                hovertemplate="<b>%{y}</b><br>Revenue: $%{x:,.0f}<br>Orders: %{customdata[0]:,.0f}<br>AOV: $%{customdata[1]:.2f}<extra></extra>"
+            )
+            fig_jtype.update_layout(
+                template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)", height=max(350, len(jtype_agg)*35+60),
+                margin=dict(l=0, r=70, t=10, b=0),
+                coloraxis_showscale=False,
+                xaxis=dict(showgrid=True, gridcolor="#2d303e"),
+                yaxis=dict(showgrid=False)
+            )
+            st.plotly_chart(fig_jtype, config={"displayModeBar":False}, use_container_width=True)
 
     # ── Stone pie ────────────────────────────────────────────────────────────
     with ov_right:
         st.markdown("**💠 Top 15 Stones by Revenue**")
         # stone_agg is precomputed (cached) based on filters
-        fig_stone = px.pie(
-            stone_agg, values="revenue", names="stone", hole=0.48,
-            color_discrete_sequence=px.colors.qualitative.Pastel
-        )
-        fig_stone.update_traces(
-            textposition="outside", textinfo="percent+label",
-            textfont_size=10,
-            hovertemplate="<b>%{label}</b><br>Revenue: $%{value:,.0f}<br>Share: %{percent}<extra></extra>"
-        )
-        fig_stone.update_layout(
-            template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-            height=max(350, len(jtype_agg)*35+60),
-            margin=dict(l=0, r=0, t=10, b=40),
-            showlegend=False
-        )
-        st.plotly_chart(fig_stone, config={"displayModeBar":False}, use_container_width=True)
+        if stone_agg.empty:
+            st.info("No stone sales for the current selection.")
+        else:
+            fig_stone = px.pie(
+                stone_agg, values="revenue", names="stone", hole=0.48,
+                color_discrete_sequence=px.colors.qualitative.Pastel
+            )
+            fig_stone.update_traces(
+                textposition="outside", textinfo="percent+label",
+                textfont_size=10,
+                hovertemplate="<b>%{label}</b><br>Revenue: $%{value:,.0f}<br>Share: %{percent}<extra></extra>"
+            )
+            fig_stone.update_layout(
+                template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+                height=max(350, len(jtype_agg)*35+60),
+                margin=dict(l=0, r=0, t=10, b=40),
+                showlegend=False
+            )
+            st.plotly_chart(fig_stone, config={"displayModeBar":False}, use_container_width=True)
 
     # ── KPI summary row ───────────────────────────────────────────────────────
     kp1, kp2, kp3, kp4, kp5 = st.columns(5)
