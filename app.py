@@ -2834,20 +2834,28 @@ with tabs[9]:
     def _load_merch():
         import os
         candidates = [
+            "/mount/src/businessperformancedashboard/Merchandising_data.csv",
             "/mount/src/businessperformancedashboard/Merchandising_data.xlsx",
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "Merchandising_data.csv"),
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "Merchandising_data.xlsx"),
+            "Merchandising_data.csv",
             "Merchandising_data.xlsx",
         ]
         found_path = next((p for p in candidates if os.path.exists(p)), None)
         if found_path is None:
             return None, "FILE_NOT_FOUND"
+        if found_path.endswith(".xlsx"):
+            try:
+                import openpyxl  # noqa: F401
+            except ImportError:
+                return None, "OPENPYXL_MISSING"
         try:
-            import openpyxl  # noqa: F401
-        except ImportError:
-            return None, "OPENPYXL_MISSING"
-        try:
-            raw = pd.read_excel(found_path, engine="openpyxl",
-                                usecols=["Parent","Design Code","jewelry_type","stone"])
+            if found_path.endswith(".csv"):
+                raw = pd.read_csv(found_path,
+                                  usecols=["Parent","Design Code","jewelry_type","stone"])
+            else:
+                raw = pd.read_excel(found_path, engine="openpyxl",
+                                    usecols=["Parent","Design Code","jewelry_type","stone"])
         except Exception as e:
             return None, f"READ_ERROR: {e}"
         raw = raw.rename(columns={"Design Code": "design_code"})
@@ -3095,9 +3103,10 @@ with tabs[9]:
         parent_agg["revenue"] / parent_agg["orders"].replace(0, np.nan)
     ).fillna(0)
     _pa_tot = parent_agg["revenue"].sum()
-    parent_agg["revenue_share"] = (
-        (parent_agg["revenue"] / _pa_tot * 100) if _pa_tot > 0 else 0.0
-    ).round(2)
+    if _pa_tot > 0:
+        parent_agg["revenue_share"] = (parent_agg["revenue"] / _pa_tot * 100).round(2)
+    else:
+        parent_agg["revenue_share"] = 0.0
     parent_agg = parent_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
     for _c in ["design_code","jewelry_type","stone"]:
         parent_agg[_c] = parent_agg[_c].fillna("—").astype(str)
@@ -3195,9 +3204,10 @@ with tabs[9]:
             design_agg["revenue"] / design_agg["orders"].replace(0, np.nan)
         ).fillna(0)
         _dc_tot = design_agg["revenue"].sum()
-        design_agg["revenue_share"] = (
-            (design_agg["revenue"] / _dc_tot * 100) if _dc_tot > 0 else 0.0
-        ).round(2)
+        if _dc_tot > 0:
+            design_agg["revenue_share"] = (design_agg["revenue"] / _dc_tot * 100).round(2)
+        else:
+            design_agg["revenue_share"] = 0.0
         design_agg = design_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
 
         # Top-20 bar chart — only plot codes with actual revenue
