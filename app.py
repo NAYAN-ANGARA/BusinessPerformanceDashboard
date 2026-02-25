@@ -2110,6 +2110,26 @@ with tabs[7]:
                 key="report_end"
             )
 
+        # ── Marketplace filter ────────────────────────────────────────────
+        all_marketplaces = sorted(sales_df["channel"].dropna().unique().tolist())
+        report_marketplace_options = ["All Marketplaces"] + all_marketplaces
+        report_selected_mp = st.multiselect(
+            "🛒 Filter by Marketplace",
+            options=report_marketplace_options,
+            default=["All Marketplaces"],
+            key="report_marketplace_filter",
+            help="Select one or more marketplaces to scope this report. Defaults to all."
+        )
+        # Resolve to actual channel list
+        if not report_selected_mp or "All Marketplaces" in report_selected_mp:
+            report_channels = all_marketplaces
+        else:
+            report_channels = report_selected_mp
+
+        # Show active filter badge
+        if report_channels != all_marketplaces:
+            st.info(f"📌 Report scoped to: **{', '.join(report_channels)}**")
+
         st.markdown("**📑 Include Sections:**")
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -2129,12 +2149,12 @@ with tabs[7]:
             mask_s = (
                 (sales_df["date"].dt.date >= report_start) &
                 (sales_df["date"].dt.date <= report_end) &
-                (sales_df["channel"].isin(selected_channels))
+                (sales_df["channel"].isin(report_channels))
             )
             mask_sp = (
                 (spend_df["date"].dt.date >= report_start) &
                 (spend_df["date"].dt.date <= report_end) &
-                (spend_df["channel"].isin(selected_channels))
+                (spend_df["channel"].isin(report_channels))
             )
             report_df_s  = sales_df[mask_s]
             report_df_sp = spend_df[mask_sp]
@@ -2146,28 +2166,30 @@ with tabs[7]:
             mask_yoy_s = (
                 (sales_df["date"].dt.date >= yoy_start) &
                 (sales_df["date"].dt.date <= yoy_end) &
-                (sales_df["channel"].isin(selected_channels))
+                (sales_df["channel"].isin(report_channels))
             )
             mask_yoy_sp = (
                 (spend_df["date"].dt.date >= yoy_start) &
                 (spend_df["date"].dt.date <= yoy_end) &
-                (spend_df["channel"].isin(selected_channels))
+                (spend_df["channel"].isin(report_channels))
             )
             yoy_df_s  = sales_df[mask_yoy_s]
             yoy_df_sp = spend_df[mask_yoy_sp]
             yoy_metrics = calc_metrics(yoy_df_s, yoy_df_sp) if len(yoy_df_s) > 0 else None
 
+            mp_label = ", ".join(report_channels) if report_channels != all_marketplaces else "All Marketplaces"
             st.session_state.current_report = {
-                'period':       f"{report_start.strftime('%b %d, %Y')} – {report_end.strftime('%b %d, %Y')}",
-                'yoy_period':   f"{yoy_start.strftime('%b %d, %Y')} – {yoy_end.strftime('%b %d, %Y')}",
-                'metrics':      report_metrics,
-                'yoy_metrics':  yoy_metrics,
-                'sales_data':   report_df_s,
-                'spend_data':   report_df_sp,
-                'yoy_sales':    yoy_df_s,
-                'yoy_spend':    yoy_df_sp,
-                'report_start': report_start,
-                'report_end':   report_end,
+                'period':        f"{report_start.strftime('%b %d, %Y')} – {report_end.strftime('%b %d, %Y')}",
+                'yoy_period':    f"{yoy_start.strftime('%b %d, %Y')} – {yoy_end.strftime('%b %d, %Y')}",
+                'metrics':       report_metrics,
+                'yoy_metrics':   yoy_metrics,
+                'sales_data':    report_df_s,
+                'spend_data':    report_df_sp,
+                'yoy_sales':     yoy_df_s,
+                'yoy_spend':     yoy_df_sp,
+                'report_start':  report_start,
+                'report_end':    report_end,
+                'marketplace_label': mp_label,
                 'sections': {
                     'kpis':            include_kpis,
                     'trends':          include_trends,
@@ -2221,11 +2243,18 @@ with tabs[7]:
         st.markdown("---")
 
         # ── HEADER BANNER ────────────────────────────────────────────────────
+        mp_scope = report.get('marketplace_label', 'All Marketplaces')
+        mp_badge = (
+            f"&nbsp;|&nbsp; 🛒 <strong>Marketplace:</strong> {mp_scope}"
+            if mp_scope != "All Marketplaces"
+            else ""
+        )
         st.markdown(
             f"<h2 style='margin:0'>📊 Performance Report</h2>"
             f"<p style='color:#9ca3af; margin:4px 0 16px 0;'>"
             f"📅 <strong>This period:</strong> {report['period']} &nbsp;|&nbsp; "
             f"📅 <strong>Last year same period:</strong> {report['yoy_period']}"
+            f"{mp_badge}"
             f"</p>",
             unsafe_allow_html=True
         )
