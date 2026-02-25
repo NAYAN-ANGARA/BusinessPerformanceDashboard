@@ -936,9 +936,204 @@ with tabs[3]:
             )
             st.plotly_chart(fig_sku_tree, config={'displayModeBar': False})
         
-        # Detailed SKU Cards with Child SKUs
+        # ── SKU SEARCH / LOOKUP ──────────────────────────────────────────────
         st.markdown("---")
-        st.markdown("**📦 Detailed SKU Breakdown (Click to expand for Child SKUs)**")
+        st.markdown('<div class="section-header">🔍 SKU Deep-Dive Search</div>', unsafe_allow_html=True)
+
+        all_parent_skus_list = sorted(df_s["Parent"].dropna().unique().tolist())
+
+        search_col1, search_col2 = st.columns([3, 1])
+        with search_col1:
+            sku_search_query = st.text_input(
+                "Search SKU",
+                placeholder="Type a Parent SKU name...",
+                key="sku_search_input",
+                label_visibility="collapsed"
+            )
+        with search_col2:
+            sku_search_exact = st.selectbox(
+                "Match",
+                options=["Contains", "Exact"],
+                key="sku_search_mode",
+                label_visibility="collapsed"
+            )
+
+        # Filter matching SKUs
+        if sku_search_query.strip():
+            q = sku_search_query.strip()
+            if sku_search_exact == "Exact":
+                matching_skus = [s for s in all_parent_skus_list if s.lower() == q.lower()]
+            else:
+                matching_skus = [s for s in all_parent_skus_list if q.lower() in s.lower()]
+        else:
+            matching_skus = []
+
+        if sku_search_query.strip() and not matching_skus:
+            st.warning(f"No SKUs found matching **'{sku_search_query}'**. Try a shorter keyword or switch to Contains mode.")
+
+        elif matching_skus:
+            # If multiple matches show a selector, otherwise jump straight in
+            if len(matching_skus) > 1:
+                st.caption(f"Found **{len(matching_skus)}** matching SKUs — select one to inspect:")
+                selected_sku = st.selectbox(
+                    "Select SKU",
+                    options=matching_skus,
+                    key="sku_search_select",
+                    label_visibility="collapsed"
+                )
+            else:
+                selected_sku = matching_skus[0]
+
+            # ── Pull data for selected SKU ──────────────────────────────────
+            sku_df = df_s[df_s["Parent"] == selected_sku].copy()
+
+            total_rev    = sku_df["revenue"].sum()
+            total_orders = sku_df["orders"].sum()
+            aov          = (total_rev / total_orders) if total_orders > 0 else 0
+            active_days  = sku_df["date"].nunique()
+            first_sale   = sku_df["date"].min().strftime("%b %d, %Y")
+            last_sale    = sku_df["date"].max().strftime("%b %d, %Y")
+
+            # ── Header ───────────────────────────────────────────────────────
+            st.markdown(f"""
+            <div style='background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(139,92,246,0.1));
+                        border:1px solid rgba(59,130,246,0.35); border-radius:12px;
+                        padding:16px 20px; margin:12px 0;'>
+                <div style='font-size:20px; font-weight:800; color:#f3f4f6;'>🏷️ {selected_sku}</div>
+                <div style='font-size:12px; color:#9ca3af; margin-top:4px;'>
+                    First sale: {first_sale} &nbsp;·&nbsp; Last sale: {last_sale} &nbsp;·&nbsp; {active_days} active days
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # ── KPI row ──────────────────────────────────────────────────────
+            m1, m2, m3, m4 = st.columns(4)
+            with m1:
+                st.metric("💰 Revenue",    f"${total_rev:,.0f}")
+            with m2:
+                st.metric("🛒 Orders",     f"{total_orders:,.0f}")
+            with m3:
+                st.metric("📊 AOV",        f"${aov:,.2f}")
+            with m4:
+                revenue_share = (total_rev / df_s["revenue"].sum() * 100) if df_s["revenue"].sum() > 0 else 0
+                st.metric("📈 Rev Share",  f"{revenue_share:.1f}%")
+
+            st.markdown("")
+
+            chart_col, info_col = st.columns([3, 2])
+
+            # ── Daily revenue trend ──────────────────────────────────────────
+            with chart_col:
+                st.markdown("**📅 Daily Revenue Trend**")
+                daily_sku = (
+                    sku_df.groupby(pd.Grouper(key="date", freq="D"))["revenue"]
+                    .sum().reset_index().sort_values("date")
+                )
+                # 7-day rolling average
+                daily_sku["rolling7"] = daily_sku["revenue"].rolling(7, min_periods=1).mean()
+
+                fig_sku_trend = go.Figure()
+                fig_sku_trend.add_trace(go.Bar(
+                    x=daily_sku["date"], y=daily_sku["revenue"],
+                    name="Daily Revenue",
+                    marker_color="rgba(59,130,246,0.5)"
+                ))
+                fig_sku_trend.add_trace(go.Scatter(
+                    x=daily_sku["date"], y=daily_sku["rolling7"],
+                    name="7-day Avg",
+                    line=dict(color="#10b981", width=2),
+                    mode="lines"
+                ))
+                fig_sku_trend.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    height=280,
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    legend=dict(orientation="h", y=1.15),
+                    xaxis=dict(showgrid=False),
+                    yaxis=dict(showgrid=True, gridcolor="#2d303e", title="Revenue ($)")
+                )
+                st.plotly_chart(fig_sku_trend, config={"displayModeBar": False})
+
+            # ── Marketplace breakdown ────────────────────────────────────────
+            with info_col:
+                st.markdown("**🛒 Revenue by Marketplace**")
+                mp_breakdown = (
+                    sku_df.groupby("channel")
+                    .agg(revenue=("revenue","sum"), orders=("orders","sum"))
+                    .reset_index()
+                    .sort_values("revenue", ascending=False)
+                )
+                mp_breakdown["share"] = (
+                    mp_breakdown["revenue"] / mp_breakdown["revenue"].sum() * 100
+                ).round(1)
+
+                if len(mp_breakdown) > 0:
+                    fig_mp_pie = px.pie(
+                        mp_breakdown, values="revenue", names="channel",
+                        hole=0.55,
+                        color_discrete_sequence=["#3b82f6","#10b981","#f59e0b",
+                                                  "#8b5cf6","#ec4899","#06b6d4"]
+                    )
+                    fig_mp_pie.update_traces(textposition="outside", textinfo="percent+label")
+                    fig_mp_pie.update_layout(
+                        template="plotly_dark",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        showlegend=False,
+                        height=280,
+                        margin=dict(l=0, r=0, t=10, b=0)
+                    )
+                    st.plotly_chart(fig_mp_pie, config={"displayModeBar": False})
+
+            # ── Marketplace table ────────────────────────────────────────────
+            st.dataframe(
+                mp_breakdown,
+                column_config={
+                    "channel": st.column_config.TextColumn("Marketplace"),
+                    "revenue": st.column_config.NumberColumn("Revenue",  format="$%d"),
+                    "orders":  st.column_config.NumberColumn("Orders",   format="%d"),
+                    "share":   st.column_config.NumberColumn("Share %",  format="%.1f%%"),
+                },
+                hide_index=True, use_container_width=True
+            )
+
+            # ── Child SKUs ───────────────────────────────────────────────────
+            if "SKU" in df_s.columns:
+                child_skus = (
+                    sku_df.groupby("SKU")
+                    .agg(revenue=("revenue","sum"), orders=("orders","sum"))
+                    .reset_index()
+                    .sort_values("revenue", ascending=False)
+                )
+                child_skus["aov"]   = child_skus["revenue"] / child_skus["orders"].replace(0, np.nan)
+                child_skus["share"] = (child_skus["revenue"] / child_skus["revenue"].sum() * 100).round(1)
+                valid_children      = child_skus[child_skus["SKU"] != "Unknown"]
+
+                if len(valid_children) > 0:
+                    st.markdown(f"**📦 Child SKUs ({len(valid_children)} variants)**")
+                    st.dataframe(
+                        valid_children,
+                        column_config={
+                            "SKU":     st.column_config.TextColumn("Child SKU", width="large"),
+                            "revenue": st.column_config.ProgressColumn(
+                                "Revenue", format="$%d",
+                                min_value=0, max_value=int(valid_children["revenue"].max())
+                            ),
+                            "orders":  st.column_config.NumberColumn("Orders",  format="%d"),
+                            "aov":     st.column_config.NumberColumn("AOV",     format="$%.2f"),
+                            "share":   st.column_config.NumberColumn("Share %", format="%.1f%%"),
+                        },
+                        hide_index=True, use_container_width=True,
+                        height=min(400, 60 + len(valid_children) * 38)
+                    )
+
+        else:
+            st.caption("🔎 Type a SKU name above to search. Supports partial matches.")
+
+        # ── Detailed SKU Cards with Child SKUs ───────────────────────────────
+        st.markdown("---")
+        st.markdown("**📦 Top 10 SKU Breakdown (Click to expand for Child SKUs)**")
         
         for idx, parent_row in Parent_perf.iterrows():
             parent = parent_row['Parent']
