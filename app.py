@@ -2908,8 +2908,38 @@ with tabs[9]:
     # ── Enrich sales data with merch attributes ───────────────────────────────
     df_enriched = df_s.merge(
         merch_lookup[["Parent","design_code","jewelry_type","stone"]],
-        on="Parent", how="left"
+        on="Parent", how="left", suffixes=("_sales", "_merch")
     )
+
+    # --- Robust column normalisation (prevents KeyError on 'stone' / 'jewelry_type') ---
+    # If the sales dataset already contains columns named like the merch attributes,
+    # pandas will suffix them. We always want the merch values.
+    def _coalesce_col(df, base):
+        merch_col = f"{base}_merch"
+        sales_col = f"{base}_sales"
+        if base in df.columns:
+            return base
+        if merch_col in df.columns:
+            df[base] = df[merch_col]
+            return base
+        if sales_col in df.columns:
+            df[base] = df[sales_col]
+            return base
+        # last-resort: case-insensitive match
+        for c in df.columns:
+            if str(c).strip().lower() == base.lower():
+                df[base] = df[c]
+                return base
+        df[base] = np.nan
+        return base
+
+    for _c in ["design_code", "jewelry_type", "stone"]:
+        _coalesce_col(df_enriched, _c)
+
+    # Drop suffixed duplicates to keep downstream code stable
+    drop_cols = [c for c in df_enriched.columns if c.endswith("_sales") or c.endswith("_merch")]
+    if drop_cols:
+        df_enriched = df_enriched.drop(columns=drop_cols)
 
     # ── Tab-level filters ─────────────────────────────────────────────────────
     st.markdown("### 🔧 Filters")
