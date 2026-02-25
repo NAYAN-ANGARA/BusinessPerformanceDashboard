@@ -2831,34 +2831,59 @@ with tabs[9]:
     # ── Load & deduplicate merchandising reference data ───────────────────────
     @st.cache_data(show_spinner=False, ttl=3600)
     def _load_merch():
-        import os, io
-        # Look for the file next to app.py on the server, or in /mount/src (Streamlit Cloud)
+        import os
+        # Streamlit Cloud mounts the repo at /mount/src/<repo-name>/
+        # We also try the cwd and the directory of app.py
         candidates = [
-            "Merchandising_data.xlsx",
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "Merchandising_data.xlsx"),
             "/mount/src/businessperformancedashboard/Merchandising_data.xlsx",
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "Merchandising_data.xlsx"),
+            "Merchandising_data.xlsx",
         ]
+        found_path = None
         for p in candidates:
             if os.path.exists(p):
-                raw = pd.read_excel(p, engine="openpyxl",
-                                    usecols=["Parent","Design Code","jewelry_type","stone"])
-                raw = raw.rename(columns={"Design Code": "design_code"})
-                raw["Parent"]       = raw["Parent"].astype(str).str.strip()
-                raw["design_code"]  = raw["design_code"].astype(str).str.strip()
-                raw["jewelry_type"] = raw["jewelry_type"].astype(str).str.strip()
-                raw["stone"]        = raw["stone"].astype(str).str.strip()
-                # One clean lookup row per Parent (keep first)
-                lookup = raw.drop_duplicates(subset="Parent").reset_index(drop=True)
-                return lookup
-        return None
+                found_path = p
+                break
 
-    merch_lookup = _load_merch()
+        if found_path is None:
+            return None, "FILE_NOT_FOUND"
 
-    if merch_lookup is None:
+        # Check openpyxl is available before reading
+        try:
+            import openpyxl  # noqa: F401
+        except ImportError:
+            return None, "OPENPYXL_MISSING"
+
+        try:
+            raw = pd.read_excel(
+                found_path, engine="openpyxl",
+                usecols=["Parent", "Design Code", "jewelry_type", "stone"]
+            )
+        except Exception as e:
+            return None, f"READ_ERROR: {e}"
+
+        raw = raw.rename(columns={"Design Code": "design_code"})
+        for col in ["Parent", "design_code", "jewelry_type", "stone"]:
+            raw[col] = raw[col].astype(str).str.strip()
+        lookup = raw.drop_duplicates(subset="Parent").reset_index(drop=True)
+        return lookup, "OK"
+
+    merch_lookup, merch_status = _load_merch()
+
+    if merch_status == "OPENPYXL_MISSING":
         st.error(
-            "⚠️ **Merchandising_data.xlsx** was not found next to app.py.  \n"
-            "Please commit the file to your GitHub repo alongside app.py and redeploy."
+            "⚠️ **openpyxl is not installed.** Add `openpyxl>=3.1.0` to your "
+            "`requirements.txt`, commit it, and redeploy."
         )
+        st.stop()
+    elif merch_status == "FILE_NOT_FOUND":
+        st.error(
+            "⚠️ **Merchandising_data.xlsx not found.** "
+            "Make sure the file is committed to your GitHub repo in the same folder as app.py."
+        )
+        st.stop()
+    elif merch_status != "OK" or merch_lookup is None:
+        st.error(f"⚠️ Failed to load merchandising data: {merch_status}")
         st.stop()
 
     # ── Mapping stats ─────────────────────────────────────────────────────────
@@ -3236,8 +3261,8 @@ with tabs[9]:
             unmatched_df = pd.DataFrame(sorted(sales_parents - merch_parents), columns=["Parent SKU"])
             st.dataframe(unmatched_df, hide_index=True, use_container_width=True, height=250)
             st.download_button("📥 Download Unmatched SKU List",
-                            unmatched_df.to_csv(index=False).encode("utf-8"),
-                            "unmatched_skus.csv", "text/csv", key="dl_unmatched")
+                               unmatched_df.to_csv(index=False).encode("utf-8"),
+                               "unmatched_skus.csv", "text/csv", key="dl_unmatched")
 
 # ---------------- FOOTER ----------------
 st.markdown("---")
