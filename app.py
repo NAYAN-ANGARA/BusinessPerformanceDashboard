@@ -2829,333 +2829,172 @@ with tabs[8]:
 with tabs[9]:
     st.markdown('<div class="section-header">💎 Merchandising Intelligence</div>', unsafe_allow_html=True)
 
-    # ── Load & deduplicate merchandising reference data ───────────────────────
+    # ── Load merchandising reference data ────────────────────────────────────
     @st.cache_data(show_spinner=False, ttl=3600)
     def _load_merch():
         import os
-        # Streamlit Cloud mounts the repo at /mount/src/<repo-name>/
-        # We also try the cwd and the directory of app.py
         candidates = [
             "/mount/src/businessperformancedashboard/Merchandising_data.xlsx",
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "Merchandising_data.xlsx"),
             "Merchandising_data.xlsx",
         ]
-        found_path = None
-        for p in candidates:
-            if os.path.exists(p):
-                found_path = p
-                break
-
+        found_path = next((p for p in candidates if os.path.exists(p)), None)
         if found_path is None:
             return None, "FILE_NOT_FOUND"
-
-        # Check openpyxl is available before reading
         try:
             import openpyxl  # noqa: F401
         except ImportError:
             return None, "OPENPYXL_MISSING"
-
         try:
-            raw = pd.read_excel(
-                found_path, engine="openpyxl",
-                usecols=["Parent", "Design Code", "jewelry_type", "stone"]
-            )
+            raw = pd.read_excel(found_path, engine="openpyxl",
+                                usecols=["Parent","Design Code","jewelry_type","stone"])
         except Exception as e:
             return None, f"READ_ERROR: {e}"
-
         raw = raw.rename(columns={"Design Code": "design_code"})
-        for col in ["Parent", "design_code", "jewelry_type", "stone"]:
+        for col in ["Parent","design_code","jewelry_type","stone"]:
             raw[col] = raw[col].astype(str).str.strip()
+        # One clean row per Parent — keep first occurrence
         lookup = raw.drop_duplicates(subset="Parent").reset_index(drop=True)
         return lookup, "OK"
 
     merch_lookup, merch_status = _load_merch()
 
     if merch_status == "OPENPYXL_MISSING":
-        st.error(
-            "⚠️ **openpyxl is not installed.** Add `openpyxl>=3.1.0` to your "
-            "`requirements.txt`, commit it, and redeploy."
-        )
+        st.error("⚠️ **openpyxl not installed.** Add `openpyxl>=3.1.0` to requirements.txt and redeploy.")
         st.stop()
     elif merch_status == "FILE_NOT_FOUND":
-        st.error(
-            "⚠️ **Merchandising_data.xlsx not found.** "
-            "Make sure the file is committed to your GitHub repo in the same folder as app.py."
-        )
+        st.error("⚠️ **Merchandising_data.xlsx not found.** Commit it to your GitHub repo next to app.py.")
         st.stop()
     elif merch_status != "OK" or merch_lookup is None:
         st.error(f"⚠️ Failed to load merchandising data: {merch_status}")
         st.stop()
 
-    # ── Sales base for this tab (ignore sidebar Product Types filter) ────────────
-    # Merchandising Intelligence has its own Jewelry Type / Stone filters.
-    # We still respect the global Date Range + Marketplaces filters.
-    mask_merch_sales = (
-    (sales_df["date"].dt.date >= start_date) &
-    (sales_df["date"].dt.date <= end_date) &
-    (sales_df["channel"].isin(selected_channels))
+    # ── Sales within global date + channel filters ───────────────────────────
+    # This tab has its own Jewelry Type / Stone filters, so we ignore the
+    # sidebar Product Type filter but still respect Date Range + Marketplaces.
+    mask_merch = (
+        (sales_df["date"].dt.date >= start_date) &
+        (sales_df["date"].dt.date <= end_date) &
+        (sales_df["channel"].isin(selected_channels))
     )
-    df_s_merch = sales_df[mask_merch_sales]
+    df_s_merch = sales_df[mask_merch]
 
-# ── Mapping stats ─────────────────────────────────────────────────────────
-    sales_parents  = set(df_s_merch["Parent"].dropna().unique())
-    merch_parents  = set(merch_lookup["Parent"].unique())
+    # Aggregate sales to one row per Parent SKU for this period
+    sales_by_parent = (
+        df_s_merch
+        .groupby("Parent", as_index=False)
+        .agg(revenue=("revenue","sum"), orders=("orders","sum"))
+    )
+
+    # ── FIX #1: CATALOGUE drives the join, not sales ─────────────────────────
+    # Every catalogue SKU appears. Revenue/orders = 0 if no sales in period.
+    df_enriched = (
+        merch_lookup[["Parent","design_code","jewelry_type","stone"]]
+        .drop_duplicates("Parent")
+        .merge(sales_by_parent, on="Parent", how="left")
+    )
+    df_enriched["revenue"] = df_enriched["revenue"].fillna(0.0)
+    df_enriched["orders"]  = df_enriched["orders"].fillna(0.0)
+
+    # ── Match-rate banner ─────────────────────────────────────────────────────
+    sales_parents   = set(df_s_merch["Parent"].dropna().unique())
+    merch_parents   = set(merch_lookup["Parent"].unique())
     matched_parents = sales_parents & merch_parents
-
     match_pct = len(matched_parents) / len(sales_parents) * 100 if sales_parents else 0
 
     bm1, bm2, bm3, bm4 = st.columns(4)
-    bm1.metric("💎 Merch Catalogue",  f"{len(merch_parents):,} SKUs")
-    bm2.metric("📦 Sales SKUs",       f"{len(sales_parents):,} SKUs")
-    bm3.metric("✅ Matched",          f"{len(matched_parents):,} SKUs")
-    bm4.metric("🔗 Match Rate",       f"{match_pct:.1f}%")
+    bm1.metric("💎 Merch Catalogue", f"{len(merch_parents):,} SKUs")
+    bm2.metric("📦 Sales SKUs",      f"{len(sales_parents):,} SKUs")
+    bm3.metric("✅ Matched",         f"{len(matched_parents):,} SKUs")
+    bm4.metric("🔗 Match Rate",      f"{match_pct:.1f}%")
 
-    if match_pct == 0:
-        st.warning("No Parent SKUs could be matched between sales data and the merchandising sheet. "
-                   "Check that Parent SKU names are formatted the same way in both sources.")
+    if sales_parents and match_pct == 0:
+        st.warning("No Parent SKUs matched. Check that Parent SKU names are formatted "
+                   "identically in both the sales sheet and Merchandising_data.xlsx.")
 
     st.markdown("---")
-
-    # ── Enrich sales data with merch attributes ───────────────────────────────
-    df_enriched = df_s_merch.merge(
-        merch_lookup[["Parent","design_code","jewelry_type","stone"]],
-        on="Parent", how="left", suffixes=("_sales", "_merch")
-    )
-
-    # --- Robust column normalisation (prevents KeyError on 'stone' / 'jewelry_type') ---
-    # If the sales dataset already contains columns named like the merch attributes,
-    # pandas will suffix them. We always want the merch values.
-    def _coalesce_col(df, base):
-        merch_col = f"{base}_merch"
-        sales_col = f"{base}_sales"
-        if base in df.columns:
-            return base
-        if merch_col in df.columns:
-            df[base] = df[merch_col]
-            return base
-        if sales_col in df.columns:
-            df[base] = df[sales_col]
-            return base
-        # last-resort: case-insensitive match
-        for c in df.columns:
-            if str(c).strip().lower() == base.lower():
-                df[base] = df[c]
-                return base
-        df[base] = np.nan
-        return base
-
-    for _c in ["design_code", "jewelry_type", "stone"]:
-        _coalesce_col(df_enriched, _c)
-
-    # Drop suffixed duplicates to keep downstream code stable
-    drop_cols = [c for c in df_enriched.columns if c.endswith("_sales") or c.endswith("_merch")]
-    if drop_cols:
-        df_enriched = df_enriched.drop(columns=drop_cols)
 
     # ── Tab-level filters ─────────────────────────────────────────────────────
     st.markdown("### 🔧 Filters")
     fcol1, fcol2, fcol3 = st.columns([2, 2, 1])
 
+    # Filter options come from the full catalogue (not just matched SKUs)
     all_jtypes = sorted(merch_lookup["jewelry_type"].dropna().unique().tolist())
     all_stones = sorted(merch_lookup["stone"].dropna().unique().tolist())
 
     with fcol1:
         sel_jtype = st.multiselect(
-            "💍 Jewelry Type",
-            options=all_jtypes,
-            default=[],
-            key="merch_jtype_filter",
-            placeholder="All jewelry types…"
+            "💍 Jewelry Type", options=all_jtypes, default=[],
+            key="merch_jtype_filter", placeholder="All jewelry types…"
         )
     with fcol2:
         sel_stone = st.multiselect(
-            "💠 Stone",
-            options=all_stones,
-            default=[],
-            key="merch_stone_filter",
-            placeholder="All stones…"
+            "💠 Stone", options=all_stones, default=[],
+            key="merch_stone_filter", placeholder="All stones…"
         )
     with fcol3:
-        matched_only = st.toggle(
-            "Matched SKUs only",
-            value=True,
+        # FIX #3: default False so 0-sales SKUs are visible by default
+        with_sales_only = st.toggle(
+            "With sales only", value=False,
             key="merch_matched_only",
-            help="When ON, only Parent SKUs found in both sales and merchandising data are shown."
+            help="ON = hide SKUs with $0 revenue in this period. OFF = show all catalogue SKUs (zero shown as 0)."
         )
 
-        # Apply filters + heavy aggregations (cached for snappy interactions)
-    FILTER_COLS = ["Parent", "design_code", "jewelry_type", "stone", "revenue", "orders"]
+    # ── FIX #2: Apply filters directly on df_enriched (no closure caching) ──
+    df_m = df_enriched.copy()
 
-    # Make groupbys faster (especially for repeated filter changes)
-    for _c in ["jewelry_type", "stone", "design_code"]:
-        if _c in df_enriched.columns and not pd.api.types.is_categorical_dtype(df_enriched[_c]):
-            df_enriched[_c] = df_enriched[_c].astype("category")
+    if with_sales_only:
+        df_m = df_m[df_m["orders"] > 0]
 
-    # Prepare a slim base frame once per rerun for this tab (keeps UI identical, speeds up filtering)
-    _df_merch_base = df_enriched[FILTER_COLS].copy()
+    # FIX #5: simple isin — each row has exactly one stone value, no regex needed
+    if sel_jtype:
+        df_m = df_m[df_m["jewelry_type"].isin(sel_jtype)]
+    if sel_stone:
+        df_m = df_m[df_m["stone"].isin(sel_stone)]
 
-    # A tiny signature so cache invalidates if underlying data changes (date range, file, etc.)
-    _data_sig = (int(_df_merch_base.shape[0]), float(_df_merch_base["revenue"].sum()), float(_df_merch_base["orders"].sum()))
+    # Active filter info bar
+    active_parts = []
+    if sel_jtype:
+        active_parts.append(f"💍 {', '.join(sel_jtype)}")
+    if sel_stone:
+        extra = f" +{len(sel_stone)-3} more" if len(sel_stone) > 3 else ""
+        active_parts.append(f"💠 {', '.join(sel_stone[:3])}{extra}")
+    if with_sales_only:
+        active_parts.append("📦 With sales only")
 
-    @st.cache_data(show_spinner=False, ttl=900, max_entries=128)
-    def _compute_merch_views(_data_sig_key: tuple, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple):
-        # Use the outer-scope base df; cache key is driven by _data_sig_key + filters only.
-        df = _df_merch_base.copy()
+    rev_sum = float(df_m["revenue"].sum())
+    ord_sum = float(df_m["orders"].sum())
+    sku_cnt = int(df_m["Parent"].nunique())
 
-        # Normalize columns to robust plain strings for reliable filtering
-        for _c in ["design_code", "jewelry_type", "stone"]:
-            if _c in df.columns:
-                df[_c] = df[_c].astype("string").fillna("").str.strip()
+    if active_parts:
+        st.info("📌 Active: " + "  |  ".join(active_parts) +
+                f"  ·  **{sku_cnt:,} SKUs**  ·  **${rev_sum:,.0f}** revenue  ·  **{int(ord_sum):,}** orders")
+    else:
+        st.info(f"📌 Showing full catalogue  ·  **{sku_cnt:,} SKUs**  ·  **${rev_sum:,.0f}** revenue  ·  **{int(ord_sum):,}** orders")
 
-        # Normalised helper cols (case-insensitive)
-        df["_jewelry_type_norm"] = df.get("jewelry_type", "").astype("string").str.lower().str.strip()
-        df["_stone_norm"] = df.get("stone", "").astype("string").str.lower().str.strip()
-
-        # Normalize selection values too
-        _sel_jtype_norm = tuple(sorted({str(x).strip().lower() for x in _sel_jtype if str(x).strip()}))
-        _sel_stone_norm = tuple(sorted({str(x).strip().lower() for x in _sel_stone if str(x).strip()}))
-
-        mask = pd.Series(True, index=df.index)
-
-        if _matched_only:
-            # matched == has a real design_code from merch lookup
-            dc = df.get("design_code", "")
-            mask &= dc.notna() & (dc.astype("string").str.strip() != "") & (dc.astype("string").str.lower() != "nan")
-
-        if _sel_jtype_norm:
-            mask &= df["_jewelry_type_norm"].isin(_sel_jtype_norm)
-
-        if _sel_stone_norm:
-            # Support comma-separated stones by matching whole tokens.
-            # Example: "Diamond, Ruby" should match selection "ruby".
-            stone_str = df["_stone_norm"].fillna("")
-            pat = r"(?:^|,\s*)({})(?:\s*,|$)".format("|".join(re.escape(s) for s in _sel_stone_norm))
-            mask &= stone_str.str.contains(pat, na=False, regex=True)
-
-        df_m = df.loc[mask, FILTER_COLS]
-        # If filters produce nothing, return empty-but-well-formed views.
-        # The UI will show 0s and "no data" messages instead of sticking or erroring.
-        if df_m.empty:
-            metrics = {"sku_count": 0, "design_count": 0, "rev_sum": 0.0, "ord_sum": 0.0}
-            jtype_agg = pd.DataFrame(columns=["jewelry_type","revenue","orders","aov"])
-            stone_agg = pd.DataFrame(columns=["stone","revenue"])
-            parent_agg = pd.DataFrame(columns=["Parent","revenue","orders","design_code","jewelry_type","stone","aov","revenue_share"])
-            design_agg = pd.DataFrame(columns=["design_code","revenue","orders","variants","jewelry_type","stones","aov","revenue_share"])
-            heat_raw = pd.DataFrame(columns=["jewelry_type","stone","revenue"])
-            top15_stones = []
-            return df_m, metrics, jtype_agg, stone_agg, parent_agg, design_agg, heat_raw, top15_stones
-
-        # KPI metrics
-        metrics = {
-            "sku_count": int(df_m["Parent"].nunique()),
-            "design_count": int(df_m["design_code"].nunique()),
-            "rev_sum": float(df_m["revenue"].sum()),
-            "ord_sum": float(df_m["orders"].sum()),
-        }
-
-        # Revenue by jewelry type
-        jtype_agg = (
-            df_m.groupby("jewelry_type", dropna=False)
-            .agg(revenue=("revenue", "sum"), orders=("orders", "sum"))
-            .reset_index()
-        )
-        jtype_agg["aov"] = (jtype_agg["revenue"] / jtype_agg["orders"].replace(0, np.nan)).fillna(0)
-        jtype_agg = jtype_agg.sort_values("revenue", ascending=True)
-
-        # Top stones by revenue
-        stone_agg = (
-            df_m.groupby("stone", dropna=False)["revenue"]
-            .sum()
-            .reset_index()
-            .sort_values("revenue", ascending=False)
-            .head(15)
-        )
-
-        # Parent SKU performance (fast attrs extraction)
-        parent_sum = (
-            df_m.groupby("Parent")
-            .agg(revenue=("revenue", "sum"), orders=("orders", "sum"))
-            .reset_index()
-        )
-        parent_attr = (
-            df_m[["Parent", "design_code", "jewelry_type", "stone"]]
-            .drop_duplicates(subset="Parent", keep="first")
-        )
-        parent_agg = parent_sum.merge(parent_attr, on="Parent", how="left")
-        for _c in ["design_code", "jewelry_type", "stone"]:
-            if _c in parent_agg.columns:
-                parent_agg[_c] = parent_agg[_c].astype("string").fillna("—")
-        parent_agg["aov"] = (parent_agg["revenue"] / parent_agg["orders"].replace(0, np.nan)).fillna(0)
-        parent_agg["revenue_share"] = (parent_agg["revenue"] / parent_agg["revenue"].sum() * 100).round(2)
-        parent_agg = parent_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
-
-        # Design code performance
-        ddf = df_m[df_m["design_code"].notna() & (df_m["design_code"].astype(str).str.lower() != "nan") & (df_m["design_code"].astype(str).str.strip() != "")].copy()
-        if ddf.empty:
-            design_agg = pd.DataFrame(columns=["design_code","revenue","orders","variants","jewelry_type","stones","aov","revenue_share"])
-        else:
-            design_sum = (
-                ddf.groupby("design_code")
-                .agg(revenue=("revenue", "sum"), orders=("orders", "sum"), variants=("Parent", "nunique"))
-                .reset_index()
-            )
-            design_jtype = (
-                ddf[["design_code", "jewelry_type"]]
-                .drop_duplicates(subset="design_code", keep="first")
-            )
-            stones_series = (
-                ddf[["design_code", "stone"]]
-                .dropna(subset=["stone"])
-                .astype({"stone": str})
-                .groupby("design_code")["stone"]
-                .apply(lambda s: ", ".join(sorted(set([x.strip() for x in s.tolist() if str(x).strip()]))))
-                .reset_index(name="stones")
-            )
-            design_agg = design_sum.merge(design_jtype, on="design_code", how="left").merge(stones_series, on="design_code", how="left")
-            design_agg["jewelry_type"] = design_agg["jewelry_type"].astype("string").fillna("—")
-            design_agg["stones"] = design_agg["stones"].astype("string").fillna("—")
-            design_agg["aov"] = (design_agg["revenue"] / design_agg["orders"].replace(0, np.nan)).fillna(0)
-            design_agg["revenue_share"] = (design_agg["revenue"] / design_agg["revenue"].sum() * 100).round(2)
-            design_agg = design_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
-
-        # Heatmap data
-        heat_raw = (
-            df_m.groupby(["jewelry_type", "stone"], dropna=False)["revenue"]
-            .sum()
-            .reset_index()
-        )
-        top15_stones = heat_raw.groupby("stone")["revenue"].sum().nlargest(15).index.tolist()
-
-        return df_m, metrics, jtype_agg, stone_agg, parent_agg, design_agg, heat_raw, top15_stones
-
-    _sel_jtype_t = tuple(sel_jtype or [])
-    _sel_stone_t = tuple(sel_stone or [])
-
-    _views = _compute_merch_views(_data_sig, matched_only, _sel_jtype_t, _sel_stone_t)
-
-    df_m, _m_metrics, jtype_agg, stone_agg, parent_agg, design_agg, heat_raw, top15_stones = _views
     if df_m.empty:
-        st.warning("No sales match the current Merchandising filters. Showing 0s for this selection.")
-
-    # Active filter badges
-    active = []
-    if sel_jtype: active.append(f"💍 {', '.join(sel_jtype)}")
-    if sel_stone: active.append(f"💠 {', '.join(sel_stone[:3])}{'…+more' if len(sel_stone) > 3 else ''}")
-    if active:
-        st.info("📌 Active: " + "  |  ".join(active) +
-                f"  ·  **{_m_metrics['sku_count']:,} SKUs** · "
-                f"**${_m_metrics['rev_sum']:,.0f}** revenue")
+        st.warning("No SKUs match the current filters.")
+        st.stop()
 
     st.markdown("---")
 
-    # ════════════════════════════════════════════════════════════════════════════
-    # SECTION 1 ── Revenue by Jewelry Type & Stone
-    # ════════════════════════════════════════════════════════════════════════════
+    # ════════════════════════════════════════════════════════════════════════
+    # SECTION 1 — KPIs + Category Charts
+    # ════════════════════════════════════════════════════════════════════════
     st.markdown("### 📊 Category Revenue Overview")
 
+    kp1, kp2, kp3, kp4, kp5 = st.columns(5)
+    blended_aov = rev_sum / ord_sum if ord_sum > 0 else 0
+    kp1.metric("💰 Total Revenue",    f"${rev_sum:,.0f}")
+    kp2.metric("🛒 Total Orders",     f"{int(ord_sum):,}")
+    kp3.metric("📊 Blended AOV",      f"${blended_aov:,.2f}")
+    kp4.metric("🏷️ Parent SKUs",      f"{sku_cnt:,}")
+    kp5.metric("🎨 Design Codes",     f"{df_m['design_code'].nunique():,}")
+
+    st.markdown("")
     ov_left, ov_right = st.columns(2)
 
-    # ── Jewelry Type bar ─────────────────────────────────────────────────────
+    # ── Jewelry Type horizontal bar ───────────────────────────────────────
     with ov_left:
         st.markdown("**💍 Revenue by Jewelry Type**")
         jtype_agg = (
@@ -3164,85 +3003,115 @@ with tabs[9]:
             .reset_index()
             .sort_values("revenue", ascending=True)
         )
-        jtype_agg["aov"] = (jtype_agg["revenue"] / jtype_agg["orders"].replace(0, np.nan)).fillna(0)
+        jtype_agg["aov"] = (
+            jtype_agg["revenue"] / jtype_agg["orders"].replace(0, np.nan)
+        ).fillna(0)
 
-        if jtype_agg.empty:
-            st.info("No jewelry type sales for the current selection.")
+        if jtype_agg.empty or jtype_agg["revenue"].sum() == 0:
+            st.info("No revenue for the current jewelry-type selection.")
         else:
             fig_jtype = px.bar(
                 jtype_agg, x="revenue", y="jewelry_type", orientation="h",
                 color="aov", color_continuous_scale="Blues",
                 custom_data=["orders","aov"],
                 labels={"revenue":"Revenue ($)","jewelry_type":"","aov":"AOV ($)"},
-                text=jtype_agg["revenue"].apply(lambda v: f"${v/1000:.0f}k")
+                text=jtype_agg["revenue"].apply(
+                    lambda v: f"${v/1000:.1f}k" if v >= 1000 else f"${v:.0f}")
             )
             fig_jtype.update_traces(
                 textposition="outside",
-                hovertemplate="<b>%{y}</b><br>Revenue: $%{x:,.0f}<br>Orders: %{customdata[0]:,.0f}<br>AOV: $%{customdata[1]:.2f}<extra></extra>"
+                hovertemplate=(
+                    "<b>%{y}</b><br>Revenue: $%{x:,.0f}<br>"
+                    "Orders: %{customdata[0]:,.0f}<br>"
+                    "AOV: $%{customdata[1]:.2f}<extra></extra>"
+                )
             )
             fig_jtype.update_layout(
                 template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)", height=max(350, len(jtype_agg)*35+60),
+                plot_bgcolor="rgba(0,0,0,0)",
+                height=max(300, len(jtype_agg) * 36 + 60),
                 margin=dict(l=0, r=70, t=10, b=0),
                 coloraxis_showscale=False,
                 xaxis=dict(showgrid=True, gridcolor="#2d303e"),
                 yaxis=dict(showgrid=False)
             )
-            st.plotly_chart(fig_jtype, config={"displayModeBar":False}, use_container_width=True)
+            st.plotly_chart(fig_jtype, config={"displayModeBar":False},
+                            use_container_width=True)
 
-    # ── Stone pie ────────────────────────────────────────────────────────────
+    # ── Stone donut — only positive-revenue slices ─────────────────────────
     with ov_right:
         st.markdown("**💠 Top 15 Stones by Revenue**")
-        # stone_agg is precomputed (cached) based on filters
-        if stone_agg.empty:
-            st.info("No stone sales for the current selection.")
+        stone_agg = (
+            df_m.groupby("stone", dropna=False)["revenue"]
+            .sum().reset_index()
+            .sort_values("revenue", ascending=False)
+        )
+        stone_pie = stone_agg[stone_agg["revenue"] > 0].head(15)
+
+        if stone_pie.empty:
+            st.info("No revenue by stone for the current selection.")
         else:
             fig_stone = px.pie(
-                stone_agg, values="revenue", names="stone", hole=0.48,
+                stone_pie, values="revenue", names="stone", hole=0.48,
                 color_discrete_sequence=px.colors.qualitative.Pastel
             )
             fig_stone.update_traces(
                 textposition="outside", textinfo="percent+label",
                 textfont_size=10,
-                hovertemplate="<b>%{label}</b><br>Revenue: $%{value:,.0f}<br>Share: %{percent}<extra></extra>"
+                hovertemplate="<b>%{label}</b><br>Revenue: $%{value:,.0f}<br>"
+                              "Share: %{percent}<extra></extra>"
             )
             fig_stone.update_layout(
                 template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-                height=max(350, len(jtype_agg)*35+60),
+                height=max(300, len(jtype_agg) * 36 + 60),
                 margin=dict(l=0, r=0, t=10, b=40),
                 showlegend=False
             )
-            st.plotly_chart(fig_stone, config={"displayModeBar":False}, use_container_width=True)
-
-    # ── KPI summary row ───────────────────────────────────────────────────────
-    kp1, kp2, kp3, kp4, kp5 = st.columns(5)
-    kp1.metric("💰 Total Revenue",    f"${df_m['revenue'].sum():,.0f}")
-    kp2.metric("🛒 Total Orders",     f"{df_m['orders'].sum():,.0f}")
-    aov_all = df_m['revenue'].sum() / df_m['orders'].sum() if df_m['orders'].sum() > 0 else 0
-    kp3.metric("📊 Blended AOV",      f"${aov_all:,.2f}")
-    kp4.metric("🏷️ Active Parent SKUs", f"{df_m['Parent'].nunique():,}")
-    kp5.metric("🎨 Design Codes",     f"{df_m['design_code'].nunique():,}")
+            st.plotly_chart(fig_stone, config={"displayModeBar":False},
+                            use_container_width=True)
 
     st.markdown("---")
 
-    # ════════════════════════════════════════════════════════════════════════════
-    # SECTION 2 ── Parent SKU Performance Table
-    # ════════════════════════════════════════════════════════════════════════════
+    # ════════════════════════════════════════════════════════════════════════
+    # SECTION 2 — Parent SKU Performance Table
+    # ════════════════════════════════════════════════════════════════════════
     st.markdown("### 🏷️ Parent SKU Performance")
-    st.caption("Each Parent SKU mapped to its Design Code, Jewelry Type and Stone from the merchandising catalogue.")
+    st.caption(
+        "All catalogue SKUs shown. SKUs with no sales in the selected "
+        "period appear with Revenue = $0 and Orders = 0."
+    )
 
-    # parent_agg is precomputed (cached) based on filters
+    parent_agg = (
+        df_m.groupby("Parent", as_index=False)
+        .agg(
+            revenue     =("revenue","sum"),
+            orders      =("orders","sum"),
+            design_code =("design_code",  "first"),
+            jewelry_type=("jewelry_type", "first"),
+            stone       =("stone",        "first"),
+        )
+    )
+    parent_agg["aov"]           = (
+        parent_agg["revenue"] / parent_agg["orders"].replace(0, np.nan)
+    ).fillna(0)
+    _pa_tot = parent_agg["revenue"].sum()
+    parent_agg["revenue_share"] = (
+        (parent_agg["revenue"] / _pa_tot * 100) if _pa_tot > 0 else 0.0
+    ).round(2)
+    parent_agg = parent_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
+    for _c in ["design_code","jewelry_type","stone"]:
+        parent_agg[_c] = parent_agg[_c].fillna("—").astype(str)
 
-    # Inline search
-    ps1, ps2 = st.columns([3,1])
+    ps1, ps2 = st.columns([3, 1])
     with ps1:
-        p_search = st.text_input("🔎 Search Parent SKU or Design Code",
-                                  placeholder="e.g. EJ_SE or FC_SB…",
-                                  key="merch_parent_search",
-                                  label_visibility="collapsed")
+        p_search = st.text_input(
+            "🔎 Search Parent SKU or Design Code",
+            placeholder="e.g. EJ_SE or FC_SB…",
+            key="merch_parent_search", label_visibility="collapsed"
+        )
     with ps2:
         top_n = st.selectbox("Show top", [25, 50, 100, "All"],
-                              key="merch_parent_topn", label_visibility="collapsed")
+                             key="merch_parent_topn", label_visibility="collapsed")
 
     p_disp = parent_agg.copy()
     if p_search.strip():
@@ -3254,6 +3123,10 @@ with tabs[9]:
     if top_n != "All":
         p_disp = p_disp.head(int(top_n))
 
+    # FIX #4: safe max — avoid crash on empty
+    _max_rev_pa = float(parent_agg["revenue"].max()) if not parent_agg.empty else 1.0
+    _max_rev_pa = max(_max_rev_pa, 1.0)
+
     st.dataframe(
         p_disp[["Parent","design_code","jewelry_type","stone",
                 "revenue","orders","aov","revenue_share"]],
@@ -3264,10 +3137,10 @@ with tabs[9]:
             "stone":         st.column_config.TextColumn("Stone",        width="medium"),
             "revenue":       st.column_config.ProgressColumn(
                                 "Revenue ($)", format="$%d",
-                                min_value=0, max_value=int(parent_agg["revenue"].max())),
-            "orders":        st.column_config.NumberColumn("Orders",      format="%d"),
-            "aov":           st.column_config.NumberColumn("AOV ($)",     format="$%.2f"),
-            "revenue_share": st.column_config.NumberColumn("Rev Share %", format="%.2f%%"),
+                                min_value=0, max_value=_max_rev_pa),
+            "orders":        st.column_config.NumberColumn("Orders",     format="%d"),
+            "aov":           st.column_config.NumberColumn("AOV ($)",    format="$%.2f"),
+            "revenue_share": st.column_config.NumberColumn("Rev Share %",format="%.2f%%"),
         },
         hide_index=True, use_container_width=True, height=430
     )
@@ -3280,136 +3153,217 @@ with tabs[9]:
 
     st.markdown("---")
 
-    # ════════════════════════════════════════════════════════════════════════════
-    # SECTION 3 ── Design Code Performance
-    # ════════════════════════════════════════════════════════════════════════════
+    # ════════════════════════════════════════════════════════════════════════
+    # SECTION 3 — Design Code Performance
+    # ════════════════════════════════════════════════════════════════════════
     st.markdown("### 🎨 Design Code Performance")
-    st.caption("A Design Code groups multiple Parent SKUs (different stones/variants of the same design). Revenue is aggregated across all its variants.")
-
-    # design_agg is precomputed (cached) based on filters
-
-    # Top 20 chart
-    top20 = design_agg.head(20).copy()
-    fig_dc = px.bar(
-        top20, x="design_code", y="revenue",
-        color="jewelry_type",
-        custom_data=["orders","aov","variants","stones"],
-        labels={"revenue":"Revenue ($)","design_code":"Design Code","jewelry_type":"Type"},
-        text=top20["revenue"].apply(lambda v: f"${v/1000:.1f}k")
+    st.caption(
+        "A Design Code groups multiple Parent SKUs (different stone variants "
+        "of the same design). Revenue is aggregated across all variants."
     )
-    fig_dc.update_traces(
-        textposition="outside",
-        hovertemplate=(
-            "<b>%{x}</b><br>"
-            "Revenue: $%{y:,.0f}<br>"
-            "Orders: %{customdata[0]:,.0f}<br>"
-            "AOV: $%{customdata[1]:.2f}<br>"
-            "Variants: %{customdata[2]}<br>"
-            "Stones: %{customdata[3]}<extra></extra>"
+
+    _valid_dc = df_m["design_code"].notna() & (
+        df_m["design_code"].astype(str).str.strip().str.lower().isin(["", "nan"]) == False
+    )
+    ddf = df_m[_valid_dc].copy()
+
+    if ddf.empty:
+        st.info("No design codes for the current filter selection.")
+    else:
+        design_sum = ddf.groupby("design_code", as_index=False).agg(
+            revenue =("revenue","sum"),
+            orders  =("orders","sum"),
+            variants=("Parent","nunique"),
         )
-    )
-    fig_dc.update_layout(
-        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)", height=380,
-        margin=dict(l=0, r=0, t=20, b=0),
-        xaxis=dict(tickangle=-40, showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor="#2d303e"),
-        legend=dict(title="Jewelry Type", orientation="h", y=1.14),
-        bargap=0.25
-    )
-    st.plotly_chart(fig_dc, config={"displayModeBar":False}, use_container_width=True)
+        design_jtype = (
+            ddf[["design_code","jewelry_type"]]
+            .drop_duplicates("design_code", keep="first")
+        )
+        design_stones = (
+            ddf.groupby("design_code")["stone"]
+            .apply(lambda s: ", ".join(sorted(set(s.dropna().astype(str).str.strip()))))
+            .reset_index(name="stones")
+        )
+        design_agg = (
+            design_sum
+            .merge(design_jtype,  on="design_code", how="left")
+            .merge(design_stones, on="design_code", how="left")
+        )
+        design_agg["jewelry_type"] = design_agg["jewelry_type"].fillna("—").astype(str)
+        design_agg["stones"]       = design_agg["stones"].fillna("—").astype(str)
+        design_agg["aov"]          = (
+            design_agg["revenue"] / design_agg["orders"].replace(0, np.nan)
+        ).fillna(0)
+        _dc_tot = design_agg["revenue"].sum()
+        design_agg["revenue_share"] = (
+            (design_agg["revenue"] / _dc_tot * 100) if _dc_tot > 0 else 0.0
+        ).round(2)
+        design_agg = design_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
 
-    # Design code searchable table
-    ds1, ds2 = st.columns([3,1])
-    with ds1:
-        dc_search = st.text_input("🔎 Search Design Code or Stone",
-                                   placeholder="e.g. FC_SB or Diamond…",
-                                   key="merch_dc_search",
-                                   label_visibility="collapsed")
-    with ds2:
-        dc_top_n = st.selectbox("Show top", [25, 50, 100, "All"],
-                                 key="merch_dc_topn", label_visibility="collapsed")
+        # Top-20 bar chart — only plot codes with actual revenue
+        top20 = design_agg[design_agg["revenue"] > 0].head(20)
 
-    dc_disp = design_agg.copy()
-    if dc_search.strip():
-        q2 = dc_search.strip()
-        dc_disp = dc_disp[
-            dc_disp["design_code"].str.contains(q2, case=False, na=False) |
-            dc_disp["stones"].str.contains(q2, case=False, na=False)
-        ]
-    if dc_top_n != "All":
-        dc_disp = dc_disp.head(int(dc_top_n))
+        # FIX #6: guard before rendering chart
+        if top20.empty:
+            st.info("No revenue recorded for any design code in this selection.")
+        else:
+            fig_dc = px.bar(
+                top20, x="design_code", y="revenue",
+                color="jewelry_type",
+                custom_data=["orders","aov","variants","stones"],
+                labels={"revenue":"Revenue ($)","design_code":"Design Code",
+                        "jewelry_type":"Type"},
+                text=top20["revenue"].apply(
+                    lambda v: f"${v/1000:.1f}k" if v >= 1000 else f"${v:.0f}")
+            )
+            fig_dc.update_traces(
+                textposition="outside",
+                hovertemplate=(
+                    "<b>%{x}</b><br>Revenue: $%{y:,.0f}<br>"
+                    "Orders: %{customdata[0]:,.0f}<br>"
+                    "AOV: $%{customdata[1]:.2f}<br>"
+                    "Variants: %{customdata[2]}<br>"
+                    "Stones: %{customdata[3]}<extra></extra>"
+                )
+            )
+            fig_dc.update_layout(
+                template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)", height=380,
+                margin=dict(l=0, r=0, t=24, b=0),
+                xaxis=dict(tickangle=-40, showgrid=False),
+                yaxis=dict(showgrid=True, gridcolor="#2d303e"),
+                legend=dict(title="Jewelry Type", orientation="h", y=1.14),
+                bargap=0.25
+            )
+            st.plotly_chart(fig_dc, config={"displayModeBar":False},
+                            use_container_width=True)
 
-    st.dataframe(
-        dc_disp[["design_code","jewelry_type","stones","variants",
-                 "revenue","orders","aov","revenue_share"]],
-        column_config={
-            "design_code":   st.column_config.TextColumn("Design Code",   width="medium"),
-            "jewelry_type":  st.column_config.TextColumn("Jewelry Type",  width="small"),
-            "stones":        st.column_config.TextColumn("Stones",        width="large"),
-            "variants":      st.column_config.NumberColumn("# Variants",  format="%d"),
-            "revenue":       st.column_config.ProgressColumn(
-                                "Revenue ($)", format="$%d",
-                                min_value=0, max_value=int(design_agg["revenue"].max())),
-            "orders":        st.column_config.NumberColumn("Orders",      format="%d"),
-            "aov":           st.column_config.NumberColumn("AOV ($)",     format="$%.2f"),
-            "revenue_share": st.column_config.NumberColumn("Rev Share %", format="%.2f%%"),
-        },
-        hide_index=True, use_container_width=True, height=430
-    )
-    st.caption(f"Showing {len(dc_disp):,} of {len(design_agg):,} Design Codes")
-    st.download_button(
-        "📥 Download Design Code Report (CSV)",
-        dc_disp.to_csv(index=False).encode("utf-8"),
-        "design_code_performance.csv", "text/csv", key="dl_merch_design"
-    )
+        # Searchable design code table
+        ds1, ds2 = st.columns([3, 1])
+        with ds1:
+            dc_search = st.text_input(
+                "🔎 Search Design Code or Stone",
+                placeholder="e.g. FC_SB or Diamond…",
+                key="merch_dc_search", label_visibility="collapsed"
+            )
+        with ds2:
+            dc_top_n = st.selectbox("Show top", [25, 50, 100, "All"],
+                                    key="merch_dc_topn", label_visibility="collapsed")
+
+        dc_disp = design_agg.copy()
+        if dc_search.strip():
+            q2 = dc_search.strip()
+            dc_disp = dc_disp[
+                dc_disp["design_code"].str.contains(q2, case=False, na=False) |
+                dc_disp["stones"].str.contains(q2, case=False, na=False)
+            ]
+        if dc_top_n != "All":
+            dc_disp = dc_disp.head(int(dc_top_n))
+
+        # FIX #4: safe max
+        _max_rev_dc = float(design_agg["revenue"].max()) if not design_agg.empty else 1.0
+        _max_rev_dc = max(_max_rev_dc, 1.0)
+
+        st.dataframe(
+            dc_disp[["design_code","jewelry_type","stones","variants",
+                     "revenue","orders","aov","revenue_share"]],
+            column_config={
+                "design_code":   st.column_config.TextColumn("Design Code",  width="medium"),
+                "jewelry_type":  st.column_config.TextColumn("Jewelry Type", width="small"),
+                "stones":        st.column_config.TextColumn("Stones",       width="large"),
+                "variants":      st.column_config.NumberColumn("# Variants", format="%d"),
+                "revenue":       st.column_config.ProgressColumn(
+                                    "Revenue ($)", format="$%d",
+                                    min_value=0, max_value=_max_rev_dc),
+                "orders":        st.column_config.NumberColumn("Orders",     format="%d"),
+                "aov":           st.column_config.NumberColumn("AOV ($)",    format="$%.2f"),
+                "revenue_share": st.column_config.NumberColumn("Rev Share %",format="%.2f%%"),
+            },
+            hide_index=True, use_container_width=True, height=430
+        )
+        st.caption(f"Showing {len(dc_disp):,} of {len(design_agg):,} Design Codes")
+        st.download_button(
+            "📥 Download Design Code Report (CSV)",
+            dc_disp.to_csv(index=False).encode("utf-8"),
+            "design_code_performance.csv", "text/csv", key="dl_merch_design"
+        )
 
     st.markdown("---")
 
-    # ════════════════════════════════════════════════════════════════════════════
-    # SECTION 4 ── Jewelry Type × Stone Heatmap
-    # ════════════════════════════════════════════════════════════════════════════
+    # ════════════════════════════════════════════════════════════════════════
+    # SECTION 4 — Jewelry Type × Stone Heatmap
+    # ════════════════════════════════════════════════════════════════════════
     st.markdown("### 🔥 Revenue Heatmap — Jewelry Type × Stone")
-    st.caption("Top 15 stones shown. Colour intensity and label = revenue. Hover for exact figure.")
-
-    # heat_raw and top15_stones are precomputed (cached) based on filters
-    pivot = heat_raw.pivot(index="jewelry_type", columns="stone", values="revenue").fillna(0)
-
-    text_matrix = [
-        [f"${v/1000:.0f}k" if v > 0 else "" for v in row]
-        for row in pivot.values
-    ]
-    fig_heat = go.Figure(data=go.Heatmap(
-        z=pivot.values,
-        x=pivot.columns.tolist(),
-        y=pivot.index.tolist(),
-        colorscale="Blues",
-        hoverongaps=False,
-        hovertemplate="<b>%{y}</b> × <b>%{x}</b><br>Revenue: $%{z:,.0f}<extra></extra>",
-        text=text_matrix,
-        texttemplate="%{text}",
-        textfont={"size": 9}
-    ))
-    fig_heat.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        height=max(320, len(pivot) * 42 + 80),
-        margin=dict(l=0, r=0, t=10, b=0),
-        xaxis=dict(tickangle=-42, side="bottom"),
-        yaxis=dict(autorange="reversed")
+    st.caption(
+        "Top 15 stones by revenue shown. "
+        "Colour intensity = revenue. Hover for exact figure."
     )
-    st.plotly_chart(fig_heat, config={"displayModeBar":False}, use_container_width=True)
 
-    # Unmatched callout (collapsible)
-    if len(sales_parents - merch_parents) > 0:
-        with st.expander(f"ℹ️ {len(sales_parents - merch_parents):,} sales SKUs with no merchandising match"):
-            st.caption("These Parent SKUs have sales data but were not found in Merchandising_data.xlsx.")
-            unmatched_df = pd.DataFrame(sorted(sales_parents - merch_parents), columns=["Parent SKU"])
-            st.dataframe(unmatched_df, hide_index=True, use_container_width=True, height=250)
-            st.download_button("📥 Download Unmatched SKU List",
-                               unmatched_df.to_csv(index=False).encode("utf-8"),
-                               "unmatched_skus.csv", "text/csv", key="dl_unmatched")
+    heat_raw = (
+        df_m.groupby(["jewelry_type","stone"], dropna=False)["revenue"]
+        .sum().reset_index()
+    )
+    # Only keep top-15 stones to keep the chart readable
+    top15_stones = (
+        heat_raw.groupby("stone")["revenue"].sum()
+        .nlargest(15).index.tolist()
+    )
+    heat_filtered = heat_raw[heat_raw["stone"].isin(top15_stones)]
+
+    # FIX #4: guard pivot on empty frame
+    if heat_filtered.empty:
+        st.info("No heatmap data for the current selection.")
+    else:
+        pivot = (
+            heat_filtered
+            .pivot(index="jewelry_type", columns="stone", values="revenue")
+            .fillna(0)
+        )
+        text_matrix = [
+            [
+                f"${v/1000:.1f}k" if v >= 1000 else (f"${v:.0f}" if v > 0 else "")
+                for v in row
+            ]
+            for row in pivot.values
+        ]
+        fig_heat = go.Figure(data=go.Heatmap(
+            z=pivot.values,
+            x=pivot.columns.tolist(),
+            y=pivot.index.tolist(),
+            colorscale="Blues",
+            hoverongaps=False,
+            hovertemplate="<b>%{y}</b> × <b>%{x}</b><br>Revenue: $%{z:,.0f}<extra></extra>",
+            text=text_matrix,
+            texttemplate="%{text}",
+            textfont={"size": 9}
+        ))
+        fig_heat.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            height=max(320, len(pivot) * 42 + 80),
+            margin=dict(l=0, r=0, t=10, b=0),
+            xaxis=dict(tickangle=-42, side="bottom"),
+            yaxis=dict(autorange="reversed")
+        )
+        st.plotly_chart(fig_heat, config={"displayModeBar":False},
+                        use_container_width=True)
+
+    # ── Unmatched SKUs ────────────────────────────────────────────────────
+    unmatched = sales_parents - merch_parents
+    if unmatched:
+        with st.expander(f"ℹ️ {len(unmatched):,} sales SKUs have no merchandising record"):
+            st.caption("These Parent SKUs appear in sales data but not in Merchandising_data.xlsx.")
+            st.dataframe(
+                pd.DataFrame(sorted(unmatched), columns=["Parent SKU"]),
+                hide_index=True, use_container_width=True, height=250
+            )
+            st.download_button(
+                "📥 Download Unmatched SKU List",
+                pd.DataFrame(sorted(unmatched), columns=["Parent SKU"])
+                  .to_csv(index=False).encode("utf-8"),
+                "unmatched_skus.csv", "text/csv", key="dl_unmatched"
+            )
 
 # ---------------- FOOTER ----------------
 st.markdown("---")
