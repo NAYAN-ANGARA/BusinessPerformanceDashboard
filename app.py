@@ -55,7 +55,6 @@ def compute_channel_matrix(df_s: pd.DataFrame, df_sp: pd.DataFrame) -> pd.DataFr
     ch_matrix["roas"] = np.where(ch_matrix["spend"] > 0, ch_matrix["revenue"] / ch_matrix["spend"], 0)
     ch_matrix["aov"] = np.where(ch_matrix["orders"] > 0, ch_matrix["revenue"] / ch_matrix["orders"], 0)
     return ch_matrix
-io.templates.default = "plotly_dark"
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
