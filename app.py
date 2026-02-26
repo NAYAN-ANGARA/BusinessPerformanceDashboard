@@ -600,21 +600,28 @@ with k8:
 
 # ---------------- UI: ENHANCED ANALYSIS TABS ----------------
 st.markdown("")
-tabs = st.tabs([
+tab_names = [
     "🚀 Strategy & Recommendations",
-    "📈 Performance Trends", 
-    "🛒 Marketplace Analysis", 
+    "📈 Performance Trends",
+    "🛒 Marketplace Analysis",
     "🏷️ SKU Analysis",
     "📊 Profitability Deep Dive",
     "🔮 Forecasting & Predictions",
     "🧪 A/B Test Tracker",
     "📅 Weekly Reports",
     "📋 Data Explorer",
-    "💎 Merchandising Intel"
-])
+    "💎 Merchandising Intel",
+]
+
+# Render only the active tab to reduce CPU/RAM on Streamlit Cloud free tier
+try:
+    active_tab = st.segmented_control("", options=tab_names, default=tab_names[0], key="active_tab")
+except Exception:
+    active_tab = st.radio("", options=tab_names, index=0, horizontal=True, key="active_tab")
+
 
 # TAB 1: Strategy & Recommendations
-with tabs[0]:
+if active_tab == tab_names[0]:
     st.markdown('<div class="section-header">🧠 AI Strategic Insights</div>', unsafe_allow_html=True)
     
     # Generate insights based on the Channel Matrix
@@ -667,7 +674,7 @@ with tabs[0]:
         st.caption(f"Vs Current: ${curr['Net']:,.0f}")
 
 # TAB 2: Performance Trends
-with tabs[1]:
+if active_tab == tab_names[1]:
     col1, col2 = st.columns([2, 1])
     
     with col1:
@@ -777,7 +784,7 @@ with tabs[1]:
             st.plotly_chart(fig_costs, config={'displayModeBar': False})
 
 # TAB 3: Marketplace Analysis
-with tabs[2]:
+if active_tab == tab_names[2]:
     st.markdown('<div class="section-header">🛒 Marketplace Performance Analysis</div>', unsafe_allow_html=True)
     
     # Info box explaining the analysis
@@ -923,7 +930,7 @@ with tabs[2]:
     )
 
 # TAB 4: SKU Analysis
-with tabs[3]:
+if active_tab == tab_names[3]:
     st.markdown('<div class="section-header">🏷️ SKU Performance Analysis</div>', unsafe_allow_html=True)
     
     if "Parent" in df_s.columns and df_s["Parent"].nunique() > 1:
@@ -1258,7 +1265,7 @@ with tabs[3]:
         st.info("📦 SKU data not available in the current dataset. Please ensure 'Parent' column exists in your data.")
 
 # TAB 5: Profitability Deep Dive
-with tabs[4]:
+if active_tab == tab_names[4]:
     col1, col2 = st.columns([1, 2])
     
     with col1:
@@ -1339,7 +1346,7 @@ with tabs[4]:
     st.dataframe(profit_metrics, hide_index=True)
 
 # TAB 6: Forecasting & Predictions
-with tabs[5]:
+if active_tab == tab_names[5]:
     st.markdown('<div class="section-header">🔮 Advanced Ensemble ML Forecasting</div>', unsafe_allow_html=True)
 
     st.markdown("""
@@ -1822,7 +1829,7 @@ with tabs[5]:
             c3.info(   f"🎯 **Most Confident:** {top_conf['Marketplace']} ({top_conf['Confidence %']:.0f}%)")
 
 # TAB 7: A/B Test Tracker
-with tabs[6]:
+if active_tab == tab_names[6]:
     st.markdown('<div class="section-header">🧪 Advanced A/B Test Performance Tracker</div>', unsafe_allow_html=True)
     
     st.markdown("""
@@ -2318,7 +2325,7 @@ with tabs[6]:
     else:
         st.info("📝 No A/B tests created yet. Use the forms above to create your first test!")
 # TAB 8: Weekly Reports
-with tabs[7]:
+if active_tab == tab_names[7]:
     st.markdown('<div class="section-header">📅 Weekly Performance Reports</div>', unsafe_allow_html=True)
 
     st.markdown("""
@@ -2811,7 +2818,7 @@ Same period last year: **{report['yoy_period']}**
                 st.text_area("Select all & copy:", markdown_report, height=200)
 
 # TAB 9: Data Explorer
-with tabs[8]:
+if active_tab == tab_names[8]:
     st.markdown('<div class="section-header">📋 Performance Data Explorer</div>', unsafe_allow_html=True)
     
     # Channel Performance Table
@@ -2868,7 +2875,7 @@ with tabs[8]:
 
 
 # TAB 10: Merchandising Intel
-with tabs[9]:
+if active_tab == tab_names[9]:
     st.markdown('<div class="section-header">💎 Merchandising Intelligence</div>', unsafe_allow_html=True)
 
     # ── Load merchandising reference data ────────────────────────────────────
