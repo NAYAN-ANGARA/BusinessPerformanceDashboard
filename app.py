@@ -2888,17 +2888,17 @@ with tabs[9]:
         st.stop()
 
     # ── Sales base for this tab (ignore sidebar Product Types filter) ────────────
-# Merchandising Intelligence has its own Jewelry Type / Stone filters.
-# We still respect the global Date Range + Marketplaces filters.
-mask_merch_sales = (
+    # Merchandising Intelligence has its own Jewelry Type / Stone filters.
+    # We still respect the global Date Range + Marketplaces filters.
+    mask_merch_sales = (
     (sales_df["date"].dt.date >= start_date) &
     (sales_df["date"].dt.date <= end_date) &
     (sales_df["channel"].isin(selected_channels))
-)
-df_s_merch = sales_df[mask_merch_sales]
+    )
+    df_s_merch = sales_df[mask_merch_sales]
 
-# ── Mapping stats ─────────────────────────────────────────────────────────
-     sales_parents  = set(df_s_merch["Parent"].dropna().unique())
+    # ── Mapping stats ─────────────────────────────────────────────────────────
+    sales_parents  = set(df_s_merch["Parent"].dropna().unique())
     merch_parents  = set(merch_lookup["Parent"].unique())
     matched_parents = sales_parents & merch_parents
 
@@ -3059,10 +3059,10 @@ df_s_merch = sales_df[mask_merch_sales]
         }
 
         # Revenue by jewelry type
+        # (Guard) ensure column exists for groupby
+        if "jewelry_type" not in df_m.columns:
+            df_m["jewelry_type"] = pd.NA
         jtype_agg = (
-            # (Guard) ensure column exists for groupby
-            if "jewelry_type" not in df_m.columns:
-                df_m["jewelry_type"] = pd.NA
             df_m.groupby("jewelry_type", dropna=False)
             .agg(revenue=("revenue", "sum"), orders=("orders", "sum"))
             .reset_index()
@@ -3422,12 +3422,12 @@ df_s_merch = sales_df[mask_merch_sales]
                                unmatched_df.to_csv(index=False).encode("utf-8"),
                                "unmatched_skus.csv", "text/csv", key="dl_unmatched")
 
-# ---------------- FOOTER ----------------
-st.markdown("---")
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.markdown(f"<div style='text-align: left; color: #6b7280; font-size: 12px;'>📅 Last Updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}</div>", unsafe_allow_html=True)
-with col2:
-    st.markdown(f"<div style='text-align: center; color: #6b7280; font-size: 12px;'>⚙️ Safe Margin: {SAFE_MARGIN*100:.0f}%</div>", unsafe_allow_html=True)
-with col3:
-    st.markdown(f"<div style='text-align: right; color: #6b7280; font-size: 12px;'>📊 Data Points: {len(df_s):,}</div>", unsafe_allow_html=True)
+    # ---------------- FOOTER ----------------
+    st.markdown("---")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f"<div style='text-align: left; color: #6b7280; font-size: 12px;'>📅 Last Updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}</div>", unsafe_allow_html=True)
+    with col2:
+        st.markdown(f"<div style='text-align: center; color: #6b7280; font-size: 12px;'>⚙️ Safe Margin: {SAFE_MARGIN*100:.0f}%</div>", unsafe_allow_html=True)
+    with col3:
+        st.markdown(f"<div style='text-align: right; color: #6b7280; font-size: 12px;'>📊 Data Points: {len(df_s):,}</div>", unsafe_allow_html=True)
