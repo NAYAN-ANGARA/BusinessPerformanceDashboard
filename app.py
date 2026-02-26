@@ -10,7 +10,7 @@ import hashlib
 
 # Configure Plotly
 import plotly.io as pio
-p
+pio.templates.default = "plotly_dark"
 
 # ---------------- SAFE HELPERS ----------------
 def _fillna_numeric_only(df: pd.DataFrame, value=0):
