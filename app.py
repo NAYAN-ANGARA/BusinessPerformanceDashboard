@@ -1,5 +1,14 @@
 import streamlit as st
 import pandas as pd
+
+# --- Safe fillna for mixed dtypes (prevents TypeError with Categorical columns) ---
+def _fillna_numeric(df: pd.DataFrame, value=0):
+    """Fill NaNs only in numeric columns, leaving categoricals/strings intact."""
+    num_cols = df.select_dtypes(include=["number"]).columns
+    if len(num_cols):
+        df[num_cols] = df[num_cols].fillna(value)
+    return df
+
 import plotly.express as px
 import plotly.graph_objects as go
 from gsheets import load_all_sheets
@@ -463,27 +472,54 @@ def calc_metrics(sales, spend):
 @st.cache_data(show_spinner=False, ttl=600)
 def compute_channel_matrix(_sales: pd.DataFrame, _spend: pd.DataFrame) -> pd.DataFrame:
     """Return a per-channel table with revenue/orders/spend/commission + ROAS/AOV/ACOS.
-    Cached to avoid recomputing across tabs and to prevent NameError when a tab is opened first.
+    Designed to be lightweight and safe with categorical/string columns (no global fillna(0)).
     """
     if _sales is None or _sales.empty:
-        return pd.DataFrame(columns=["channel","revenue","orders","spend","selling_commission","roas","aov","acos"])
+        return pd.DataFrame(columns=[
+            "channel","revenue","orders","spend","selling_commission","roas","aov","acos"
+        ])
 
-    ch_rev = _sales.groupby("channel").agg(revenue=("revenue","sum"), orders=("orders","sum")).reset_index()
+    # Revenue + Orders
+    ch_rev = (
+        _sales.groupby("channel", dropna=False)
+        .agg(revenue=("revenue","sum"), orders=("orders","sum"))
+        .reset_index()
+    )
 
+    # Commission (optional)
     if "selling_commission" in _sales.columns:
-        ch_comm = _sales.groupby("channel")["selling_commission"].sum().reset_index()
-        ch_rev = _fillna_numeric(pd.merge(ch_rev, ch_comm, on="channel", how="left"), 0)
+        ch_comm = (
+            _sales.groupby("channel", dropna=False)["selling_commission"]
+            .sum()
+            .reset_index()
+        )
+        ch_rev = pd.merge(ch_rev, ch_comm, on="channel", how="left")
     else:
-        ch_rev["selling_commission"] = 0
+        ch_rev["selling_commission"] = 0.0
 
+    # Spend (optional)
     if _spend is None or _spend.empty:
-        ch_sp = pd.DataFrame({"channel": ch_rev["channel"], "spend": 0})
+        ch_sp = pd.DataFrame({"channel": ch_rev["channel"], "spend": 0.0})
     else:
-        ch_sp = _spend.groupby("channel")["spend"].sum().reset_index()
+        ch_sp = (
+            _spend.groupby("channel", dropna=False)["spend"]
+            .sum()
+            .reset_index()
+        )
 
-    ch_matrix = _fillna_numeric(pd.merge(ch_rev, ch_sp, on="channel", how="outer"), 0)
+    ch_matrix = pd.merge(ch_rev, ch_sp, on="channel", how="outer")
 
-    # Vectorized metrics (faster than apply)
+    # Fill NaNs ONLY for numeric columns (prevents categorical fill errors)
+    num_cols = ch_matrix.select_dtypes(include=["number"]).columns
+    if len(num_cols):
+        ch_matrix[num_cols] = ch_matrix[num_cols].fillna(0)
+
+    # Ensure expected numeric dtypes exist
+    for c in ["revenue","orders","spend","selling_commission"]:
+        if c not in ch_matrix.columns:
+            ch_matrix[c] = 0.0
+
+    # Vectorized metrics
     rev = ch_matrix["revenue"].astype(float)
     sp  = ch_matrix["spend"].astype(float)
     ords= ch_matrix["orders"].astype(float)
