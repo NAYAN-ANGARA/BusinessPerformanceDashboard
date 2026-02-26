@@ -1,5 +1,17 @@
 import streamlit as st
 import pandas as pd
+
+
+# --- Safe fillna for mixed dtypes (prevents TypeError with Categorical columns) ---
+def _fillna_numeric(df: pd.DataFrame, value=0):
+    """Fill NaNs only in numeric columns to avoid pandas Categorical fillna TypeError."""
+    if df is None or df.empty:
+        return df
+    num_cols = df.select_dtypes(include=["number"]).columns
+    if len(num_cols):
+        df[num_cols] = df[num_cols].fillna(value)
+    return df
+
 import plotly.express as px
 import plotly.graph_objects as go
 from gsheets import load_all_sheets
@@ -608,7 +620,7 @@ with tabs[0]:
     # Generate insights based on the Channel Matrix
     ch_rev_rec = df_s.groupby("channel")["revenue"].sum().reset_index()
     ch_sp_rec = df_sp.groupby("channel")["spend"].sum().reset_index()
-    ch_matrix_rec = pd.merge(ch_rev_rec, ch_sp_rec, on="channel", how="outer").fillna(0)
+    ch_matrix_rec = _fillna_numeric(pd.merge(ch_rev_rec, ch_sp_rec, on="channel", how="outer"), 0)
     ch_matrix_rec["roas"] = ch_matrix_rec.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
     
     recommendations = generate_insights(ch_matrix_rec, curr)
@@ -667,7 +679,7 @@ with tabs[1]:
             "orders": "sum"
         }).reset_index()
         daily_spend = df_sp.groupby(pd.Grouper(key="date", freq="D"))["spend"].sum().reset_index()
-        daily_trend = pd.merge(daily_rev, daily_spend, on="date", how="outer").fillna(0)
+        daily_trend = _fillna_numeric(pd.merge(daily_rev, daily_spend, on="date", how="outer"), 0)
         daily_trend["roas"] = daily_trend.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
         
         fig_multi = go.Figure()
@@ -740,7 +752,7 @@ with tabs[1]:
         daily_comm = df_s.groupby(pd.Grouper(key="date", freq="D"))["selling_commission"].sum().reset_index()
         
         if not daily_comm.empty:
-            daily_costs = pd.merge(daily_spend, daily_comm, on="date", how="outer").fillna(0)
+            daily_costs = _fillna_numeric(pd.merge(daily_spend, daily_comm, on="date", how="outer"), 0)
             
             fig_costs = go.Figure()
             fig_costs.add_trace(go.Bar(
@@ -792,10 +804,10 @@ with tabs[2]:
         
         if "selling_commission" in df_s.columns:
             ch_comm = df_s.groupby("channel")["selling_commission"].sum().reset_index()
-            ch_rev = pd.merge(ch_rev, ch_comm, on="channel", how="left").fillna(0)
+            ch_rev = _fillna_numeric(pd.merge(ch_rev, ch_comm, on="channel", how="left"), 0)
         
         ch_sp = df_sp.groupby("channel")["spend"].sum().reset_index()
-        ch_matrix = pd.merge(ch_rev, ch_sp, on="channel", how="outer").fillna(0)
+        ch_matrix = _fillna_numeric(pd.merge(ch_rev, ch_sp, on="channel", how="outer"), 0)
         ch_matrix["roas"] = ch_matrix.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
         ch_matrix["aov"] = ch_matrix.apply(lambda x: x["revenue"]/x["orders"] if x["orders"]>0 else 0, axis=1)
         ch_matrix["acos"] = ch_matrix.apply(lambda x: (x["spend"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
@@ -2641,7 +2653,7 @@ with tabs[7]:
 
             ch_now = report['sales_data'].groupby("channel").agg({"revenue":"sum","orders":"sum"}).reset_index()
             ch_sp_now = report['spend_data'].groupby("channel")["spend"].sum().reset_index()
-            ch_report = pd.merge(ch_now, ch_sp_now, on="channel", how="outer").fillna(0)
+            ch_report = _fillna_numeric(pd.merge(ch_now, ch_sp_now, on="channel", how="outer"), 0)
             ch_report["roas"] = ch_report.apply(lambda r: r["revenue"]/r["spend"] if r["spend"]>0 else 0, axis=1)
             ch_report["acos"] = ch_report.apply(lambda r: r["spend"]/r["revenue"]*100 if r["revenue"]>0 else 0, axis=1)
             ch_report = ch_report.sort_values("revenue", ascending=False)
@@ -2649,7 +2661,7 @@ with tabs[7]:
             if has_yoy:
                 # Merge in YoY revenue per channel
                 ch_yoy = report['yoy_sales'].groupby("channel")["revenue"].sum().reset_index().rename(columns={"revenue":"yoy_revenue"})
-                ch_report = ch_report.merge(ch_yoy, on="channel", how="left").fillna(0)
+                ch_report = _fillna_numeric(ch_report.merge(ch_yoy, on="channel", how="left"), 0)
                 ch_report["yoy_growth"] = ch_report.apply(
                     lambda r: (r["revenue"]-r["yoy_revenue"])/r["yoy_revenue"]*100 if r["yoy_revenue"]>0 else float("nan"), axis=1
                 )
@@ -2693,7 +2705,7 @@ with tabs[7]:
 
             if has_yoy and "Parent" in report['yoy_sales'].columns:
                 sku_yoy = report['yoy_sales'].groupby("Parent")["revenue"].sum().reset_index().rename(columns={"revenue":"yoy_revenue"})
-                sku_now = sku_now.merge(sku_yoy, on="Parent", how="left").fillna(0)
+                sku_now = _fillna_numeric(sku_now.merge(sku_yoy, on="Parent", how="left"), 0)
                 sku_now["yoy_growth"] = sku_now.apply(
                     lambda r: (r["revenue"]-r["yoy_revenue"])/r["yoy_revenue"]*100 if r["yoy_revenue"]>0 else float("nan"), axis=1
                 )
