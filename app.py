@@ -53,8 +53,7 @@ st.markdown("""
         border-radius: 16px;
         padding: 24px;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        backdrop-filter: blur(15px);
-        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
         position: relative;
         overflow: hidden;
     }
@@ -72,9 +71,8 @@ st.markdown("""
     }
     
     .metric-card:hover {
-        transform: translateY(-6px);
-        border-color: rgba(255, 255, 255, 0.25);
-        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
     }
     
     .metric-card:hover::before {
@@ -128,12 +126,10 @@ st.markdown("""
     .delta-pos { 
         background: rgba(16, 185, 129, 0.25); 
         color: #34d399;
-        box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
     }
     .delta-neg { 
         background: rgba(239, 68, 68, 0.25); 
         color: #f87171;
-        box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
     }
     
     /* Section Headers with Icons */
@@ -227,6 +223,11 @@ st.markdown("""
     .rec-warn { border-left-color: #f59e0b; } /* Orange - Optimize */
     .rec-crit { border-left-color: #ef4444; } /* Red - Cut */
     .rec-info { border-left-color: #3b82f6; } /* Blue - Info */
+
+    /* Performance hints */
+    .metric-card { will-change: transform; }
+    .stPlotlyChart { contain: layout style; }
+    .stDataFrame  { contain: layout; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -260,7 +261,7 @@ def multiselect_with_all(label, options):
     return list(options) if ALL in selected or not selected else selected
 
 # ---------------- DATA LOADER ----------------
-@st.cache_data(show_spinner=True, ttl=600)
+@st.cache_data(show_spinner=True, ttl=3600)
 def load_and_process_data():
     import tempfile, json as _json, os as _os
     try:
@@ -388,14 +389,30 @@ def load_and_process_data():
     spend = pd.concat(spend_list, ignore_index=True) if spend_list else pd.DataFrame(columns=['date', 'channel', 'spend'])
 
     # --- MEMORY OPT for spend ---
-    if not spend.empty:
-        spend["spend"] = pd.to_numeric(spend["spend"], errors="coerce").fillna(0).astype("float32")
-        spend["channel"] = spend["channel"].astype("string").str.strip().astype("category")
+    spend["spend"]   = pd.to_numeric(spend["spend"], errors="coerce").fillna(0).astype("float32")
+    spend["channel"] = spend["channel"].astype("string").str.strip().astype("category")
 
-        # Free temporary structures
+    # Normalize dates (strip intra-day time so groupby("date") works cleanly)
+    sales["date"] = sales["date"].dt.normalize()
+    spend["date"] = spend["date"].dt.normalize()
+
+    # ── Integer date column for O(1) range comparisons (avoids .dt.date per row) ──
+    _ep = pd.Timestamp("1970-01-01")
+    sales["_d"] = (sales["date"] - _ep).dt.days.astype("int32")
+    spend["_d"] = (spend["date"] - _ep).dt.days.astype("int32")
+
+    # Keep only columns used downstream — drops raw source columns to save RAM
+    _keep_s = [c for c in ["date","_d","channel","type","Parent","SKU",
+                            "revenue","orders","selling_commission"] if c in sales.columns]
+    sales = sales[_keep_s]
+
+    # Free all raw structures (always, not gated on spend.empty)
+    try:
         del all_dfs, sales_list, spend_list
-        gc.collect()
-        return sales, spend, None
+    except Exception:
+        pass
+    gc.collect()
+    return sales, spend, None
 
 # ---------------- LOAD STATE ----------------
 with st.spinner("⚡ Loading business intelligence..."):
@@ -439,51 +456,91 @@ comparison_period = st.sidebar.selectbox(
     ["Year over Year", "Month over Month"]
 )
 
+# ── Fast integer-date filter helpers ─────────────────────────────────────────
+_EP = pd.Timestamp("1970-01-01")
+
+def _date_to_d(d):
+    """Python date → integer days since epoch (matches _d column)."""
+    return (pd.Timestamp(d) - _EP).days
+
+@st.cache_data(show_spinner=False, max_entries=64)
+def _slice_sales(_nrows, sd: int, ed: int, ch: tuple, ty: tuple):
+    m = (sales_df["_d"] >= sd) & (sales_df["_d"] <= ed) & sales_df["channel"].isin(ch)
+    if ty:
+        m &= sales_df["type"].isin(ty)
+    return sales_df.loc[m]
+
+@st.cache_data(show_spinner=False, max_entries=64)
+def _slice_spend(_nrows, sd: int, ed: int, ch: tuple):
+    m = (spend_df["_d"] >= sd) & (spend_df["_d"] <= ed) & spend_df["channel"].isin(ch)
+    return spend_df.loc[m]
+
+@st.cache_data(show_spinner=False, max_entries=32)
+def _channel_matrix_cached(_nrows, sd: int, ed: int, ch: tuple, ty: tuple):
+    """Shared channel-level aggregation — built once, reused by Tab 1 + Tab 3."""
+    _s  = _slice_sales(_nrows, sd, ed, ch, ty)
+    _sp = _slice_spend(_nrows, sd, ed, ch)
+    cr  = _s.groupby("channel", observed=True).agg(
+              revenue=("revenue","sum"), orders=("orders","sum")).reset_index()
+    if "selling_commission" in _s.columns:
+        cc = _s.groupby("channel", observed=True)["selling_commission"].sum().reset_index()
+        cr = _fillna_numeric(cr.merge(cc, on="channel", how="left"), 0)
+    cs  = _sp.groupby("channel", observed=True)["spend"].sum().reset_index()
+    cm  = _fillna_numeric(cr.merge(cs, on="channel", how="outer"), 0)
+    cm["roas"] = np.where(cm["spend"]   > 0, cm["revenue"] / cm["spend"],    0)
+    cm["aov"]  = np.where(cm["orders"]  > 0, cm["revenue"] / cm["orders"],   0)
+    cm["acos"] = np.where(cm["revenue"] > 0, cm["spend"]   / cm["revenue"] * 100, 0)
+    return cm
+
+@st.cache_data(show_spinner=False, max_entries=32)
+def _daily_agg_cached(_nrows, sd: int, ed: int, ch: tuple, ty: tuple):
+    """Pre-built daily revenue+orders+spend — reused by Tab 2 + Forecasting."""
+    _s  = _slice_sales(_nrows, sd, ed, ch, ty)
+    _sp = _slice_spend(_nrows, sd, ed, ch)
+    dr  = _s.groupby("date", observed=True).agg(
+              revenue=("revenue","sum"), orders=("orders","sum")).reset_index()
+    ds  = _sp.groupby("date", observed=True)["spend"].sum().reset_index()
+    dt  = _fillna_numeric(dr.merge(ds, on="date", how="outer"), 0).sort_values("date")
+    dt["roas"] = np.where(dt["spend"] > 0, dt["revenue"] / dt["spend"], 0)
+    return dt
+
+# Stable row-count keys (avoids re-hashing full DataFrames on every rerun)
+_S_NROWS = len(sales_df)
+_P_NROWS = len(spend_df)
+
 # ---------------- APPLY FILTERS ----------------
-mask_sales = (
-    (sales_df["date"].dt.date >= start_date) & 
-    (sales_df["date"].dt.date <= end_date) &
-    (sales_df["channel"].isin(selected_channels)) &
-    (sales_df["type"].isin(selected_types) if "type" in sales_df.columns and selected_types else True)
-)
-df_s = sales_df[mask_sales]
-
-mask_spend = (
-    (spend_df["date"].dt.date >= start_date) & 
-    (spend_df["date"].dt.date <= end_date) &
-    (spend_df["channel"].isin(selected_channels))
-)
-df_sp = spend_df[mask_spend]
-
-# Previous Period Calculation
 days_diff = (end_date - start_date).days + 1
+_sd = _date_to_d(start_date)
+_ed = _date_to_d(end_date)
+_ch = tuple(sorted(str(c) for c in selected_channels))
+_ty = tuple(sorted(str(t) for t in selected_types)) if selected_types else ()
 
+df_s  = _slice_sales(_S_NROWS,  _sd, _ed, _ch, _ty)
+df_sp = _slice_spend(_P_NROWS, _sd, _ed, _ch)
+
+# Previous Period
 if comparison_period == "Year over Year":
     start_ly = start_date - pd.DateOffset(years=1)
-    end_ly = end_date - pd.DateOffset(years=1)
+    end_ly   = end_date   - pd.DateOffset(years=1)
 elif comparison_period == "Month over Month":
     start_ly = start_date - pd.DateOffset(months=1)
-    end_ly = end_date - pd.DateOffset(months=1)
+    end_ly   = end_date   - pd.DateOffset(months=1)
 elif comparison_period == "Week over Week":
     start_ly = start_date - timedelta(days=7)
-    end_ly = end_date - timedelta(days=7)
-else:  # Previous Period
+    end_ly   = end_date   - timedelta(days=7)
+else:
     start_ly = start_date - timedelta(days=days_diff)
-    end_ly = start_date - timedelta(days=1)
+    end_ly   = start_date - timedelta(days=1)
 
-mask_sales_ly = (
-    (sales_df["date"].dt.date >= start_ly.date()) & 
-    (sales_df["date"].dt.date <= end_ly.date()) &
-    (sales_df["channel"].isin(selected_channels))
-)
-df_s_ly = sales_df[mask_sales_ly]
+_sd_ly = _date_to_d(start_ly.date() if hasattr(start_ly, "date") else start_ly)
+_ed_ly = _date_to_d(end_ly.date()   if hasattr(end_ly,   "date") else end_ly)
 
-mask_spend_ly = (
-    (spend_df["date"].dt.date >= start_ly.date()) & 
-    (spend_df["date"].dt.date <= end_ly.date()) &
-    (spend_df["channel"].isin(selected_channels))
-)
-df_sp_ly = spend_df[mask_spend_ly]
+df_s_ly  = _slice_sales(_S_NROWS,  _sd_ly, _ed_ly, _ch, ())
+df_sp_ly = _slice_spend(_P_NROWS, _sd_ly, _ed_ly, _ch)
+
+# Pre-build shared aggregates (zero cost on repeat calls — cache_data hits)
+ch_matrix  = _channel_matrix_cached(_S_NROWS, _sd, _ed, _ch, _ty)
+daily_data = _daily_agg_cached(_S_NROWS, _sd, _ed, _ch, _ty)
 
 # ---------------- METRIC CALCULATIONS ----------------
 def calc_metrics(sales, spend):
@@ -505,26 +562,24 @@ def calc_metrics(sales, spend):
 def generate_insights(df_channel, current_metrics):
     insights = []
     
-    # 1. CHANNEL SCALING OPPORTUNITIES (High ROAS)
+    # 1. CHANNEL SCALING OPPORTUNITIES (High ROAS) — vectorized
     if 'roas' in df_channel.columns:
-        scale_ops = df_channel[df_channel['roas'] >= 3.0]
-        for _, row in scale_ops.iterrows():
+        for row in df_channel[df_channel['roas'] >= 3.0].itertuples(index=False):
             insights.append({
                 "type": "scale",
-                "title": f"🚀 Scale Up: {row['channel']}",
-                "msg": f"ROAS is strong at {row['roas']:.2f}x. Consider increasing daily budget by 15-20% to maximize volume while maintaining profitability.",
-                "metric": f"{row['roas']:.2f}x ROAS"
+                "title": f"🚀 Scale Up: {row.channel}",
+                "msg": f"ROAS is {row.roas:.2f}x. Increase daily budget by 15-20% to capture more volume while staying profitable.",
+                "metric": f"{row.roas:.2f}x ROAS"
             })
 
     # 2. BLEEDING CAMPAIGNS (Low ROAS / High Spend)
     if 'roas' in df_channel.columns and 'spend' in df_channel.columns:
-        bleeding = df_channel[(df_channel['roas'] < 1.5) & (df_channel['spend'] > 500)]
-        for _, row in bleeding.iterrows():
+        for row in df_channel[(df_channel['roas'] < 1.5) & (df_channel['spend'] > 500)].itertuples(index=False):
             insights.append({
                 "type": "crit",
-                "title": f"🛑 High Spend / Low Return: {row['channel']}",
-                "msg": f"This channel has spent ${row['spend']:,.0f} with only {row['roas']:.2f}x ROAS. Review search terms, pause bleeding keywords, or lower bids immediately.",
-                "metric": f"${row['spend']:,.0f} Spend"
+                "title": f"🛑 High Spend / Low Return: {row.channel}",
+                "msg": f"${row.spend:,.0f} spent with only {row.roas:.2f}x ROAS. Pause bleeding keywords or lower bids immediately.",
+                "metric": f"${row.spend:,.0f} Spend"
             })
 
     # 3. PROFITABILITY WARNING
@@ -624,13 +679,8 @@ except Exception:
 if active_tab == tab_names[0]:
     st.markdown('<div class="section-header">🧠 AI Strategic Insights</div>', unsafe_allow_html=True)
     
-    # Generate insights based on the Channel Matrix
-    ch_rev_rec = df_s.groupby("channel")["revenue"].sum().reset_index()
-    ch_sp_rec = df_sp.groupby("channel")["spend"].sum().reset_index()
-    ch_matrix_rec = _fillna_numeric(pd.merge(ch_rev_rec, ch_sp_rec, on="channel", how="outer"), 0)
-    ch_matrix_rec["roas"] = ch_matrix_rec.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
-    
-    recommendations = generate_insights(ch_matrix_rec, curr)
+    # Reuse pre-built shared channel matrix (no re-groupby)
+    recommendations = generate_insights(ch_matrix, curr)
     
     col1, col2 = st.columns([2, 1])
     
@@ -660,8 +710,8 @@ if active_tab == tab_names[0]:
         st.caption("If you optimize based on these insights:")
         
         # Simple projection logic
-        potential_savings = ch_matrix_rec[ch_matrix_rec['roas'] < 1.5]['spend'].sum() * 0.5 # Assume we cut 50% of bad spend
-        potential_gain = ch_matrix_rec[ch_matrix_rec['roas'] >= 3.0]['revenue'].sum() * 0.2 # Assume 20% growth on good channels
+        potential_savings = ch_matrix[ch_matrix['roas'] < 1.5]['spend'].sum() * 0.5
+        potential_gain    = ch_matrix[ch_matrix['roas'] >= 3.0]['revenue'].sum() * 0.2
         
         new_net = curr['Net'] + potential_savings + (potential_gain * 0.2) # Assuming 20% margin on new rev
         
@@ -680,14 +730,8 @@ if active_tab == tab_names[1]:
     with col1:
         st.markdown("**Revenue, Orders & Efficiency Timeline**")
         
-        # Daily aggregation
-        daily_rev = df_s.groupby(pd.Grouper(key="date", freq="D")).agg({
-            "revenue": "sum",
-            "orders": "sum"
-        }).reset_index()
-        daily_spend = df_sp.groupby(pd.Grouper(key="date", freq="D"))["spend"].sum().reset_index()
-        daily_trend = _fillna_numeric(pd.merge(daily_rev, daily_spend, on="date", how="outer"), 0)
-        daily_trend["roas"] = daily_trend.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
+        # Reuse pre-built daily aggregate
+        daily_trend = daily_data.copy()
         
         fig_multi = go.Figure()
         
@@ -726,12 +770,11 @@ if active_tab == tab_names[1]:
     with col2:
         st.markdown("**AOV Trend Analysis**")
         
-        # Weekly AOV
-        weekly_aov = df_s.groupby(pd.Grouper(key="date", freq="W")).agg({
-            "revenue": "sum",
-            "orders": "sum"
-        }).reset_index()
-        weekly_aov["aov"] = weekly_aov.apply(lambda x: x["revenue"]/x["orders"] if x["orders"]>0 else 0, axis=1)
+        # Weekly AOV — group pre-built daily into weekly buckets
+        weekly_aov = daily_data.resample("W", on="date").agg(
+            revenue=("revenue","sum"), orders=("orders","sum")).reset_index()
+        weekly_aov["aov"] = np.where(weekly_aov["orders"] > 0,
+                                      weekly_aov["revenue"] / weekly_aov["orders"], 0)
         
         fig_aov = go.Figure()
         fig_aov.add_trace(go.Scatter(
@@ -756,10 +799,10 @@ if active_tab == tab_names[1]:
     # Commission Over Time
     st.markdown("**Commission & Spend Comparison**")
     if "selling_commission" in df_s.columns:
-        daily_comm = df_s.groupby(pd.Grouper(key="date", freq="D"))["selling_commission"].sum().reset_index()
-        
+        daily_comm = df_s.groupby("date", observed=True)["selling_commission"].sum().reset_index()
+        _daily_spend_ref = daily_data[["date","spend"]]
         if not daily_comm.empty:
-            daily_costs = _fillna_numeric(pd.merge(daily_spend, daily_comm, on="date", how="outer"), 0)
+            daily_costs = _fillna_numeric(_daily_spend_ref.merge(daily_comm, on="date", how="outer"), 0)
             
             fig_costs = go.Figure()
             fig_costs.add_trace(go.Bar(
@@ -804,21 +847,8 @@ if active_tab == tab_names[2]:
     with col1:
         st.markdown("**Marketplace Performance Matrix**")
         
-        ch_rev = df_s.groupby("channel").agg({
-            "revenue": "sum",
-            "orders": "sum"
-        }).reset_index()
-        
-        if "selling_commission" in df_s.columns:
-            ch_comm = df_s.groupby("channel")["selling_commission"].sum().reset_index()
-            ch_rev = _fillna_numeric(pd.merge(ch_rev, ch_comm, on="channel", how="left"), 0)
-        
-        ch_sp = df_sp.groupby("channel")["spend"].sum().reset_index()
-        ch_matrix = _fillna_numeric(pd.merge(ch_rev, ch_sp, on="channel", how="outer"), 0)
-        ch_matrix["roas"] = ch_matrix.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
-        ch_matrix["aov"] = ch_matrix.apply(lambda x: x["revenue"]/x["orders"] if x["orders"]>0 else 0, axis=1)
-        ch_matrix["acos"] = ch_matrix.apply(lambda x: (x["spend"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
-        ch_matrix = ch_matrix[ch_matrix["revenue"] > 0]
+        # Reuse shared pre-built channel matrix
+        ch_matrix = ch_matrix[ch_matrix["revenue"] > 0].copy()
         
         fig_bubble = px.scatter(
             ch_matrix, x="spend", y="revenue", 
@@ -864,7 +894,7 @@ if active_tab == tab_names[2]:
         st.caption("Ranked by ROAS (Return on Ad Spend)")
         
         ch_rank = ch_matrix.sort_values("roas", ascending=False)[["channel", "roas", "revenue", "spend"]].head(10).copy()
-        ch_rank["acos"] = ch_rank.apply(lambda x: (x["spend"] / x["revenue"] * 100) if x["revenue"] > 0 else 0, axis=1)
+        ch_rank["acos"] = np.where(ch_rank["revenue"] > 0, ch_rank["spend"] / ch_rank["revenue"] * 100, 0)
         
         fig_rank = go.Figure()
         fig_rank.add_trace(go.Bar(
@@ -893,13 +923,13 @@ if active_tab == tab_names[2]:
         # Quick Actions
         st.markdown("**⚡ Quick Actions**")
         st.caption("Recommended actions based on ROAS performance")
-        for _, row in ch_matrix.sort_values('roas', ascending=False).head(3).iterrows():
-            if row['roas'] >= 3.0:
-                st.success(f"**{row['channel']}**: Scale budget +20%")
-            elif row['roas'] < 1.5:
-                st.error(f"**{row['channel']}**: Reduce spend -30%")
+        for row in ch_matrix.sort_values('roas', ascending=False).head(3).itertuples(index=False):
+            if row.roas >= 3.0:
+                st.success(f"**{row.channel}**: Scale budget +20%")
+            elif row.roas < 1.5:
+                st.error(f"**{row.channel}**: Reduce spend -30%")
             else:
-                st.info(f"**{row['channel']}**: Optimize campaigns")
+                st.info(f"**{row.channel}**: Optimize campaigns")
     
     # Detailed Marketplace Breakdown Table (full width below charts)
     st.markdown("---")
@@ -908,9 +938,11 @@ if active_tab == tab_names[2]:
     
     display_ch = ch_matrix.copy()
     display_ch = display_ch.sort_values('revenue', ascending=False)
-    display_ch['profit_margin'] = display_ch.apply(
-        lambda x: ((x['revenue'] * SAFE_MARGIN - x['spend'] - x.get('selling_commission', 0)) / x['revenue'] * 100) if x['revenue'] > 0 else 0, 
-        axis=1
+    _sc3 = display_ch["selling_commission"] if "selling_commission" in display_ch.columns else 0
+    display_ch["profit_margin"] = np.where(
+        display_ch["revenue"] > 0,
+        (display_ch["revenue"] * SAFE_MARGIN - display_ch["spend"] - _sc3) / display_ch["revenue"] * 100,
+        0
     )
     
     st.dataframe(
@@ -1077,7 +1109,7 @@ if active_tab == tab_names[3]:
             with chart_col:
                 st.markdown("**📅 Daily Revenue Trend**")
                 daily_sku = (
-                    sku_df.groupby(pd.Grouper(key="date", freq="D"))["revenue"]
+                    sku_df.groupby("date", observed=True)["revenue"]
                     .sum().reset_index().sort_values("date")
                 )
                 # 7-day rolling average
@@ -1186,33 +1218,43 @@ if active_tab == tab_names[3]:
         st.markdown("---")
         st.markdown("**📦 Top 10 SKU Breakdown (Click to expand for Child SKUs)**")
         
-        for idx, parent_row in Parent_perf.iterrows():
-            parent = parent_row['Parent']
-            
-            # Get child SKUs for this parent
+        # Pre-group all child SKUs in ONE pass (avoids 10× full df_s scans)
+        if "SKU" in df_s.columns:
+            _top_parents_list = Parent_perf["Parent"].tolist()
+            _child_all = (
+                df_s[df_s["Parent"].isin(_top_parents_list)]
+                .groupby(["Parent","SKU"], observed=True)
+                .agg(revenue=("revenue","sum"), orders=("orders","sum"))
+                .reset_index()
+            )
+            _child_all["aov"] = np.where(
+                _child_all["orders"] > 0, _child_all["revenue"] / _child_all["orders"], 0)
+            _child_map = {p: g.sort_values("revenue", ascending=False)
+                          for p, g in _child_all.groupby("Parent", observed=True)}
+        else:
+            _child_map = {}
+
+        for parent_row in Parent_perf.itertuples(index=False):
+            parent = parent_row.Parent
+
             if "SKU" in df_s.columns:
-                child_data = df_s[df_s["Parent"] == parent].groupby("SKU").agg({
-                    "revenue": "sum",
-                    "orders": "sum"
-                }).reset_index()
-                child_data["aov"] = child_data["revenue"] / child_data["orders"]
-                child_data = child_data.sort_values("revenue", ascending=False)
-                
-                has_children = len(child_data) > 0 and child_data["SKU"].iloc[0] != "Unknown"
+                child_data = _child_map.get(parent, pd.DataFrame())
+                has_children = (len(child_data) > 0 and
+                                (child_data["SKU"].iloc[0] != "Unknown" if len(child_data) else False))
             else:
                 has_children = False
                 child_data = pd.DataFrame()
             
             # Create expander for each parent SKU
-            with st.expander(f"🏷️ {parent} - ${parent_row['revenue']:,.0f} Revenue", expanded=False):
+            with st.expander(f"🏷️ {parent} - ${parent_row.revenue:,.0f} Revenue", expanded=False):
                 # Parent SKU metrics
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
-                    st.metric("Revenue", f"${parent_row['revenue']:,.0f}")
+                    st.metric("Revenue", f"${parent_row.revenue:,.0f}")
                 with col2:
-                    st.metric("Orders", f"{parent_row['orders']:,.0f}")
+                    st.metric("Orders", f"{parent_row.orders:,.0f}")
                 with col3:
-                    st.metric("AOV", f"${parent_row['aov']:,.2f}")
+                    st.metric("AOV", f"${parent_row.aov:,.2f}")
                 with col4:
                     if has_children:
                         st.metric("Child SKUs", f"{len(child_data)}")
@@ -1225,18 +1267,13 @@ if active_tab == tab_names[3]:
                     st.markdown("**Child SKUs Performance:**")
                     
                     # Create a nice table for child SKUs
-                    child_display = child_data.copy()
-                    child_display["revenue"] = child_display["revenue"].apply(lambda x: f"${x:,.0f}")
-                    child_display["orders"] = child_display["orders"].apply(lambda x: f"{x:,.0f}")
-                    child_display["aov"] = child_display["aov"].apply(lambda x: f"${x:,.2f}")
-                    
                     st.dataframe(
-                        child_display,
+                        child_data,
                         column_config={
-                            "SKU": st.column_config.TextColumn("SKU", width="medium"),
-                            "revenue": st.column_config.TextColumn("Revenue", width="small"),
-                            "orders": st.column_config.TextColumn("Orders", width="small"),
-                            "aov": st.column_config.TextColumn("AOV", width="small"),
+                            "SKU":     st.column_config.TextColumn("SKU",      width="medium"),
+                            "revenue": st.column_config.NumberColumn("Revenue", format="$%d"),
+                            "orders":  st.column_config.NumberColumn("Orders",  format="%d"),
+                            "aov":     st.column_config.NumberColumn("AOV",     format="$%.2f"),
                         },
                         hide_index=True,
                         height=min(300, 50 + len(child_display) * 35)
@@ -1397,9 +1434,8 @@ if active_tab == tab_names[5]:
         with col1:
             st.markdown(f"**📈 Ensemble Revenue Forecast — {forecast_period}**")
 
-            daily_revenue = df_s.groupby(pd.Grouper(key="date", freq="D")).agg(
-                {"revenue": "sum", "orders": "sum"}
-            ).reset_index().sort_values("date")
+            # Reuse pre-built daily aggregate
+            daily_revenue = daily_data[["date","revenue","orders"]].sort_values("date").copy()
 
             if len(daily_revenue) >= 14:
                 future_dates = pd.date_range(
@@ -1416,7 +1452,7 @@ if active_tab == tab_names[5]:
                     )
                     yoy_raw = sales_df[yoy_mask]
                     if len(yoy_raw) > 0:
-                        yoy_revenue = yoy_raw.groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().values
+                        yoy_revenue = yoy_raw.groupby("date", observed=True)["revenue"].sum().values
 
                 with st.spinner("🤖 Training ensemble (5 models)…"):
                     rev_pred, rev_std, confidence, weighted_r2, model_info = ensemble_forecast(
@@ -1621,7 +1657,7 @@ if active_tab == tab_names[5]:
                 top5 = df_sku_rank.head(5)
                 chart_cols = st.columns(min(len(top5), 5))
 
-                for i, (_, row) in enumerate(top5.iterrows()):
+                for i, row in enumerate(top5.itertuples(index=False)):
                     with chart_cols[i]:
                         fig_mini = go.Figure()
                         hist = row["_hist"]
@@ -1699,7 +1735,7 @@ if active_tab == tab_names[5]:
             for marketplace in marketplaces:
                 mp_data = (
                     df_s[df_s["channel"] == marketplace]
-                    .groupby(pd.Grouper(key="date", freq="D"))["revenue"]
+                    .groupby("date", observed=True)["revenue"]
                     .sum().reset_index().sort_values("date")
                 )
                 if len(mp_data) < 7:
@@ -1882,32 +1918,12 @@ if active_tab == tab_names[6]:
                 if submitted and test_name:
                     # Calculate metrics for both variants
                     # Variant A
-                    mask_a = (
-                        (sales_df["date"].dt.date >= var_a_date_start) & 
-                        (sales_df["date"].dt.date <= var_a_date_end) &
-                        (sales_df["channel"] == variant_a_channel)
-                    )
-                    df_a = sales_df[mask_a]
-                    mask_spend_a = (
-                        (spend_df["date"].dt.date >= var_a_date_start) & 
-                        (spend_df["date"].dt.date <= var_a_date_end) &
-                        (spend_df["channel"] == variant_a_channel)
-                    )
-                    spend_a = spend_df[mask_spend_a]["spend"].sum()
+                    df_a    = _slice_sales(_S_NROWS, _date_to_d(var_a_date_start), _date_to_d(var_a_date_end), (str(variant_a_channel),), ())
+                    spend_a = _slice_spend(_P_NROWS, _date_to_d(var_a_date_start), _date_to_d(var_a_date_end), (str(variant_a_channel),))["spend"].sum()
                     
                     # Variant B
-                    mask_b = (
-                        (sales_df["date"].dt.date >= var_b_date_start) & 
-                        (sales_df["date"].dt.date <= var_b_date_end) &
-                        (sales_df["channel"] == variant_b_channel)
-                    )
-                    df_b = sales_df[mask_b]
-                    mask_spend_b = (
-                        (spend_df["date"].dt.date >= var_b_date_start) & 
-                        (spend_df["date"].dt.date <= var_b_date_end) &
-                        (spend_df["channel"] == variant_b_channel)
-                    )
-                    spend_b = spend_df[mask_spend_b]["spend"].sum()
+                    df_b    = _slice_sales(_S_NROWS, _date_to_d(var_b_date_start), _date_to_d(var_b_date_end), (str(variant_b_channel),), ())
+                    spend_b = _slice_spend(_P_NROWS, _date_to_d(var_b_date_start), _date_to_d(var_b_date_end), (str(variant_b_channel),))["spend"].sum()
                     
                     test_data = {
                         'test_name': test_name,
@@ -1962,20 +1978,10 @@ if active_tab == tab_names[6]:
                     # Calculate metrics for each marketplace
                     marketplace_results = []
                     
+                    _msd = _date_to_d(multi_date_start); _med = _date_to_d(multi_date_end)
                     for mp in marketplaces_to_compare:
-                        mask_mp = (
-                            (sales_df["date"].dt.date >= multi_date_start) & 
-                            (sales_df["date"].dt.date <= multi_date_end) &
-                            (sales_df["channel"] == mp)
-                        )
-                        df_mp = sales_df[mask_mp]
-                        
-                        mask_spend_mp = (
-                            (spend_df["date"].dt.date >= multi_date_start) & 
-                            (spend_df["date"].dt.date <= multi_date_end) &
-                            (spend_df["channel"] == mp)
-                        )
-                        spend_mp = spend_df[mask_spend_mp]["spend"].sum()
+                        df_mp    = _slice_sales(_S_NROWS, _msd, _med, (str(mp),), ())
+                        spend_mp = _slice_spend(_P_NROWS, _msd, _med, (str(mp),))["spend"].sum()
                         
                         marketplace_results.append({
                             'marketplace': mp,
@@ -2403,7 +2409,8 @@ if active_tab == tab_names[7]:
                 (spend_df["channel"].isin(report_channels))
             )
             report_df_s  = sales_df[mask_s]
-            report_df_sp = spend_df[mask_sp]
+            report_df_sp = _slice_spend(_P_NROWS, _date_to_d(report_start),
+                                         _date_to_d(report_end), _ch)
             report_metrics = calc_metrics(report_df_s, report_df_sp)
 
             # ── Same period LAST YEAR ───────────────────────────────────────
@@ -2420,7 +2427,8 @@ if active_tab == tab_names[7]:
                 (spend_df["channel"].isin(report_channels))
             )
             yoy_df_s  = sales_df[mask_yoy_s]
-            yoy_df_sp = spend_df[mask_yoy_sp]
+            yoy_df_sp = _slice_spend(_P_NROWS, _date_to_d(yoy_start),
+                                        _date_to_d(yoy_end), _ch)
             yoy_metrics = calc_metrics(yoy_df_s, yoy_df_sp) if len(yoy_df_s) > 0 else None
 
             mp_label = ", ".join(report_channels) if report_channels != all_marketplaces else "All Marketplaces"
@@ -2592,8 +2600,8 @@ if active_tab == tab_names[7]:
             )
 
             # YoY revenue trend chart side-by-side
-            daily_curr = report['sales_data'].groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
-            daily_yoy  = report['yoy_sales'].groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
+            daily_curr = report['sales_data'].groupby("date", observed=True)["revenue"].sum().reset_index()
+            daily_yoy  = report['yoy_sales'].groupby("date", observed=True)["revenue"].sum().reset_index()
 
             # Align on day-offset so both plot on the same x-axis
             daily_curr["day"] = range(len(daily_curr))
@@ -2638,7 +2646,7 @@ if active_tab == tab_names[7]:
         # ── TREND CHART ───────────────────────────────────────────────────────
         if report['sections']['trends']:
             st.markdown("### 📈 Revenue Trend — This Period")
-            daily_r = report['sales_data'].groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
+            daily_r = report['sales_data'].groupby("date", observed=True)["revenue"].sum().reset_index()
             fig_trend = go.Figure()
             fig_trend.add_trace(go.Scatter(
                 x=daily_r["date"], y=daily_r["revenue"],
@@ -2661,8 +2669,8 @@ if active_tab == tab_names[7]:
             ch_now = report['sales_data'].groupby("channel").agg({"revenue":"sum","orders":"sum"}).reset_index()
             ch_sp_now = report['spend_data'].groupby("channel")["spend"].sum().reset_index()
             ch_report = _fillna_numeric(pd.merge(ch_now, ch_sp_now, on="channel", how="outer"), 0)
-            ch_report["roas"] = ch_report.apply(lambda r: r["revenue"]/r["spend"] if r["spend"]>0 else 0, axis=1)
-            ch_report["acos"] = ch_report.apply(lambda r: r["spend"]/r["revenue"]*100 if r["revenue"]>0 else 0, axis=1)
+            ch_report["roas"] = np.where(ch_report["spend"] > 0, ch_report["revenue"] / ch_report["spend"], 0)
+            ch_report["acos"] = np.where(ch_report["revenue"] > 0, ch_report["spend"] / ch_report["revenue"] * 100, 0)
             ch_report = ch_report.sort_values("revenue", ascending=False)
 
             if has_yoy:
@@ -2775,7 +2783,7 @@ Same period last year: **{report['yoy_period']}**
         mp_md = ""
         if report['sections']['marketplaces'] and len(ch_report) > 0:
             mp_md = "\n## 🛒 Marketplace Breakdown\n"
-            for _, row in ch_report.head(5).iterrows():
+            for row in ch_report.head(5).itertuples(index=False):
                 yoy_str = f" | Last Year: ${row.get('yoy_revenue', 0):,.0f} ({row.get('yoy_growth', float('nan')):+.1f}%)" \
                           if 'yoy_revenue' in ch_report.columns else ""
                 mp_md += f"- **{row['channel']}**: ${row['revenue']:,.0f} rev | {row['roas']:.2f}x ROAS{yoy_str}\n"
@@ -2828,9 +2836,9 @@ if active_tab == tab_names[8]:
     else:
         tbl["commission"] = 0
     
-    tbl["acos"] = tbl.apply(lambda x: (x["spend"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
+    tbl["acos"] = np.where(tbl["revenue"] > 0, tbl["spend"] / tbl["revenue"] * 100, 0)
     tbl["net"] = (tbl["revenue"] * SAFE_MARGIN) - tbl["spend"] - tbl.get("commission", 0)
-    tbl["profit_margin"] = tbl.apply(lambda x: (x["net"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
+    tbl["profit_margin"] = np.where(tbl["revenue"] > 0, tbl["net"] / tbl["revenue"] * 100, 0)
     
     # Select columns to display
     display_cols = ["channel", "revenue", "orders", "aov", "spend", "commission", "roas", "acos", "net", "profit_margin"]
@@ -2926,15 +2934,8 @@ if active_tab == tab_names[9]:
         st.error(f"⚠️ Failed to load merchandising data: {merch_status}")
         st.stop()
 
-    # ── Sales within global date + channel filters ───────────────────────────
-    # This tab has its own Jewelry Type / Stone filters, so we ignore the
-    # sidebar Product Type filter but still respect Date Range + Marketplaces.
-    mask_merch = (
-        (sales_df["date"].dt.date >= start_date) &
-        (sales_df["date"].dt.date <= end_date) &
-        (sales_df["channel"].isin(selected_channels))
-    )
-    df_s_merch = sales_df[mask_merch]
+    # Reuse fast integer filter for merch tab
+    df_s_merch = _slice_sales(_S_NROWS, _sd, _ed, _ch, ())
 
     # Aggregate sales to one row per Parent SKU for this period
     sales_by_parent = (
