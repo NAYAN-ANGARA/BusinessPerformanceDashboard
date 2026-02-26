@@ -1,17 +1,5 @@
 import streamlit as st
 import pandas as pd
-
-
-# --- Safe fillna for mixed dtypes (prevents TypeError with Categorical columns) ---
-def _fillna_numeric(df: pd.DataFrame, value=0):
-    """Fill NaNs only in numeric columns to avoid pandas Categorical fillna TypeError."""
-    if df is None or df.empty:
-        return df
-    num_cols = df.select_dtypes(include=["number"]).columns
-    if len(num_cols):
-        df[num_cols] = df[num_cols].fillna(value)
-    return df
-
 import plotly.express as px
 import plotly.graph_objects as go
 from gsheets import load_all_sheets
@@ -19,9 +7,6 @@ from datetime import date, timedelta, datetime
 import numpy as np
 import json
 import hashlib
-import re
-from concurrent.futures import ThreadPoolExecutor
-import gc
 
 # Configure Plotly
 import plotly.io as pio
@@ -41,230 +26,192 @@ SAFE_MARGIN = 0.62  # Profit margin after COGS but before Ads/Commission
 # ---------------- ENHANCED CSS ----------------
 st.markdown("""
 <style>
-    /* ── Base ── */
-    .stApp { background: #0b0d1a; }
-
-    /* Subtle ambient glows */
-    .stApp::before {
-        content:""; position:fixed; top:-25%; left:-15%;
-        width:55vw; height:55vw;
-        background:radial-gradient(circle,rgba(59,130,246,.06) 0%,transparent 65%);
-        pointer-events:none; z-index:0;
+    /* Main Background with Gradient */
+    .stApp {
+        background: linear-gradient(135deg, #0f1116 0%, #1a1d29 100%);
     }
-    .stApp::after {
-        content:""; position:fixed; bottom:-15%; right:-10%;
-        width:45vw; height:45vw;
-        background:radial-gradient(circle,rgba(139,92,246,.05) 0%,transparent 65%);
-        pointer-events:none; z-index:0;
-    }
-
-    /* ── KPI Cards ── */
+    
+    /* KPI Cards with Enhanced Glassmorphism */
     .metric-card {
-        background: linear-gradient(145deg,rgba(16,19,36,.97) 0%,rgba(24,28,50,.95) 100%);
-        border: 1px solid rgba(255,255,255,.07);
+        background: linear-gradient(135deg, rgba(30, 32, 40, 0.8) 0%, rgba(42, 45, 58, 0.6) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 16px;
-        padding: 22px 20px;
-        box-shadow: 0 4px 20px rgba(0,0,0,.45),
-                    inset 0 1px 0 rgba(255,255,255,.04);
-        transition: transform .15s ease, box-shadow .15s ease;
-        position: relative; overflow: hidden; will-change: transform;
+        padding: 24px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(15px);
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
     }
-    .metric-card::after {
-        content:""; position:absolute; inset:0;
-        background:linear-gradient(135deg,rgba(255,255,255,.025) 0%,transparent 55%);
-        pointer-events:none;
+    
+    .metric-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--accent-color), transparent);
+        opacity: 0;
+        transition: opacity 0.3s ease;
     }
+    
     .metric-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 28px rgba(0,0,0,.55),
-                    inset 0 1px 0 rgba(255,255,255,.07);
-        border-color: rgba(255,255,255,.11);
+        transform: translateY(-6px);
+        border-color: rgba(255, 255, 255, 0.25);
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
     }
-
-    /* Coloured top accent */
-    .accent-blue   { border-top: 2px solid #3b82f6; }
-    .accent-green  { border-top: 2px solid #10b981; }
-    .accent-orange { border-top: 2px solid #f97316; }
-    .accent-purple { border-top: 2px solid #8b5cf6; }
-    .accent-pink   { border-top: 2px solid #ec4899; }
-    .accent-cyan   { border-top: 2px solid #06b6d4; }
-    .accent-yellow { border-top: 2px solid #eab308; }
-    .accent-red    { border-top: 2px solid #ef4444; }
-
+    
+    .metric-card:hover::before {
+        opacity: 1;
+    }
+    
     .metric-label {
-        font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.8px;
-        color: #6b7280; margin-bottom: 11px; font-weight: 700;
-        display: flex; align-items: center; gap: 6px;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: #9ca3af;
+        margin-bottom: 10px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
+    
     .metric-value {
-        font-size: 28px; font-weight: 900; color: #f9fafb;
-        margin-bottom: 10px; line-height: 1.1; letter-spacing: -.5px;
+        font-size: 32px;
+        font-weight: 900;
+        color: #ffffff;
+        margin-bottom: 8px;
+        line-height: 1.2;
+        background: linear-gradient(135deg, #fff 0%, #e0e0e0 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
     }
-
-    /* ── Delta badges ── */
+    
+    /* Dynamic Metric Accents */
+    .accent-blue { --accent-color: #3b82f6; }
+    .accent-green { --accent-color: #10b981; }
+    .accent-orange { --accent-color: #f97316; }
+    .accent-purple { --accent-color: #8b5cf6; }
+    .accent-pink { --accent-color: #ec4899; }
+    .accent-cyan { --accent-color: #06b6d4; }
+    .accent-yellow { --accent-color: #eab308; }
+    .accent-red { --accent-color: #ef4444; }
+    
+    /* Delta Badge with Glow */
     .delta-badge {
-        display: inline-flex; align-items: center;
-        padding: 3px 10px; border-radius: 20px;
-        font-size: 11px; font-weight: 700; gap: 3px;
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 12px;
+        border-radius: 16px;
+        font-size: 12px;
+        font-weight: 800;
+        gap: 4px;
     }
-    .delta-pos { background:rgba(16,185,129,.14); color:#34d399;
-                 border:1px solid rgba(16,185,129,.22); }
-    .delta-neg { background:rgba(239,68,68,.14);  color:#f87171;
-                 border:1px solid rgba(239,68,68,.22); }
-
-    /* ── Section headers ── */
+    .delta-pos { 
+        background: rgba(16, 185, 129, 0.25); 
+        color: #34d399;
+        box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+    }
+    .delta-neg { 
+        background: rgba(239, 68, 68, 0.25); 
+        color: #f87171;
+        box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+    }
+    
+    /* Section Headers with Icons */
     .section-header {
-        font-size: 17px; font-weight: 800; color: #f9fafb;
-        margin: 32px 0 16px 0; display: flex; align-items: center; gap: 10px;
-        padding-bottom: 13px; border-bottom: 1px solid rgba(255,255,255,.06);
-        letter-spacing: -.3px;
+        font-size: 20px;
+        font-weight: 700;
+        color: #f3f4f6;
+        margin: 40px 0 20px 0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid rgba(255, 255, 255, 0.1);
     }
-
-    /* ── Tabs / Segmented Control ── */
+    
+    /* Tabs Enhancement */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 4px; background: rgba(12,14,28,.9);
-        padding: 6px; border-radius: 13px;
-        border: 1px solid rgba(255,255,255,.06);
+        gap: 8px;
+        background: rgba(30, 32, 40, 0.5);
+        padding: 8px;
+        border-radius: 12px;
     }
+    
     .stTabs [data-baseweb="tab"] {
-        border-radius: 9px; padding: 9px 18px;
-        font-weight: 600; font-size: 13px; color: #6b7280;
+        border-radius: 8px;
+        padding: 12px 24px;
+        font-weight: 600;
+        transition: all 0.3s ease;
     }
+    
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg,#2563eb,#1d4ed8) !important;
-        color: #fff !important;
-        box-shadow: 0 2px 10px rgba(37,99,235,.4);
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
     }
-    [data-testid="stSegmentedControl"] button {
-        border-radius: 8px !important; font-size: 12px !important;
-        font-weight: 600 !important; padding: 6px 12px !important;
-    }
-    [data-testid="stSegmentedControl"] button[aria-selected="true"] {
-        background: linear-gradient(135deg,#2563eb,#1d4ed8) !important;
-        color: white !important;
-        box-shadow: 0 2px 8px rgba(37,99,235,.4) !important;
-    }
-
-    /* ── Buttons ── */
+    
+    /* Custom Button Styles */
     .stButton > button {
-        border-radius: 9px; font-weight: 600; font-size: 13px;
-        transition: all .18s ease;
-        border: 1px solid rgba(255,255,255,.09);
-        background: rgba(20,24,44,.9); color: #e2e8f0;
+        border-radius: 10px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
+    
     .stButton > button:hover {
-        transform: translateY(-1px);
-        border-color: rgba(59,130,246,.4);
-        box-shadow: 0 4px 14px rgba(59,130,246,.18);
-        background: rgba(37,99,235,.13);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
     }
-    .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg,#2563eb,#1d4ed8) !important;
-        border: none !important; color: white !important;
-        box-shadow: 0 2px 12px rgba(37,99,235,.35);
+    
+    /* Hide Plotly Modebar */
+    .js-plotly-plot .plotly .modebar {
+        display: none !important;
     }
-
-    /* ── Expanders ── */
+    
+    /* Expander Styling */
     .streamlit-expanderHeader {
-        background: rgba(16,19,36,.85) !important;
-        border-radius: 10px !important; font-weight: 600 !important;
-        font-size: 13.5px !important;
-        border: 1px solid rgba(255,255,255,.06) !important;
-        padding: 11px 15px !important; transition: background .15s ease;
+        background: rgba(30, 32, 40, 0.6);
+        border-radius: 8px;
+        font-weight: 600;
     }
+    
     .streamlit-expanderHeader:hover {
-        background: rgba(24,28,52,.95) !important;
-        border-color: rgba(59,130,246,.2) !important;
-    }
-    .streamlit-expanderContent {
-        border: 1px solid rgba(255,255,255,.05) !important;
-        border-top: none !important;
-        border-radius: 0 0 10px 10px !important;
-        background: rgba(9,11,22,.55) !important;
-        padding: 15px !important;
+        background: rgba(42, 45, 58, 0.8);
     }
 
-    /* ── Sidebar ── */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg,#080a16 0%,#0c0f1f 100%) !important;
-        border-right: 1px solid rgba(255,255,255,.05) !important;
-    }
-    [data-testid="stSidebar"] .stSelectbox label,
-    [data-testid="stSidebar"] .stMultiSelect label,
-    [data-testid="stSidebar"] .stDateInput label {
-        font-size: 10.5px; font-weight: 700; color: #6b7280;
-        text-transform: uppercase; letter-spacing: 1.2px;
-    }
-
-    /* ── Native st.metric ── */
-    [data-testid="metric-container"] {
-        background: rgba(16,19,36,.75);
-        border: 1px solid rgba(255,255,255,.06); border-radius: 12px;
-        padding: 13px 15px;
-    }
-    [data-testid="metric-container"] label {
-        font-size: 10.5px !important; font-weight: 700 !important;
-        letter-spacing: 1.2px !important; text-transform: uppercase !important;
-        color: #6b7280 !important;
-    }
-    [data-testid="stMetricValue"] {
-        font-size: 24px !important; font-weight: 900 !important;
-        letter-spacing: -.5px !important;
-    }
-
-    /* ── Dataframes ── */
-    [data-testid="stDataFrame"] {
-        border-radius: 12px !important; overflow: hidden;
-        border: 1px solid rgba(255,255,255,.06) !important; contain: layout;
-    }
-
-    /* ── Plotly charts ── */
-    .stPlotlyChart { border-radius: 14px; overflow: hidden; contain: layout style; }
-
-    /* ── Alert boxes ── */
-    .stInfo,    [data-testid="stNotificationContentInfo"]    { background: rgba(37,99,235,.08)  !important; border-left:3px solid #3b82f6 !important; border-radius:8px !important; }
-    .stSuccess, [data-testid="stNotificationContentSuccess"] { background: rgba(16,185,129,.08) !important; border-left:3px solid #10b981 !important; border-radius:8px !important; }
-    .stWarning, [data-testid="stNotificationContentWarning"] { background: rgba(245,158,11,.08) !important; border-left:3px solid #f59e0b !important; border-radius:8px !important; }
-    .stError,   [data-testid="stNotificationContentError"]   { background: rgba(239,68,68,.08)  !important; border-left:3px solid #ef4444 !important; border-radius:8px !important; }
-
-    /* ── Recommendation cards ── */
+    /* RECOMMENDATION CARDS */
     .rec-card {
-        background: rgba(16,19,36,.8); border-left: 3px solid #3b82f6;
-        border-radius: 10px; padding: 14px 17px; margin-bottom: 10px;
-        transition: transform .15s ease;
-        border-top:1px solid rgba(255,255,255,.04);
-        border-right:1px solid rgba(255,255,255,.04);
-        border-bottom:1px solid rgba(255,255,255,.04);
+        background: rgba(30, 32, 40, 0.6);
+        border-left: 4px solid #3b82f6;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 12px;
+        transition: transform 0.2s;
     }
-    .rec-card:hover { transform:translateX(3px); background:rgba(22,26,50,.95); }
-    .rec-title { font-weight:700; font-size:14px; color:#f3f4f6;
-                 display:flex; align-items:center; gap:8px; margin-bottom:4px; }
-    .rec-body  { color:#9ca3af; font-size:13px; line-height:1.5; }
-    .rec-high { border-left-color:#10b981; }
-    .rec-warn { border-left-color:#f59e0b; }
-    .rec-crit { border-left-color:#ef4444; }
-    .rec-info { border-left-color:#3b82f6; }
-
-    /* ── Info box ── */
-    .info-box {
-        background:rgba(37,99,235,.08); border:1px solid rgba(59,130,246,.18);
-        border-radius:10px; padding:13px 17px; font-size:13px;
-        color:#cbd5e1; margin-bottom:15px; line-height:1.6;
+    .rec-card:hover {
+        transform: translateX(5px);
+        background: rgba(42, 45, 58, 0.8);
     }
-
-    /* ── Scrollbar ── */
-    ::-webkit-scrollbar { width:5px; height:5px; }
-    ::-webkit-scrollbar-track { background:#0b0d1a; }
-    ::-webkit-scrollbar-thumb { background:#181d36; border-radius:3px; }
-    ::-webkit-scrollbar-thumb:hover { background:#242b4a; }
-
-    /* ── Hide Plotly modebar ── */
-    .js-plotly-plot .plotly .modebar { display:none !important; }
-
-    /* ── Performance hints ── */
-    .metric-card   { will-change:transform; }
-    .stPlotlyChart { contain:layout style; }
-    .stDataFrame   { contain:layout; }
+    .rec-title {
+        font-weight: 700;
+        font-size: 16px;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .rec-body {
+        color: #9ca3af;
+        font-size: 14px;
+        margin-top: 4px;
+    }
+    .rec-high { border-left-color: #10b981; } /* Green - Scale */
+    .rec-warn { border-left-color: #f59e0b; } /* Orange - Optimize */
+    .rec-crit { border-left-color: #ef4444; } /* Red - Cut */
+    .rec-info { border-left-color: #3b82f6; } /* Blue - Info */
 </style>
 """, unsafe_allow_html=True)
 
@@ -309,20 +256,15 @@ def load_and_process_data():
     except Exception as e:
         return None, None, f"Credentials error: {e}"
     try:
-        # IO-bound: fetch both spreadsheets concurrently (safe parallelism on Streamlit Cloud)
-        with ThreadPoolExecutor(max_workers=2) as ex:
-            f1 = ex.submit(load_all_sheets, creds, "USA - DB for Marketplace Dashboard")
-            f2 = ex.submit(load_all_sheets, creds, "IB - Database for Marketplace Dashboard")
-            data1 = f1.result()
-            data2 = f2.result()
-
+        data1 = load_all_sheets(creds, "USA - DB for Marketplace Dashboard")
+        data2 = load_all_sheets(creds, "IB - Database for Marketplace Dashboard")
+        
         all_dfs = {}
-        if data1:
-            for k, v in data1.items():
-                all_dfs[f"USA_{k}"] = v
-        if data2:
-            for k, v in data2.items():
-                all_dfs[f"IB_{k}"] = v
+        if data1: 
+            for k, v in data1.items(): all_dfs[f"USA_{k}"] = v
+        if data2: 
+            for k, v in data2.items(): all_dfs[f"IB_{k}"] = v
+            
     except Exception as e:
         return None, None, str(e)
     finally:
@@ -354,9 +296,6 @@ def load_and_process_data():
     if not sales_list: return None, None, "No Sales sheets found."
     
     sales = pd.concat(sales_list, ignore_index=True)
-
-    # --- MEMORY OPT: keep only columns we actually use downstream (saves RAM on Streamlit free tier) ---
-    # Normalize special-case columns first so selection below won't drop them.
     
     # Ensure all required lowercase columns exist
     sales.columns = [c if c in ['Parent', 'SKU'] else c.lower() for c in sales.columns]
@@ -388,18 +327,6 @@ def load_and_process_data():
     
     sales = sales.dropna(subset=["date"])
 
-    # --- MEMORY OPT: downcast numerics + convert repeated strings to category to reduce RAM ---
-    if "orders" in sales.columns:
-        sales["orders"] = pd.to_numeric(sales["orders"], errors="coerce").fillna(0).astype("int32")
-    if "revenue" in sales.columns:
-        sales["revenue"] = pd.to_numeric(sales["revenue"], errors="coerce").fillna(0).astype("float32")
-    if "selling_commission" in sales.columns:
-        sales["selling_commission"] = pd.to_numeric(sales["selling_commission"], errors="coerce").fillna(0).astype("float32")
-    # Strings → category (fast groupbys, lower memory)
-    for _c in ["channel", "type", "Parent", "SKU"]:
-        if _c in sales.columns:
-            sales[_c] = sales[_c].astype("string").str.strip().astype("category")
-
     # Process Spend
     spend_list = []
     for name, df in all_dfs.items():
@@ -424,16 +351,8 @@ def load_and_process_data():
                 spend_list.append(df[['date', 'channel', 'spend']])
 
     spend = pd.concat(spend_list, ignore_index=True) if spend_list else pd.DataFrame(columns=['date', 'channel', 'spend'])
-
-    # --- MEMORY OPT for spend ---
-    if not spend.empty:
-        spend["spend"] = pd.to_numeric(spend["spend"], errors="coerce").fillna(0).astype("float32")
-        spend["channel"] = spend["channel"].astype("string").str.strip().astype("category")
-
-        # Free temporary structures
-        del all_dfs, sales_list, spend_list
-        gc.collect()
-        return sales, spend, None
+    
+    return sales, spend, None
 
 # ---------------- LOAD STATE ----------------
 with st.spinner("⚡ Loading business intelligence..."):
@@ -540,6 +459,41 @@ def calc_metrics(sales, spend):
         "Net": net, "ROAS": roas, "ACOS": acos, "AOV": aov
     }
 
+# --- Cached channel-level performance table used across multiple tabs ---
+@st.cache_data(show_spinner=False, ttl=600)
+def compute_channel_matrix(_sales: pd.DataFrame, _spend: pd.DataFrame) -> pd.DataFrame:
+    """Return a per-channel table with revenue/orders/spend/commission + ROAS/AOV/ACOS.
+    Cached to avoid recomputing across tabs and to prevent NameError when a tab is opened first.
+    """
+    if _sales is None or _sales.empty:
+        return pd.DataFrame(columns=["channel","revenue","orders","spend","selling_commission","roas","aov","acos"])
+
+    ch_rev = _sales.groupby("channel").agg(revenue=("revenue","sum"), orders=("orders","sum")).reset_index()
+
+    if "selling_commission" in _sales.columns:
+        ch_comm = _sales.groupby("channel")["selling_commission"].sum().reset_index()
+        ch_rev = _fillna_numeric(pd.merge(ch_rev, ch_comm, on="channel", how="left"), 0)
+    else:
+        ch_rev["selling_commission"] = 0
+
+    if _spend is None or _spend.empty:
+        ch_sp = pd.DataFrame({"channel": ch_rev["channel"], "spend": 0})
+    else:
+        ch_sp = _spend.groupby("channel")["spend"].sum().reset_index()
+
+    ch_matrix = _fillna_numeric(pd.merge(ch_rev, ch_sp, on="channel", how="outer"), 0)
+
+    # Vectorized metrics (faster than apply)
+    rev = ch_matrix["revenue"].astype(float)
+    sp  = ch_matrix["spend"].astype(float)
+    ords= ch_matrix["orders"].astype(float)
+
+    ch_matrix["roas"] = np.where(sp > 0, rev / sp, 0.0)
+    ch_matrix["aov"]  = np.where(ords > 0, rev / ords, 0.0)
+    ch_matrix["acos"] = np.where(rev > 0, (sp / rev) * 100.0, 0.0)
+
+    return ch_matrix
+
 def generate_insights(df_channel, current_metrics):
     insights = []
     
@@ -638,34 +592,27 @@ with k8:
 
 # ---------------- UI: ENHANCED ANALYSIS TABS ----------------
 st.markdown("")
-tab_names = [
+tabs = st.tabs([
     "🚀 Strategy & Recommendations",
-    "📈 Performance Trends",
-    "🛒 Marketplace Analysis",
+    "📈 Performance Trends", 
+    "🛒 Marketplace Analysis", 
     "🏷️ SKU Analysis",
     "📊 Profitability Deep Dive",
     "🔮 Forecasting & Predictions",
     "🧪 A/B Test Tracker",
     "📅 Weekly Reports",
     "📋 Data Explorer",
-    "💎 Merchandising Intel",
-]
-
-# Render only the active tab to reduce CPU/RAM on Streamlit Cloud free tier
-try:
-    active_tab = st.segmented_control("", options=tab_names, default=tab_names[0], key="active_tab")
-except Exception:
-    active_tab = st.radio("", options=tab_names, index=0, horizontal=True, key="active_tab")
-
+    "💎 Merchandising Intel"
+])
 
 # TAB 1: Strategy & Recommendations
-if active_tab == tab_names[0]:
+with tabs[0]:
     st.markdown('<div class="section-header">🧠 AI Strategic Insights</div>', unsafe_allow_html=True)
     
     # Generate insights based on the Channel Matrix
     ch_rev_rec = df_s.groupby("channel")["revenue"].sum().reset_index()
     ch_sp_rec = df_sp.groupby("channel")["spend"].sum().reset_index()
-    ch_matrix_rec = _fillna_numeric(pd.merge(ch_rev_rec, ch_sp_rec, on="channel", how="outer"), 0)
+    ch_matrix_rec = pd.merge(ch_rev_rec, ch_sp_rec, on="channel", how="outer").fillna(0)
     ch_matrix_rec["roas"] = ch_matrix_rec.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
     
     recommendations = generate_insights(ch_matrix_rec, curr)
@@ -712,7 +659,7 @@ if active_tab == tab_names[0]:
         st.caption(f"Vs Current: ${curr['Net']:,.0f}")
 
 # TAB 2: Performance Trends
-if active_tab == tab_names[1]:
+with tabs[1]:
     col1, col2 = st.columns([2, 1])
     
     with col1:
@@ -724,7 +671,7 @@ if active_tab == tab_names[1]:
             "orders": "sum"
         }).reset_index()
         daily_spend = df_sp.groupby(pd.Grouper(key="date", freq="D"))["spend"].sum().reset_index()
-        daily_trend = _fillna_numeric(pd.merge(daily_rev, daily_spend, on="date", how="outer"), 0)
+        daily_trend = pd.merge(daily_rev, daily_spend, on="date", how="outer").fillna(0)
         daily_trend["roas"] = daily_trend.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
         
         fig_multi = go.Figure()
@@ -797,7 +744,7 @@ if active_tab == tab_names[1]:
         daily_comm = df_s.groupby(pd.Grouper(key="date", freq="D"))["selling_commission"].sum().reset_index()
         
         if not daily_comm.empty:
-            daily_costs = _fillna_numeric(pd.merge(daily_spend, daily_comm, on="date", how="outer"), 0)
+            daily_costs = pd.merge(daily_spend, daily_comm, on="date", how="outer").fillna(0)
             
             fig_costs = go.Figure()
             fig_costs.add_trace(go.Bar(
@@ -822,7 +769,7 @@ if active_tab == tab_names[1]:
             st.plotly_chart(fig_costs, config={'displayModeBar': False})
 
 # TAB 3: Marketplace Analysis
-if active_tab == tab_names[2]:
+with tabs[2]:
     st.markdown('<div class="section-header">🛒 Marketplace Performance Analysis</div>', unsafe_allow_html=True)
     
     # Info box explaining the analysis
@@ -841,21 +788,7 @@ if active_tab == tab_names[2]:
     
     with col1:
         st.markdown("**Marketplace Performance Matrix**")
-        
-        ch_rev = df_s.groupby("channel").agg({
-            "revenue": "sum",
-            "orders": "sum"
-        }).reset_index()
-        
-        if "selling_commission" in df_s.columns:
-            ch_comm = df_s.groupby("channel")["selling_commission"].sum().reset_index()
-            ch_rev = _fillna_numeric(pd.merge(ch_rev, ch_comm, on="channel", how="left"), 0)
-        
-        ch_sp = df_sp.groupby("channel")["spend"].sum().reset_index()
-        ch_matrix = _fillna_numeric(pd.merge(ch_rev, ch_sp, on="channel", how="outer"), 0)
-        ch_matrix["roas"] = ch_matrix.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
-        ch_matrix["aov"] = ch_matrix.apply(lambda x: x["revenue"]/x["orders"] if x["orders"]>0 else 0, axis=1)
-        ch_matrix["acos"] = ch_matrix.apply(lambda x: (x["spend"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
+        ch_matrix = compute_channel_matrix(df_s, df_sp)
         ch_matrix = ch_matrix[ch_matrix["revenue"] > 0]
         
         fig_bubble = px.scatter(
@@ -968,104 +901,62 @@ if active_tab == tab_names[2]:
     )
 
 # TAB 4: SKU Analysis
-if active_tab == tab_names[3]:
+with tabs[3]:
     st.markdown('<div class="section-header">🏷️ SKU Performance Analysis</div>', unsafe_allow_html=True)
     
     if "Parent" in df_s.columns and df_s["Parent"].nunique() > 1:
         # Calculate Parent SKU Performance
-        Parent_perf = df_s.groupby("Parent", observed=True).agg(
-            revenue=("revenue","sum"), orders=("orders","sum")
-        ).reset_index()
-        Parent_perf["aov"]       = (Parent_perf["revenue"] /
-                                     Parent_perf["orders"].replace(0, float("nan"))).fillna(0)
-        _total_rev               = Parent_perf["revenue"].sum()
-        Parent_perf["rev_share"] = (Parent_perf["revenue"] / _total_rev * 100
-                                    if _total_rev > 0 else 0)
+        Parent_perf = df_s.groupby("Parent").agg({
+            "revenue": "sum",
+            "orders": "sum"
+        }).reset_index()
+        Parent_perf["aov"] = Parent_perf["revenue"] / Parent_perf["orders"]
         Parent_perf = Parent_perf.sort_values("revenue", ascending=False).head(10)
-
-        # ── Summary mini-KPIs ─────────────────────────────────────────────────
-        sk1, sk2, sk3, sk4 = st.columns(4)
-        _total_skus = df_s["Parent"].nunique()
-        _top1_share = float(Parent_perf["rev_share"].iloc[0]) if len(Parent_perf) else 0
-        _top3_share = float(Parent_perf["rev_share"].head(3).sum())
-        _avg_aov    = float(Parent_perf["aov"].mean()) if len(Parent_perf) else 0
-        sk1.metric("🏷️ Total SKUs",       f"{_total_skus:,}")
-        sk2.metric("🥇 Top SKU Rev Share", f"{_top1_share:.1f}%")
-        sk3.metric("🏆 Top-3 Rev Share",   f"{_top3_share:.1f}%")
-        sk4.metric("📊 Avg AOV (Top 10)",  f"${_avg_aov:,.2f}")
-        st.markdown("")
-
-        col1, col2 = st.columns([3, 2])
+        
+        col1, col2 = st.columns([2, 1])
         
         with col1:
-            st.markdown("**📊 Top 10 Parent SKUs — Revenue (colour = AOV)**")
-            fig_sku_bar = go.Figure()
-            fig_sku_bar.add_trace(go.Bar(
-                x=Parent_perf["revenue"],
-                y=Parent_perf["Parent"],
-                orientation="h",
-                marker=dict(
-                    color=Parent_perf["aov"],
-                    colorscale=[[0,"#1a2e50"],[0.5,"#2563eb"],[1,"#06b6d4"]],
-                    showscale=True,
-                    colorbar=dict(
-                        title="AOV ($)", thickness=10, len=0.7,
-                        tickfont=dict(color="#9ca3af", size=10),
-                        titlefont=dict(color="#9ca3af", size=11),
-                    ),
-                ),
-                text=Parent_perf["revenue"].apply(
-                    lambda v: f"${v/1000:.1f}k" if v >= 1000 else f"${v:.0f}"),
-                textposition="outside",
-                hovertemplate=(
-                    "<b>%{y}</b><br>"
-                    "Revenue: $%{x:,.0f}<br>"
-                    "AOV: $%{marker.color:.2f}<extra></extra>"
-                ),
-            ))
+            st.markdown("**Top 10 Parent SKUs by Revenue**")
+            
+            fig_sku_bar = px.bar(
+                Parent_perf, 
+                x="revenue", 
+                y="Parent",
+                orientation='h',
+                color="orders",
+                color_continuous_scale="Blues",
+                labels={"revenue": "Revenue ($)", "Parent": "Parent SKU", "orders": "Orders"}
+            )
+            
             fig_sku_bar.update_layout(
                 template="plotly_dark",
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
-                height=420,
-                margin=dict(l=0, r=90, t=10, b=0),
-                yaxis=dict(autorange="reversed", tickfont=dict(size=11)),
-                xaxis=dict(showgrid=True, gridcolor="#1a1f36", zeroline=False),
+                height=450,
+                margin=dict(l=0, r=0, t=20, b=0),
+                yaxis=dict(tickmode='linear')
             )
-            st.plotly_chart(fig_sku_bar, config={"displayModeBar": False}, use_container_width=True)
+            st.plotly_chart(fig_sku_bar, config={'displayModeBar': False})
         
         with col2:
-            st.markdown("**🗺️ Revenue Share Treemap**")
-            _labels = Parent_perf.apply(
-                lambda r: f"{r['Parent']}<br><span style='font-size:11px'>"
-                          f"${r['revenue']/1000:.1f}k · {r['rev_share']:.1f}%</span>", axis=1
+            st.markdown("**SKU Revenue Distribution**")
+            
+            fig_sku_tree = px.treemap(
+                Parent_perf, 
+                path=['Parent'], 
+                values='revenue',
+                color='aov',
+                color_continuous_scale='Viridis',
+                labels={"revenue": "Revenue", "aov": "AOV"}
             )
-            fig_sku_tree = go.Figure(go.Treemap(
-                labels=Parent_perf["Parent"],
-                parents=[""] * len(Parent_perf),
-                values=Parent_perf["revenue"],
-                customdata=Parent_perf[["orders","aov","rev_share"]].values,
-                hovertemplate=(
-                    "<b>%{label}</b><br>"
-                    "Revenue: $%{value:,.0f}<br>"
-                    "Orders: %{customdata[0]:,.0f}<br>"
-                    "AOV: $%{customdata[1]:.2f}<br>"
-                    "Rev Share: %{customdata[2]:.1f}%<extra></extra>"
-                ),
-                marker=dict(
-                    colors=Parent_perf["aov"],
-                    colorscale=[[0,"#0f2040"],[0.5,"#1e40af"],[1,"#0891b2"]],
-                    showscale=False,
-                ),
-                textfont=dict(size=11, color="#ffffff"),
-                texttemplate="<b>%{label}</b><br>$%{value:,.0f}",
-            ))
+            
             fig_sku_tree.update_layout(
+                template="plotly_dark",
                 paper_bgcolor="rgba(0,0,0,0)",
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=420,
+                margin=dict(l=0, r=0, t=20, b=0),
+                height=450
             )
-            st.plotly_chart(fig_sku_tree, config={"displayModeBar": False}, use_container_width=True)
+            st.plotly_chart(fig_sku_tree, config={'displayModeBar': False})
         
         # ── SKU SEARCH / LOOKUP ──────────────────────────────────────────────
         st.markdown("---")
@@ -1266,103 +1157,86 @@ if active_tab == tab_names[3]:
         st.markdown("---")
         st.markdown("**📦 Top 10 SKU Breakdown (Click to expand for Child SKUs)**")
         
-        # Pre-group ALL child SKUs in one pass → no repeated full-df scans
-        if "SKU" in df_s.columns:
-            _top_parents = Parent_perf["Parent"].tolist()
-            _child_all   = (
-                df_s[df_s["Parent"].isin(_top_parents)]
-                .groupby(["Parent", "SKU"], observed=True)
-                .agg(revenue=("revenue", "sum"), orders=("orders", "sum"))
-                .reset_index()
-            )
-            _child_all["aov"] = (_child_all["revenue"] /
-                                  _child_all["orders"].replace(0, float("nan"))).fillna(0)
-            _child_map = {
-                p: g.sort_values("revenue", ascending=False)
-                for p, g in _child_all.groupby("Parent", observed=True)
-            }
-        else:
-            _child_map = {}
-
-        _rank_icons = {0:"🥇", 1:"🥈", 2:"🥉"}
-        for _rank, parent_row in enumerate(Parent_perf.itertuples(index=False)):
-            parent = parent_row.Parent
-            child_data   = _child_map.get(parent, pd.DataFrame())
-            has_children = (
-                len(child_data) > 0
-                and not child_data.empty
-                and child_data["SKU"].iloc[0] != "Unknown"
-            )
-            _n_variants  = len(child_data) if has_children else 0
-            _rank_icon   = _rank_icons.get(_rank, "🏷️")
-
-            _label = (
-                f"{_rank_icon} **{parent}** — "
-                f"${parent_row.revenue:,.0f} revenue · {int(parent_row.orders):,} orders"
-                + (f" · {_n_variants} variants" if has_children else "")
-            )
-            with st.expander(_label, expanded=False):
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("💰 Revenue",  f"${parent_row.revenue:,.0f}")
-                c2.metric("🛒 Orders",   f"{int(parent_row.orders):,}")
-                c3.metric("📊 AOV",      f"${parent_row.aov:,.2f}")
-                c4.metric("🧩 Variants", str(_n_variants) if has_children else "N/A")
-
+        for idx, parent_row in Parent_perf.iterrows():
+            parent = parent_row['Parent']
+            
+            # Get child SKUs for this parent
+            if "SKU" in df_s.columns:
+                child_data = df_s[df_s["Parent"] == parent].groupby("SKU").agg({
+                    "revenue": "sum",
+                    "orders": "sum"
+                }).reset_index()
+                child_data["aov"] = child_data["revenue"] / child_data["orders"]
+                child_data = child_data.sort_values("revenue", ascending=False)
+                
+                has_children = len(child_data) > 0 and child_data["SKU"].iloc[0] != "Unknown"
+            else:
+                has_children = False
+                child_data = pd.DataFrame()
+            
+            # Create expander for each parent SKU
+            with st.expander(f"🏷️ {parent} - ${parent_row['revenue']:,.0f} Revenue", expanded=False):
+                # Parent SKU metrics
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Revenue", f"${parent_row['revenue']:,.0f}")
+                with col2:
+                    st.metric("Orders", f"{parent_row['orders']:,.0f}")
+                with col3:
+                    st.metric("AOV", f"${parent_row['aov']:,.2f}")
+                with col4:
+                    if has_children:
+                        st.metric("Child SKUs", f"{len(child_data)}")
+                    else:
+                        st.metric("Child SKUs", "N/A")
+                
+                # Show child SKUs if available
                 if has_children:
-                    tbl_col, pie_col = st.columns([3, 2])
-                    with tbl_col:
-                        st.markdown("**📋 Child SKU Breakdown**")
-                        _max_rev = float(child_data["revenue"].max()) or 1.0
-                        st.dataframe(
-                            child_data,
-                            column_config={
-                                "SKU":     st.column_config.TextColumn("Child SKU", width="large"),
-                                "revenue": st.column_config.ProgressColumn(
-                                    "Revenue", format="$%d",
-                                    min_value=0, max_value=_max_rev),
-                                "orders":  st.column_config.NumberColumn("Orders", format="%d"),
-                                "aov":     st.column_config.NumberColumn("AOV",    format="$%.2f"),
-                            },
-                            hide_index=True,
-                            use_container_width=True,
-                            height=min(300, 50 + len(child_data) * 35),
+                    st.markdown("---")
+                    st.markdown("**Child SKUs Performance:**")
+                    
+                    # Create a nice table for child SKUs
+                    child_display = child_data.copy()
+                    child_display["revenue"] = child_display["revenue"].apply(lambda x: f"${x:,.0f}")
+                    child_display["orders"] = child_display["orders"].apply(lambda x: f"{x:,.0f}")
+                    child_display["aov"] = child_display["aov"].apply(lambda x: f"${x:,.2f}")
+                    
+                    st.dataframe(
+                        child_display,
+                        column_config={
+                            "SKU": st.column_config.TextColumn("SKU", width="medium"),
+                            "revenue": st.column_config.TextColumn("Revenue", width="small"),
+                            "orders": st.column_config.TextColumn("Orders", width="small"),
+                            "aov": st.column_config.TextColumn("AOV", width="small"),
+                        },
+                        hide_index=True,
+                        height=min(300, 50 + len(child_display) * 35)
+                    )
+                    
+                    # Visual breakdown
+                    if len(child_data) > 1:
+                        fig_child = px.pie(
+                            child_data, 
+                            values="revenue", 
+                            names="SKU",
+                            title="Revenue Distribution by Child SKU",
+                            color_discrete_sequence=px.colors.sequential.Plasma
                         )
-                    with pie_col:
-                        if len(child_data) > 1:
-                            st.markdown("**🍩 Variant Share**")
-                            _top6 = child_data.head(6)
-                            fig_child = go.Figure(go.Pie(
-                                labels=_top6["SKU"],
-                                values=_top6["revenue"],
-                                hole=0.55,
-                                textinfo="percent",
-                                textposition="inside",
-                                marker=dict(colors=[
-                                    "#3b82f6","#10b981","#f59e0b",
-                                    "#8b5cf6","#ec4899","#06b6d4",
-                                ][:len(_top6)]),
-                                hovertemplate=(
-                                    "<b>%{label}</b><br>"
-                                    "$%{value:,.0f}<br>%{percent}<extra></extra>"
-                                ),
-                            ))
-                            fig_child.update_layout(
-                                paper_bgcolor="rgba(0,0,0,0)",
-                                margin=dict(l=0, r=0, t=0, b=0),
-                                height=220,
-                                showlegend=False,
-                            )
-                            st.plotly_chart(fig_child,
-                                            config={"displayModeBar": False},
-                                            use_container_width=True)
+                        fig_child.update_layout(
+                            template="plotly_dark",
+                            paper_bgcolor="rgba(0,0,0,0)",
+                            height=300,
+                            margin=dict(l=0, r=0, t=40, b=0)
+                        )
+                        st.plotly_chart(fig_child, config={'displayModeBar': False})
                 else:
-                    st.info("ℹ️ No child SKU data available for this parent.")
+                    st.info("ℹ️ No child SKU data available for this parent SKU")
         
     else:
         st.info("📦 SKU data not available in the current dataset. Please ensure 'Parent' column exists in your data.")
 
 # TAB 5: Profitability Deep Dive
-if active_tab == tab_names[4]:
+with tabs[4]:
     col1, col2 = st.columns([1, 2])
     
     with col1:
@@ -1443,7 +1317,7 @@ if active_tab == tab_names[4]:
     st.dataframe(profit_metrics, hide_index=True)
 
 # TAB 6: Forecasting & Predictions
-if active_tab == tab_names[5]:
+with tabs[5]:
     st.markdown('<div class="section-header">🔮 Advanced Ensemble ML Forecasting</div>', unsafe_allow_html=True)
 
     st.markdown("""
@@ -1926,7 +1800,7 @@ if active_tab == tab_names[5]:
             c3.info(   f"🎯 **Most Confident:** {top_conf['Marketplace']} ({top_conf['Confidence %']:.0f}%)")
 
 # TAB 7: A/B Test Tracker
-if active_tab == tab_names[6]:
+with tabs[6]:
     st.markdown('<div class="section-header">🧪 Advanced A/B Test Performance Tracker</div>', unsafe_allow_html=True)
     
     st.markdown("""
@@ -2422,7 +2296,7 @@ if active_tab == tab_names[6]:
     else:
         st.info("📝 No A/B tests created yet. Use the forms above to create your first test!")
 # TAB 8: Weekly Reports
-if active_tab == tab_names[7]:
+with tabs[7]:
     st.markdown('<div class="section-header">📅 Weekly Performance Reports</div>', unsafe_allow_html=True)
 
     st.markdown("""
@@ -2757,7 +2631,7 @@ if active_tab == tab_names[7]:
 
             ch_now = report['sales_data'].groupby("channel").agg({"revenue":"sum","orders":"sum"}).reset_index()
             ch_sp_now = report['spend_data'].groupby("channel")["spend"].sum().reset_index()
-            ch_report = _fillna_numeric(pd.merge(ch_now, ch_sp_now, on="channel", how="outer"), 0)
+            ch_report = pd.merge(ch_now, ch_sp_now, on="channel", how="outer").fillna(0)
             ch_report["roas"] = ch_report.apply(lambda r: r["revenue"]/r["spend"] if r["spend"]>0 else 0, axis=1)
             ch_report["acos"] = ch_report.apply(lambda r: r["spend"]/r["revenue"]*100 if r["revenue"]>0 else 0, axis=1)
             ch_report = ch_report.sort_values("revenue", ascending=False)
@@ -2765,7 +2639,7 @@ if active_tab == tab_names[7]:
             if has_yoy:
                 # Merge in YoY revenue per channel
                 ch_yoy = report['yoy_sales'].groupby("channel")["revenue"].sum().reset_index().rename(columns={"revenue":"yoy_revenue"})
-                ch_report = _fillna_numeric(ch_report.merge(ch_yoy, on="channel", how="left"), 0)
+                ch_report = ch_report.merge(ch_yoy, on="channel", how="left").fillna(0)
                 ch_report["yoy_growth"] = ch_report.apply(
                     lambda r: (r["revenue"]-r["yoy_revenue"])/r["yoy_revenue"]*100 if r["yoy_revenue"]>0 else float("nan"), axis=1
                 )
@@ -2809,7 +2683,7 @@ if active_tab == tab_names[7]:
 
             if has_yoy and "Parent" in report['yoy_sales'].columns:
                 sku_yoy = report['yoy_sales'].groupby("Parent")["revenue"].sum().reset_index().rename(columns={"revenue":"yoy_revenue"})
-                sku_now = _fillna_numeric(sku_now.merge(sku_yoy, on="Parent", how="left"), 0)
+                sku_now = sku_now.merge(sku_yoy, on="Parent", how="left").fillna(0)
                 sku_now["yoy_growth"] = sku_now.apply(
                     lambda r: (r["revenue"]-r["yoy_revenue"])/r["yoy_revenue"]*100 if r["yoy_revenue"]>0 else float("nan"), axis=1
                 )
@@ -2915,10 +2789,11 @@ Same period last year: **{report['yoy_period']}**
                 st.text_area("Select all & copy:", markdown_report, height=200)
 
 # TAB 9: Data Explorer
-if active_tab == tab_names[8]:
+with tabs[8]:
     st.markdown('<div class="section-header">📋 Performance Data Explorer</div>', unsafe_allow_html=True)
     
     # Channel Performance Table
+    ch_matrix = compute_channel_matrix(df_s, df_sp)
     tbl = ch_matrix.copy()
     if "selling_commission" in ch_matrix.columns:
         tbl["commission"] = ch_matrix["selling_commission"]
@@ -2972,183 +2847,155 @@ if active_tab == tab_names[8]:
 
 
 # TAB 10: Merchandising Intel
-if active_tab == tab_names[9]:
+with tabs[9]:
     st.markdown('<div class="section-header">💎 Merchandising Intelligence</div>', unsafe_allow_html=True)
 
-    # ── Load merchandising reference data ────────────────────────────────────
+    # ── Load & deduplicate merchandising reference data ───────────────────────
     @st.cache_data(show_spinner=False, ttl=3600)
     def _load_merch():
         import os
+        # Streamlit Cloud mounts the repo at /mount/src/<repo-name>/
+        # We also try the cwd and the directory of app.py
         candidates = [
-            "/mount/src/businessperformancedashboard/Merchandising_data.csv",
             "/mount/src/businessperformancedashboard/Merchandising_data.xlsx",
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "Merchandising_data.csv"),
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "Merchandising_data.xlsx"),
-            "Merchandising_data.csv",
             "Merchandising_data.xlsx",
         ]
-        found_path = next((p for p in candidates if os.path.exists(p)), None)
+        found_path = None
+        for p in candidates:
+            if os.path.exists(p):
+                found_path = p
+                break
+
         if found_path is None:
             return None, "FILE_NOT_FOUND"
-        if found_path.endswith(".xlsx"):
-            try:
-                import openpyxl  # noqa: F401
-            except ImportError:
-                return None, "OPENPYXL_MISSING"
+
+        # Check openpyxl is available before reading
         try:
-            if found_path.endswith(".csv"):
-                raw = pd.read_csv(found_path,
-                                  usecols=["Parent","Design Code","jewelry_type","stone"])
-            else:
-                raw = pd.read_excel(found_path, engine="openpyxl",
-                                    usecols=["Parent","Design Code","jewelry_type","stone"])
+            import openpyxl  # noqa: F401
+        except ImportError:
+            return None, "OPENPYXL_MISSING"
+
+        try:
+            raw = pd.read_excel(
+                found_path, engine="openpyxl",
+                usecols=["Parent", "Design Code", "jewelry_type", "stone"]
+            )
         except Exception as e:
             return None, f"READ_ERROR: {e}"
+
         raw = raw.rename(columns={"Design Code": "design_code"})
-        for col in ["Parent","design_code","jewelry_type","stone"]:
+        for col in ["Parent", "design_code", "jewelry_type", "stone"]:
             raw[col] = raw[col].astype(str).str.strip()
-        # One clean row per Parent — keep first occurrence
         lookup = raw.drop_duplicates(subset="Parent").reset_index(drop=True)
         return lookup, "OK"
 
     merch_lookup, merch_status = _load_merch()
 
     if merch_status == "OPENPYXL_MISSING":
-        st.error("⚠️ **openpyxl not installed.** Add `openpyxl>=3.1.0` to requirements.txt and redeploy.")
+        st.error(
+            "⚠️ **openpyxl is not installed.** Add `openpyxl>=3.1.0` to your "
+            "`requirements.txt`, commit it, and redeploy."
+        )
         st.stop()
     elif merch_status == "FILE_NOT_FOUND":
-        st.error("⚠️ **Merchandising_data.xlsx not found.** Commit it to your GitHub repo next to app.py.")
+        st.error(
+            "⚠️ **Merchandising_data.xlsx not found.** "
+            "Make sure the file is committed to your GitHub repo in the same folder as app.py."
+        )
         st.stop()
     elif merch_status != "OK" or merch_lookup is None:
         st.error(f"⚠️ Failed to load merchandising data: {merch_status}")
         st.stop()
 
-    # ── Sales within global date + channel filters ───────────────────────────
-    # This tab has its own Jewelry Type / Stone filters, so we ignore the
-    # sidebar Product Type filter but still respect Date Range + Marketplaces.
-    mask_merch = (
-        (sales_df["date"].dt.date >= start_date) &
-        (sales_df["date"].dt.date <= end_date) &
-        (sales_df["channel"].isin(selected_channels))
-    )
-    df_s_merch = sales_df[mask_merch]
-
-    # Aggregate sales to one row per Parent SKU for this period
-    sales_by_parent = (
-        df_s_merch
-        .groupby("Parent", as_index=False)
-        .agg(revenue=("revenue","sum"), orders=("orders","sum"))
-    )
-
-    # ── FIX #1: CATALOGUE drives the join, not sales ─────────────────────────
-    # Every catalogue SKU appears. Revenue/orders = 0 if no sales in period.
-    df_enriched = (
-        merch_lookup[["Parent","design_code","jewelry_type","stone"]]
-        .drop_duplicates("Parent")
-        .merge(sales_by_parent, on="Parent", how="left")
-    )
-    df_enriched["revenue"] = df_enriched["revenue"].fillna(0.0)
-    df_enriched["orders"]  = df_enriched["orders"].fillna(0.0)
-
-    # ── Match-rate banner ─────────────────────────────────────────────────────
-    sales_parents   = set(df_s_merch["Parent"].dropna().unique())
-    merch_parents   = set(merch_lookup["Parent"].unique())
+    # ── Mapping stats ─────────────────────────────────────────────────────────
+    sales_parents  = set(df_s["Parent"].dropna().unique())
+    merch_parents  = set(merch_lookup["Parent"].unique())
     matched_parents = sales_parents & merch_parents
+
     match_pct = len(matched_parents) / len(sales_parents) * 100 if sales_parents else 0
 
     bm1, bm2, bm3, bm4 = st.columns(4)
-    bm1.metric("💎 Merch Catalogue", f"{len(merch_parents):,} SKUs")
-    bm2.metric("📦 Sales SKUs",      f"{len(sales_parents):,} SKUs")
-    bm3.metric("✅ Matched",         f"{len(matched_parents):,} SKUs")
-    bm4.metric("🔗 Match Rate",      f"{match_pct:.1f}%")
+    bm1.metric("💎 Merch Catalogue",  f"{len(merch_parents):,} SKUs")
+    bm2.metric("📦 Sales SKUs",       f"{len(sales_parents):,} SKUs")
+    bm3.metric("✅ Matched",          f"{len(matched_parents):,} SKUs")
+    bm4.metric("🔗 Match Rate",       f"{match_pct:.1f}%")
 
-    if sales_parents and match_pct == 0:
-        st.warning("No Parent SKUs matched. Check that Parent SKU names are formatted "
-                   "identically in both the sales sheet and Merchandising_data.xlsx.")
+    if match_pct == 0:
+        st.warning("No Parent SKUs could be matched between sales data and the merchandising sheet. "
+                   "Check that Parent SKU names are formatted the same way in both sources.")
 
     st.markdown("---")
+
+    # ── Enrich sales data with merch attributes ───────────────────────────────
+    df_enriched = df_s.merge(
+        merch_lookup[["Parent","design_code","jewelry_type","stone"]],
+        on="Parent", how="left"
+    )
 
     # ── Tab-level filters ─────────────────────────────────────────────────────
     st.markdown("### 🔧 Filters")
     fcol1, fcol2, fcol3 = st.columns([2, 2, 1])
 
-    # Filter options come from the full catalogue (not just matched SKUs)
     all_jtypes = sorted(merch_lookup["jewelry_type"].dropna().unique().tolist())
     all_stones = sorted(merch_lookup["stone"].dropna().unique().tolist())
 
     with fcol1:
         sel_jtype = st.multiselect(
-            "💍 Jewelry Type", options=all_jtypes, default=[],
-            key="merch_jtype_filter", placeholder="All jewelry types…"
+            "💍 Jewelry Type",
+            options=all_jtypes,
+            default=[],
+            key="merch_jtype_filter",
+            placeholder="All jewelry types…"
         )
     with fcol2:
         sel_stone = st.multiselect(
-            "💠 Stone", options=all_stones, default=[],
-            key="merch_stone_filter", placeholder="All stones…"
+            "💠 Stone",
+            options=all_stones,
+            default=[],
+            key="merch_stone_filter",
+            placeholder="All stones…"
         )
     with fcol3:
-        # FIX #3: default False so 0-sales SKUs are visible by default
-        with_sales_only = st.toggle(
-            "With sales only", value=False,
+        matched_only = st.toggle(
+            "Matched SKUs only",
+            value=True,
             key="merch_matched_only",
-            help="ON = hide SKUs with $0 revenue in this period. OFF = show all catalogue SKUs (zero shown as 0)."
+            help="When ON, only Parent SKUs found in both sales and merchandising data are shown."
         )
 
-    # ── FIX #2: Apply filters directly on df_enriched (no closure caching) ──
+    # Apply filters
     df_m = df_enriched.copy()
-
-    if with_sales_only:
-        df_m = df_m[df_m["orders"] > 0]
-
-    # FIX #5: simple isin — each row has exactly one stone value, no regex needed
+    if matched_only:
+        df_m = df_m[df_m["design_code"].notna()]
     if sel_jtype:
         df_m = df_m[df_m["jewelry_type"].isin(sel_jtype)]
     if sel_stone:
         df_m = df_m[df_m["stone"].isin(sel_stone)]
 
-    # Active filter info bar
-    active_parts = []
-    if sel_jtype:
-        active_parts.append(f"💍 {', '.join(sel_jtype)}")
-    if sel_stone:
-        extra = f" +{len(sel_stone)-3} more" if len(sel_stone) > 3 else ""
-        active_parts.append(f"💠 {', '.join(sel_stone[:3])}{extra}")
-    if with_sales_only:
-        active_parts.append("📦 With sales only")
-
-    rev_sum = float(df_m["revenue"].sum())
-    ord_sum = float(df_m["orders"].sum())
-    sku_cnt = int(df_m["Parent"].nunique())
-
-    if active_parts:
-        st.info("📌 Active: " + "  |  ".join(active_parts) +
-                f"  ·  **{sku_cnt:,} SKUs**  ·  **${rev_sum:,.0f}** revenue  ·  **{int(ord_sum):,}** orders")
-    else:
-        st.info(f"📌 Showing full catalogue  ·  **{sku_cnt:,} SKUs**  ·  **${rev_sum:,.0f}** revenue  ·  **{int(ord_sum):,}** orders")
-
     if df_m.empty:
-        st.warning("No SKUs match the current filters.")
+        st.warning("No records match the current filters. Try removing some filter selections.")
         st.stop()
+
+    # Active filter badges
+    active = []
+    if sel_jtype: active.append(f"💍 {', '.join(sel_jtype)}")
+    if sel_stone: active.append(f"💠 {', '.join(sel_stone[:3])}{'…+more' if len(sel_stone) > 3 else ''}")
+    if active:
+        st.info("📌 Active: " + "  |  ".join(active) +
+                f"  ·  **{df_m['Parent'].nunique():,} SKUs** · "
+                f"**${df_m['revenue'].sum():,.0f}** revenue")
 
     st.markdown("---")
 
-    # ════════════════════════════════════════════════════════════════════════
-    # SECTION 1 — KPIs + Category Charts
-    # ════════════════════════════════════════════════════════════════════════
+    # ════════════════════════════════════════════════════════════════════════════
+    # SECTION 1 ── Revenue by Jewelry Type & Stone
+    # ════════════════════════════════════════════════════════════════════════════
     st.markdown("### 📊 Category Revenue Overview")
 
-    kp1, kp2, kp3, kp4, kp5 = st.columns(5)
-    blended_aov = rev_sum / ord_sum if ord_sum > 0 else 0
-    kp1.metric("💰 Total Revenue",    f"${rev_sum:,.0f}")
-    kp2.metric("🛒 Total Orders",     f"{int(ord_sum):,}")
-    kp3.metric("📊 Blended AOV",      f"${blended_aov:,.2f}")
-    kp4.metric("🏷️ Parent SKUs",      f"{sku_cnt:,}")
-    kp5.metric("🎨 Design Codes",     f"{df_m['design_code'].nunique():,}")
-
-    st.markdown("")
     ov_left, ov_right = st.columns(2)
 
-    # ── Jewelry Type horizontal bar ───────────────────────────────────────
+    # ── Jewelry Type bar ─────────────────────────────────────────────────────
     with ov_left:
         st.markdown("**💍 Revenue by Jewelry Type**")
         jtype_agg = (
@@ -3157,116 +3004,97 @@ if active_tab == tab_names[9]:
             .reset_index()
             .sort_values("revenue", ascending=True)
         )
-        jtype_agg["aov"] = (
-            jtype_agg["revenue"] / jtype_agg["orders"].replace(0, np.nan)
-        ).fillna(0)
+        jtype_agg["aov"] = (jtype_agg["revenue"] / jtype_agg["orders"].replace(0, np.nan)).fillna(0)
 
-        if jtype_agg.empty or jtype_agg["revenue"].sum() == 0:
-            st.info("No revenue for the current jewelry-type selection.")
-        else:
-            fig_jtype = px.bar(
-                jtype_agg, x="revenue", y="jewelry_type", orientation="h",
-                color="aov", color_continuous_scale="Blues",
-                custom_data=["orders","aov"],
-                labels={"revenue":"Revenue ($)","jewelry_type":"","aov":"AOV ($)"},
-                text=jtype_agg["revenue"].apply(
-                    lambda v: f"${v/1000:.1f}k" if v >= 1000 else f"${v:.0f}")
-            )
-            fig_jtype.update_traces(
-                textposition="outside",
-                hovertemplate=(
-                    "<b>%{y}</b><br>Revenue: $%{x:,.0f}<br>"
-                    "Orders: %{customdata[0]:,.0f}<br>"
-                    "AOV: $%{customdata[1]:.2f}<extra></extra>"
-                )
-            )
-            fig_jtype.update_layout(
-                template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                height=max(300, len(jtype_agg) * 36 + 60),
-                margin=dict(l=0, r=70, t=10, b=0),
-                coloraxis_showscale=False,
-                xaxis=dict(showgrid=True, gridcolor="#2d303e"),
-                yaxis=dict(showgrid=False)
-            )
-            st.plotly_chart(fig_jtype, config={"displayModeBar":False},
-                            use_container_width=True)
+        fig_jtype = px.bar(
+            jtype_agg, x="revenue", y="jewelry_type", orientation="h",
+            color="aov", color_continuous_scale="Blues",
+            custom_data=["orders","aov"],
+            labels={"revenue":"Revenue ($)","jewelry_type":"","aov":"AOV ($)"},
+            text=jtype_agg["revenue"].apply(lambda v: f"${v/1000:.0f}k")
+        )
+        fig_jtype.update_traces(
+            textposition="outside",
+            hovertemplate="<b>%{y}</b><br>Revenue: $%{x:,.0f}<br>Orders: %{customdata[0]:,.0f}<br>AOV: $%{customdata[1]:.2f}<extra></extra>"
+        )
+        fig_jtype.update_layout(
+            template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)", height=max(350, len(jtype_agg)*35+60),
+            margin=dict(l=0, r=70, t=10, b=0),
+            coloraxis_showscale=False,
+            xaxis=dict(showgrid=True, gridcolor="#2d303e"),
+            yaxis=dict(showgrid=False)
+        )
+        st.plotly_chart(fig_jtype, config={"displayModeBar":False}, use_container_width=True)
 
-    # ── Stone donut — only positive-revenue slices ─────────────────────────
+    # ── Stone pie ────────────────────────────────────────────────────────────
     with ov_right:
         st.markdown("**💠 Top 15 Stones by Revenue**")
         stone_agg = (
             df_m.groupby("stone", dropna=False)["revenue"]
             .sum().reset_index()
             .sort_values("revenue", ascending=False)
+            .head(15)
         )
-        stone_pie = stone_agg[stone_agg["revenue"] > 0].head(15)
+        fig_stone = px.pie(
+            stone_agg, values="revenue", names="stone", hole=0.48,
+            color_discrete_sequence=px.colors.qualitative.Pastel
+        )
+        fig_stone.update_traces(
+            textposition="outside", textinfo="percent+label",
+            textfont_size=10,
+            hovertemplate="<b>%{label}</b><br>Revenue: $%{value:,.0f}<br>Share: %{percent}<extra></extra>"
+        )
+        fig_stone.update_layout(
+            template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+            height=max(350, len(jtype_agg)*35+60),
+            margin=dict(l=0, r=0, t=10, b=40),
+            showlegend=False
+        )
+        st.plotly_chart(fig_stone, config={"displayModeBar":False}, use_container_width=True)
 
-        if stone_pie.empty:
-            st.info("No revenue by stone for the current selection.")
-        else:
-            fig_stone = px.pie(
-                stone_pie, values="revenue", names="stone", hole=0.48,
-                color_discrete_sequence=px.colors.qualitative.Pastel
-            )
-            fig_stone.update_traces(
-                textposition="outside", textinfo="percent+label",
-                textfont_size=10,
-                hovertemplate="<b>%{label}</b><br>Revenue: $%{value:,.0f}<br>"
-                              "Share: %{percent}<extra></extra>"
-            )
-            fig_stone.update_layout(
-                template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-                height=max(300, len(jtype_agg) * 36 + 60),
-                margin=dict(l=0, r=0, t=10, b=40),
-                showlegend=False
-            )
-            st.plotly_chart(fig_stone, config={"displayModeBar":False},
-                            use_container_width=True)
+    # ── KPI summary row ───────────────────────────────────────────────────────
+    kp1, kp2, kp3, kp4, kp5 = st.columns(5)
+    kp1.metric("💰 Total Revenue",    f"${df_m['revenue'].sum():,.0f}")
+    kp2.metric("🛒 Total Orders",     f"{df_m['orders'].sum():,.0f}")
+    aov_all = df_m['revenue'].sum() / df_m['orders'].sum() if df_m['orders'].sum() > 0 else 0
+    kp3.metric("📊 Blended AOV",      f"${aov_all:,.2f}")
+    kp4.metric("🏷️ Active Parent SKUs", f"{df_m['Parent'].nunique():,}")
+    kp5.metric("🎨 Design Codes",     f"{df_m['design_code'].nunique():,}")
 
     st.markdown("---")
 
-    # ════════════════════════════════════════════════════════════════════════
-    # SECTION 2 — Parent SKU Performance Table
-    # ════════════════════════════════════════════════════════════════════════
+    # ════════════════════════════════════════════════════════════════════════════
+    # SECTION 2 ── Parent SKU Performance Table
+    # ════════════════════════════════════════════════════════════════════════════
     st.markdown("### 🏷️ Parent SKU Performance")
-    st.caption(
-        "All catalogue SKUs shown. SKUs with no sales in the selected "
-        "period appear with Revenue = $0 and Orders = 0."
-    )
+    st.caption("Each Parent SKU mapped to its Design Code, Jewelry Type and Stone from the merchandising catalogue.")
 
     parent_agg = (
-        df_m.groupby("Parent", as_index=False)
+        df_m.groupby("Parent")
         .agg(
             revenue     =("revenue","sum"),
             orders      =("orders","sum"),
-            design_code =("design_code",  "first"),
-            jewelry_type=("jewelry_type", "first"),
-            stone       =("stone",        "first"),
+            design_code =("design_code",  lambda x: x.dropna().iloc[0] if not x.dropna().empty else "—"),
+            jewelry_type=("jewelry_type", lambda x: x.dropna().iloc[0] if not x.dropna().empty else "—"),
+            stone       =("stone",        lambda x: x.dropna().iloc[0] if not x.dropna().empty else "—"),
         )
+        .reset_index()
     )
-    parent_agg["aov"]           = (
-        parent_agg["revenue"] / parent_agg["orders"].replace(0, np.nan)
-    ).fillna(0)
-    _pa_tot = parent_agg["revenue"].sum()
-    if _pa_tot > 0:
-        parent_agg["revenue_share"] = (parent_agg["revenue"] / _pa_tot * 100).round(2)
-    else:
-        parent_agg["revenue_share"] = 0.0
+    parent_agg["aov"]           = (parent_agg["revenue"] / parent_agg["orders"].replace(0, np.nan)).fillna(0)
+    parent_agg["revenue_share"] = (parent_agg["revenue"] / parent_agg["revenue"].sum() * 100).round(2)
     parent_agg = parent_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
-    for _c in ["design_code","jewelry_type","stone"]:
-        parent_agg[_c] = parent_agg[_c].fillna("—").astype(str)
 
-    ps1, ps2 = st.columns([3, 1])
+    # Inline search
+    ps1, ps2 = st.columns([3,1])
     with ps1:
-        p_search = st.text_input(
-            "🔎 Search Parent SKU or Design Code",
-            placeholder="e.g. EJ_SE or FC_SB…",
-            key="merch_parent_search", label_visibility="collapsed"
-        )
+        p_search = st.text_input("🔎 Search Parent SKU or Design Code",
+                                  placeholder="e.g. EJ_SE or FC_SB…",
+                                  key="merch_parent_search",
+                                  label_visibility="collapsed")
     with ps2:
         top_n = st.selectbox("Show top", [25, 50, 100, "All"],
-                             key="merch_parent_topn", label_visibility="collapsed")
+                              key="merch_parent_topn", label_visibility="collapsed")
 
     p_disp = parent_agg.copy()
     if p_search.strip():
@@ -3278,10 +3106,6 @@ if active_tab == tab_names[9]:
     if top_n != "All":
         p_disp = p_disp.head(int(top_n))
 
-    # FIX #4: safe max — avoid crash on empty
-    _max_rev_pa = float(parent_agg["revenue"].max()) if not parent_agg.empty else 1.0
-    _max_rev_pa = max(_max_rev_pa, 1.0)
-
     st.dataframe(
         p_disp[["Parent","design_code","jewelry_type","stone",
                 "revenue","orders","aov","revenue_share"]],
@@ -3292,10 +3116,10 @@ if active_tab == tab_names[9]:
             "stone":         st.column_config.TextColumn("Stone",        width="medium"),
             "revenue":       st.column_config.ProgressColumn(
                                 "Revenue ($)", format="$%d",
-                                min_value=0, max_value=_max_rev_pa),
-            "orders":        st.column_config.NumberColumn("Orders",     format="%d"),
-            "aov":           st.column_config.NumberColumn("AOV ($)",    format="$%.2f"),
-            "revenue_share": st.column_config.NumberColumn("Rev Share %",format="%.2f%%"),
+                                min_value=0, max_value=int(parent_agg["revenue"].max())),
+            "orders":        st.column_config.NumberColumn("Orders",      format="%d"),
+            "aov":           st.column_config.NumberColumn("AOV ($)",     format="$%.2f"),
+            "revenue_share": st.column_config.NumberColumn("Rev Share %", format="%.2f%%"),
         },
         hide_index=True, use_container_width=True, height=430
     )
@@ -3308,218 +3132,159 @@ if active_tab == tab_names[9]:
 
     st.markdown("---")
 
-    # ════════════════════════════════════════════════════════════════════════
-    # SECTION 3 — Design Code Performance
-    # ════════════════════════════════════════════════════════════════════════
+    # ════════════════════════════════════════════════════════════════════════════
+    # SECTION 3 ── Design Code Performance
+    # ════════════════════════════════════════════════════════════════════════════
     st.markdown("### 🎨 Design Code Performance")
-    st.caption(
-        "A Design Code groups multiple Parent SKUs (different stone variants "
-        "of the same design). Revenue is aggregated across all variants."
+    st.caption("A Design Code groups multiple Parent SKUs (different stones/variants of the same design). Revenue is aggregated across all its variants.")
+
+    design_agg = (
+        df_m[df_m["design_code"].notna() & (df_m["design_code"] != "nan")]
+        .groupby("design_code")
+        .agg(
+            revenue     =("revenue","sum"),
+            orders      =("orders","sum"),
+            variants    =("Parent","nunique"),
+            jewelry_type=("jewelry_type", lambda x: x.dropna().iloc[0] if not x.dropna().empty else "—"),
+            stones      =("stone",        lambda x: ", ".join(sorted(set(x.dropna().astype(str).tolist())))),
+        )
+        .reset_index()
     )
+    design_agg["aov"]           = (design_agg["revenue"] / design_agg["orders"].replace(0, np.nan)).fillna(0)
+    design_agg["revenue_share"] = (design_agg["revenue"] / design_agg["revenue"].sum() * 100).round(2)
+    design_agg = design_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
 
-    _valid_dc = df_m["design_code"].notna() & (
-        df_m["design_code"].astype(str).str.strip().str.lower().isin(["", "nan"]) == False
+    # Top 20 chart
+    top20 = design_agg.head(20).copy()
+    fig_dc = px.bar(
+        top20, x="design_code", y="revenue",
+        color="jewelry_type",
+        custom_data=["orders","aov","variants","stones"],
+        labels={"revenue":"Revenue ($)","design_code":"Design Code","jewelry_type":"Type"},
+        text=top20["revenue"].apply(lambda v: f"${v/1000:.1f}k")
     )
-    ddf = df_m[_valid_dc].copy()
-
-    if ddf.empty:
-        st.info("No design codes for the current filter selection.")
-    else:
-        design_sum = ddf.groupby("design_code", as_index=False).agg(
-            revenue =("revenue","sum"),
-            orders  =("orders","sum"),
-            variants=("Parent","nunique"),
+    fig_dc.update_traces(
+        textposition="outside",
+        hovertemplate=(
+            "<b>%{x}</b><br>"
+            "Revenue: $%{y:,.0f}<br>"
+            "Orders: %{customdata[0]:,.0f}<br>"
+            "AOV: $%{customdata[1]:.2f}<br>"
+            "Variants: %{customdata[2]}<br>"
+            "Stones: %{customdata[3]}<extra></extra>"
         )
-        design_jtype = (
-            ddf[["design_code","jewelry_type"]]
-            .drop_duplicates("design_code", keep="first")
-        )
-        design_stones = (
-            ddf.groupby("design_code")["stone"]
-            .apply(lambda s: ", ".join(sorted(set(s.dropna().astype(str).str.strip()))))
-            .reset_index(name="stones")
-        )
-        design_agg = (
-            design_sum
-            .merge(design_jtype,  on="design_code", how="left")
-            .merge(design_stones, on="design_code", how="left")
-        )
-        design_agg["jewelry_type"] = design_agg["jewelry_type"].fillna("—").astype(str)
-        design_agg["stones"]       = design_agg["stones"].fillna("—").astype(str)
-        design_agg["aov"]          = (
-            design_agg["revenue"] / design_agg["orders"].replace(0, np.nan)
-        ).fillna(0)
-        _dc_tot = design_agg["revenue"].sum()
-        if _dc_tot > 0:
-            design_agg["revenue_share"] = (design_agg["revenue"] / _dc_tot * 100).round(2)
-        else:
-            design_agg["revenue_share"] = 0.0
-        design_agg = design_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
+    )
+    fig_dc.update_layout(
+        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)", height=380,
+        margin=dict(l=0, r=0, t=20, b=0),
+        xaxis=dict(tickangle=-40, showgrid=False),
+        yaxis=dict(showgrid=True, gridcolor="#2d303e"),
+        legend=dict(title="Jewelry Type", orientation="h", y=1.14),
+        bargap=0.25
+    )
+    st.plotly_chart(fig_dc, config={"displayModeBar":False}, use_container_width=True)
 
-        # Top-20 bar chart — only plot codes with actual revenue
-        top20 = design_agg[design_agg["revenue"] > 0].head(20)
+    # Design code searchable table
+    ds1, ds2 = st.columns([3,1])
+    with ds1:
+        dc_search = st.text_input("🔎 Search Design Code or Stone",
+                                   placeholder="e.g. FC_SB or Diamond…",
+                                   key="merch_dc_search",
+                                   label_visibility="collapsed")
+    with ds2:
+        dc_top_n = st.selectbox("Show top", [25, 50, 100, "All"],
+                                 key="merch_dc_topn", label_visibility="collapsed")
 
-        # FIX #6: guard before rendering chart
-        if top20.empty:
-            st.info("No revenue recorded for any design code in this selection.")
-        else:
-            fig_dc = px.bar(
-                top20, x="design_code", y="revenue",
-                color="jewelry_type",
-                custom_data=["orders","aov","variants","stones"],
-                labels={"revenue":"Revenue ($)","design_code":"Design Code",
-                        "jewelry_type":"Type"},
-                text=top20["revenue"].apply(
-                    lambda v: f"${v/1000:.1f}k" if v >= 1000 else f"${v:.0f}")
-            )
-            fig_dc.update_traces(
-                textposition="outside",
-                hovertemplate=(
-                    "<b>%{x}</b><br>Revenue: $%{y:,.0f}<br>"
-                    "Orders: %{customdata[0]:,.0f}<br>"
-                    "AOV: $%{customdata[1]:.2f}<br>"
-                    "Variants: %{customdata[2]}<br>"
-                    "Stones: %{customdata[3]}<extra></extra>"
-                )
-            )
-            fig_dc.update_layout(
-                template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)", height=380,
-                margin=dict(l=0, r=0, t=24, b=0),
-                xaxis=dict(tickangle=-40, showgrid=False),
-                yaxis=dict(showgrid=True, gridcolor="#2d303e"),
-                legend=dict(title="Jewelry Type", orientation="h", y=1.14),
-                bargap=0.25
-            )
-            st.plotly_chart(fig_dc, config={"displayModeBar":False},
-                            use_container_width=True)
+    dc_disp = design_agg.copy()
+    if dc_search.strip():
+        q2 = dc_search.strip()
+        dc_disp = dc_disp[
+            dc_disp["design_code"].str.contains(q2, case=False, na=False) |
+            dc_disp["stones"].str.contains(q2, case=False, na=False)
+        ]
+    if dc_top_n != "All":
+        dc_disp = dc_disp.head(int(dc_top_n))
 
-        # Searchable design code table
-        ds1, ds2 = st.columns([3, 1])
-        with ds1:
-            dc_search = st.text_input(
-                "🔎 Search Design Code or Stone",
-                placeholder="e.g. FC_SB or Diamond…",
-                key="merch_dc_search", label_visibility="collapsed"
-            )
-        with ds2:
-            dc_top_n = st.selectbox("Show top", [25, 50, 100, "All"],
-                                    key="merch_dc_topn", label_visibility="collapsed")
-
-        dc_disp = design_agg.copy()
-        if dc_search.strip():
-            q2 = dc_search.strip()
-            dc_disp = dc_disp[
-                dc_disp["design_code"].str.contains(q2, case=False, na=False) |
-                dc_disp["stones"].str.contains(q2, case=False, na=False)
-            ]
-        if dc_top_n != "All":
-            dc_disp = dc_disp.head(int(dc_top_n))
-
-        # FIX #4: safe max
-        _max_rev_dc = float(design_agg["revenue"].max()) if not design_agg.empty else 1.0
-        _max_rev_dc = max(_max_rev_dc, 1.0)
-
-        st.dataframe(
-            dc_disp[["design_code","jewelry_type","stones","variants",
-                     "revenue","orders","aov","revenue_share"]],
-            column_config={
-                "design_code":   st.column_config.TextColumn("Design Code",  width="medium"),
-                "jewelry_type":  st.column_config.TextColumn("Jewelry Type", width="small"),
-                "stones":        st.column_config.TextColumn("Stones",       width="large"),
-                "variants":      st.column_config.NumberColumn("# Variants", format="%d"),
-                "revenue":       st.column_config.ProgressColumn(
-                                    "Revenue ($)", format="$%d",
-                                    min_value=0, max_value=_max_rev_dc),
-                "orders":        st.column_config.NumberColumn("Orders",     format="%d"),
-                "aov":           st.column_config.NumberColumn("AOV ($)",    format="$%.2f"),
-                "revenue_share": st.column_config.NumberColumn("Rev Share %",format="%.2f%%"),
-            },
-            hide_index=True, use_container_width=True, height=430
-        )
-        st.caption(f"Showing {len(dc_disp):,} of {len(design_agg):,} Design Codes")
-        st.download_button(
-            "📥 Download Design Code Report (CSV)",
-            dc_disp.to_csv(index=False).encode("utf-8"),
-            "design_code_performance.csv", "text/csv", key="dl_merch_design"
-        )
+    st.dataframe(
+        dc_disp[["design_code","jewelry_type","stones","variants",
+                 "revenue","orders","aov","revenue_share"]],
+        column_config={
+            "design_code":   st.column_config.TextColumn("Design Code",   width="medium"),
+            "jewelry_type":  st.column_config.TextColumn("Jewelry Type",  width="small"),
+            "stones":        st.column_config.TextColumn("Stones",        width="large"),
+            "variants":      st.column_config.NumberColumn("# Variants",  format="%d"),
+            "revenue":       st.column_config.ProgressColumn(
+                                "Revenue ($)", format="$%d",
+                                min_value=0, max_value=int(design_agg["revenue"].max())),
+            "orders":        st.column_config.NumberColumn("Orders",      format="%d"),
+            "aov":           st.column_config.NumberColumn("AOV ($)",     format="$%.2f"),
+            "revenue_share": st.column_config.NumberColumn("Rev Share %", format="%.2f%%"),
+        },
+        hide_index=True, use_container_width=True, height=430
+    )
+    st.caption(f"Showing {len(dc_disp):,} of {len(design_agg):,} Design Codes")
+    st.download_button(
+        "📥 Download Design Code Report (CSV)",
+        dc_disp.to_csv(index=False).encode("utf-8"),
+        "design_code_performance.csv", "text/csv", key="dl_merch_design"
+    )
 
     st.markdown("---")
 
-    # ════════════════════════════════════════════════════════════════════════
-    # SECTION 4 — Jewelry Type × Stone Heatmap
-    # ════════════════════════════════════════════════════════════════════════
+    # ════════════════════════════════════════════════════════════════════════════
+    # SECTION 4 ── Jewelry Type × Stone Heatmap
+    # ════════════════════════════════════════════════════════════════════════════
     st.markdown("### 🔥 Revenue Heatmap — Jewelry Type × Stone")
-    st.caption(
-        "Top 15 stones by revenue shown. "
-        "Colour intensity = revenue. Hover for exact figure."
-    )
+    st.caption("Top 15 stones shown. Colour intensity and label = revenue. Hover for exact figure.")
 
     heat_raw = (
-        df_m.groupby(["jewelry_type","stone"], dropna=False)["revenue"]
+        df_m.groupby(["jewelry_type","stone"])["revenue"]
         .sum().reset_index()
     )
-    # Only keep top-15 stones to keep the chart readable
+    # Keep top 15 stones by total revenue so the chart stays readable
     top15_stones = (
         heat_raw.groupby("stone")["revenue"].sum()
         .nlargest(15).index.tolist()
     )
-    heat_filtered = heat_raw[heat_raw["stone"].isin(top15_stones)]
+    heat_raw = heat_raw[heat_raw["stone"].isin(top15_stones)]
+    pivot = heat_raw.pivot(index="jewelry_type", columns="stone", values="revenue").fillna(0)
 
-    # FIX #4: guard pivot on empty frame
-    if heat_filtered.empty:
-        st.info("No heatmap data for the current selection.")
-    else:
-        pivot = (
-            heat_filtered
-            .pivot(index="jewelry_type", columns="stone", values="revenue")
-            .fillna(0)
-        )
-        text_matrix = [
-            [
-                f"${v/1000:.1f}k" if v >= 1000 else (f"${v:.0f}" if v > 0 else "")
-                for v in row
-            ]
-            for row in pivot.values
-        ]
-        fig_heat = go.Figure(data=go.Heatmap(
-            z=pivot.values,
-            x=pivot.columns.tolist(),
-            y=pivot.index.tolist(),
-            colorscale="Blues",
-            hoverongaps=False,
-            hovertemplate="<b>%{y}</b> × <b>%{x}</b><br>Revenue: $%{z:,.0f}<extra></extra>",
-            text=text_matrix,
-            texttemplate="%{text}",
-            textfont={"size": 9}
-        ))
-        fig_heat.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            height=max(320, len(pivot) * 42 + 80),
-            margin=dict(l=0, r=0, t=10, b=0),
-            xaxis=dict(tickangle=-42, side="bottom"),
-            yaxis=dict(autorange="reversed")
-        )
-        st.plotly_chart(fig_heat, config={"displayModeBar":False},
-                        use_container_width=True)
+    text_matrix = [
+        [f"${v/1000:.0f}k" if v > 0 else "" for v in row]
+        for row in pivot.values
+    ]
+    fig_heat = go.Figure(data=go.Heatmap(
+        z=pivot.values,
+        x=pivot.columns.tolist(),
+        y=pivot.index.tolist(),
+        colorscale="Blues",
+        hoverongaps=False,
+        hovertemplate="<b>%{y}</b> × <b>%{x}</b><br>Revenue: $%{z:,.0f}<extra></extra>",
+        text=text_matrix,
+        texttemplate="%{text}",
+        textfont={"size": 9}
+    ))
+    fig_heat.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        height=max(320, len(pivot) * 42 + 80),
+        margin=dict(l=0, r=0, t=10, b=0),
+        xaxis=dict(tickangle=-42, side="bottom"),
+        yaxis=dict(autorange="reversed")
+    )
+    st.plotly_chart(fig_heat, config={"displayModeBar":False}, use_container_width=True)
 
-    # ── Unmatched SKUs ────────────────────────────────────────────────────
-    unmatched = sales_parents - merch_parents
-    if unmatched:
-        with st.expander(f"ℹ️ {len(unmatched):,} sales SKUs have no merchandising record"):
-            st.caption("These Parent SKUs appear in sales data but not in Merchandising_data.xlsx.")
-            st.dataframe(
-                pd.DataFrame(sorted(unmatched), columns=["Parent SKU"]),
-                hide_index=True, use_container_width=True, height=250
-            )
-            st.download_button(
-                "📥 Download Unmatched SKU List",
-                pd.DataFrame(sorted(unmatched), columns=["Parent SKU"])
-                  .to_csv(index=False).encode("utf-8"),
-                "unmatched_skus.csv", "text/csv", key="dl_unmatched"
-            )
+    # Unmatched callout (collapsible)
+    if len(sales_parents - merch_parents) > 0:
+        with st.expander(f"ℹ️ {len(sales_parents - merch_parents):,} sales SKUs with no merchandising match"):
+            st.caption("These Parent SKUs have sales data but were not found in Merchandising_data.xlsx.")
+            unmatched_df = pd.DataFrame(sorted(sales_parents - merch_parents), columns=["Parent SKU"])
+            st.dataframe(unmatched_df, hide_index=True, use_container_width=True, height=250)
+            st.download_button("📥 Download Unmatched SKU List",
+                               unmatched_df.to_csv(index=False).encode("utf-8"),
+                               "unmatched_skus.csv", "text/csv", key="dl_unmatched")
 
 # ---------------- FOOTER ----------------
 st.markdown("---")
