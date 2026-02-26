@@ -55,6 +55,7 @@ def compute_channel_matrix(df_s: pd.DataFrame, df_sp: pd.DataFrame) -> pd.DataFr
     ch_matrix["roas"] = np.where(ch_matrix["spend"] > 0, ch_matrix["revenue"] / ch_matrix["spend"], 0)
     ch_matrix["aov"] = np.where(ch_matrix["orders"] > 0, ch_matrix["revenue"] / ch_matrix["orders"], 0)
     return ch_matrix
+io.templates.default = "plotly_dark"
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
@@ -2951,7 +2952,11 @@ with tabs[9]:
     st.markdown("---")
 
     # ── Enrich sales data with merch attributes ───────────────────────────────
-    df_enriched = df_s.merge(
+    # Drop any columns from df_s that also exist in merch_lookup (except the join key)
+    # to prevent pandas from creating _x / _y suffixed duplicates after the merge.
+    _merch_cols = ["design_code", "jewelry_type", "stone"]
+    _df_s_clean = df_s.drop(columns=[c for c in _merch_cols if c in df_s.columns], errors="ignore")
+    df_enriched = _df_s_clean.merge(
         merch_lookup[["Parent","design_code","jewelry_type","stone"]],
         on="Parent", how="left"
     )
