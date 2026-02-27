@@ -5,12 +5,17 @@ import plotly.graph_objects as go
 
 import plotly.io as pio
 import io, base64, zipfile
+import re, html
 
-from reportlab.lib.pagesizes import LETTER
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, Table as RLTable, TableStyle, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-from reportlab.lib.units import inch
+try:
+    from reportlab.lib.pagesizes import LETTER
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, Table as RLTable, TableStyle, PageBreak
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib import colors
+    from reportlab.lib.units import inch
+    REPORTLAB_AVAILABLE = True
+except ModuleNotFoundError:
+    REPORTLAB_AVAILABLE = False
 
 def _fig_to_png_bytes(fig, width=1200, height=650, scale=2):
     """Convert a Plotly figure to PNG bytes (uses kaleido if available)."""
@@ -27,6 +32,30 @@ def _render_df_html(df: pd.DataFrame, max_rows: int = 250) -> str:
     if len(view) > max_rows:
         view = view.head(max_rows)
     return view.to_html(index=False, escape=False)
+
+
+
+def _rl_safe_paragraph(text: str) -> str:
+    """Sanitize text for ReportLab Paragraph (very strict XML-like parser)."""
+    if text is None:
+        return ""
+    t = str(text)
+
+    # Normalize breaks
+    t = t.replace("\r\n", "\n").replace("\r", "\n")
+
+    # Convert common HTML breaks to newlines
+    t = re.sub(r"(?i)<br\s*/?>", "\n", t)
+
+    # Strip all remaining HTML tags (ReportLab supports only a small subset)
+    t = re.sub(r"<[^>]+>", "", t)
+
+    # Escape XML special chars
+    t = html.escape(t)
+
+    # ReportLab uses <br/> for line breaks
+    t = t.replace("\n", "<br/>")
+    return t
 
 def build_weekly_html_report(title: str, subtitle: str, report_meta: dict, kpi_rows: list, sections: list) -> bytes:
     """
@@ -143,13 +172,13 @@ def build_weekly_pdf_report(title: str, subtitle: str, report_meta: dict, kpi_ro
     styles.add(ParagraphStyle(name="SmallX", parent=styles["Normal"], fontSize=9, leading=12))
 
     story = []
-    story.append(Paragraph(title, styles["TitleX"]))
-    story.append(Paragraph(subtitle, styles["SubX"]))
+    story.append(Paragraph(_rl_safe_paragraph(title), styles["TitleX"]))
+    story.append(Paragraph(_rl_safe_paragraph(subtitle), styles["SubX"]))
 
     # Meta box
     meta_lines = []
     for k, v in (report_meta or {}).items():
-        meta_lines.append(f"<b>{k}:</b> {v}")
+        meta_lines.append(f"<b>{html.escape(str(k))}:</b> {html.escape(str(v))}")
     if meta_lines:
         story.append(Paragraph("<br/>".join(meta_lines), styles["MetaX"]))
         story.append(Spacer(1, 10))
@@ -158,9 +187,9 @@ def build_weekly_pdf_report(title: str, subtitle: str, report_meta: dict, kpi_ro
     if kpi_rows:
         kpi_cells = []
         for r in kpi_rows:
-            label = r.get("label","")
-            value = r.get("value","")
-            delta = r.get("delta","")
+            label = html.escape(str(r.get("label","")))
+            value = html.escape(str(r.get("value","")))
+            delta = html.escape(str(r.get("delta","")))
             cell = f"<b>{label}</b><br/><font size='14'>{value}</font><br/><font size='9' color='#6B7280'>{delta}</font>"
             kpi_cells.append(Paragraph(cell, styles["SmallX"]))
         cols = 4
@@ -185,9 +214,9 @@ def build_weekly_pdf_report(title: str, subtitle: str, report_meta: dict, kpi_ro
 
     # Sections
     for s in sections or []:
-        story.append(Paragraph(s.get("title",""), styles["H2X"]))
+        story.append(Paragraph(_rl_safe_paragraph(s.get("title","")), styles["H2X"]))
         if s.get("text"):
-            story.append(Paragraph(str(s["text"]), styles["SmallX"]))
+            story.append(Paragraph(_rl_safe_paragraph(s.get("text","")), styles["SmallX"]))
             story.append(Spacer(1, 8))
 
         # Figures
@@ -3057,23 +3086,20 @@ Same period last year: **{report['yoy_period']}**
             sections=sections_payload
         )
 
-        # Build PDF + HTML exports (includes charts/tables as rendered above)
+        # Build HTML export (includes charts/tables as rendered above)
 
-        pdf_bytes = build_weekly_pdf_report(
-            title="Performance Report (Full Export)",
-            subtitle=f"{report['report_start']} to {report['report_end']}",
-            report_meta=report_meta,
-            kpi_rows=kpi_rows,
-            sections=sections_payload
-        )
+        pdf_bytes = None
+        if REPORTLAB_AVAILABLE:
+            pdf_bytes = build_weekly_pdf_report(
+                title="Performance Report (Full Export)",
+                subtitle=f"{report['report_start']} to {report['report_end']}",
+                report_meta=report_meta,
+                kpi_rows=kpi_rows,
+                sections=sections_payload
+            )
+        else:
+            st.warning("PDF export requires the 'reportlab' package. Add it to requirements.txt (reportlab==4.*) or use the HTML export and print to PDF from your browser.")
 
-        html_bytes = build_weekly_html_report(
-            title="Performance Report (Full Export)",
-            subtitle=f"{report['report_start']} to {report['report_end']}",
-            report_meta=report_meta,
-            kpi_rows=kpi_rows,
-            sections=sections_payload
-        )
 
         # ZIP bundle: PDF + HTML + PNG charts + CSV tables
         zip_files = [("weekly_report.pdf", pdf_bytes)]
@@ -3094,13 +3120,16 @@ Same period last year: **{report['yoy_period']}**
 
         ex1, ex2, ex3, ex4 = st.columns(4)
         with ex1:
-            st.download_button(
-                "📄 Download Report (PDF)",
-                pdf_bytes,
-                f"weekly_report_{report['report_start']}_{report['report_end']}.pdf",
-                "application/pdf",
-                key="download_pdf"
-            )
+            if pdf_bytes:
+                st.download_button(
+                    "📄 Download Report (PDF)",
+                    pdf_bytes,
+                    f"weekly_report_{report['report_start']}_{report['report_end']}.pdf",
+                    "application/pdf",
+                    key="download_pdf"
+                )
+            else:
+                st.caption("📄 PDF export unavailable (install reportlab) — use HTML → Print to PDF.")
         with ex2:
             st.download_button(
                 "🖥️ Download Report (HTML)",
