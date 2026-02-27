@@ -6,6 +6,12 @@ import plotly.graph_objects as go
 import plotly.io as pio
 import io, base64, zipfile
 
+from reportlab.lib.pagesizes import LETTER
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, Table as RLTable, TableStyle, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.lib.units import inch
+
 def _fig_to_png_bytes(fig, width=1200, height=650, scale=2):
     """Convert a Plotly figure to PNG bytes (uses kaleido if available)."""
     try:
@@ -116,6 +122,128 @@ def build_weekly_zip_bundle(html_bytes: bytes, files: list) -> bytes:
             z.writestr(fname, b)
     return buf.getvalue()
 
+
+def build_weekly_pdf_report(title: str, subtitle: str, report_meta: dict, kpi_rows: list, sections: list) -> bytes:
+    """Create an attractive, printable PDF report that includes all charts (as PNGs) and tables."""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=LETTER,
+        leftMargin=0.6*inch,
+        rightMargin=0.6*inch,
+        topMargin=0.6*inch,
+        bottomMargin=0.6*inch
+    )
+
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="TitleX", parent=styles["Title"], fontSize=20, leading=24, spaceAfter=6))
+    styles.add(ParagraphStyle(name="SubX", parent=styles["Normal"], fontSize=11, textColor=colors.HexColor("#4B5563"), spaceAfter=14))
+    styles.add(ParagraphStyle(name="H2X", parent=styles["Heading2"], fontSize=13, leading=16, spaceBefore=10, spaceAfter=6))
+    styles.add(ParagraphStyle(name="MetaX", parent=styles["Normal"], fontSize=9, textColor=colors.HexColor("#374151"), leading=12))
+    styles.add(ParagraphStyle(name="SmallX", parent=styles["Normal"], fontSize=9, leading=12))
+
+    story = []
+    story.append(Paragraph(title, styles["TitleX"]))
+    story.append(Paragraph(subtitle, styles["SubX"]))
+
+    # Meta box
+    meta_lines = []
+    for k, v in (report_meta or {}).items():
+        meta_lines.append(f"<b>{k}:</b> {v}")
+    if meta_lines:
+        story.append(Paragraph("<br/>".join(meta_lines), styles["MetaX"]))
+        story.append(Spacer(1, 10))
+
+    # KPI cards as a table (2 rows x 4 cols if possible)
+    if kpi_rows:
+        kpi_cells = []
+        for r in kpi_rows:
+            label = r.get("label","")
+            value = r.get("value","")
+            delta = r.get("delta","")
+            cell = f"<b>{label}</b><br/><font size='14'>{value}</font><br/><font size='9' color='#6B7280'>{delta}</font>"
+            kpi_cells.append(Paragraph(cell, styles["SmallX"]))
+        cols = 4
+        rows = [kpi_cells[i:i+cols] for i in range(0, len(kpi_cells), cols)]
+        # pad last row
+        if rows and len(rows[-1]) < cols:
+            rows[-1] += [Paragraph("", styles["SmallX"]) for _ in range(cols-len(rows[-1]))]
+
+        kpi_table = RLTable(rows, colWidths=[(doc.width/cols)]*cols)
+        kpi_table.setStyle(TableStyle([
+            ('BACKGROUND',(0,0),(-1,-1), colors.HexColor("#F9FAFB")),
+            ('BOX',(0,0),(-1,-1), 0.7, colors.HexColor("#E5E7EB")),
+            ('INNERGRID',(0,0),(-1,-1), 0.4, colors.HexColor("#E5E7EB")),
+            ('VALIGN',(0,0),(-1,-1), 'TOP'),
+            ('LEFTPADDING',(0,0),(-1,-1), 8),
+            ('RIGHTPADDING',(0,0),(-1,-1), 8),
+            ('TOPPADDING',(0,0),(-1,-1), 8),
+            ('BOTTOMPADDING',(0,0),(-1,-1), 8),
+        ]))
+        story.append(kpi_table)
+        story.append(Spacer(1, 14))
+
+    # Sections
+    for s in sections or []:
+        story.append(Paragraph(s.get("title",""), styles["H2X"]))
+        if s.get("text"):
+            story.append(Paragraph(str(s["text"]), styles["SmallX"]))
+            story.append(Spacer(1, 8))
+
+        # Figures
+        for f in s.get("figs", []):
+            png = f.get("png_bytes")
+            name = f.get("name","")
+            if png:
+                try:
+                    img = RLImage(io.BytesIO(png))
+                    img.drawWidth = doc.width
+                    img.drawHeight = img.imageHeight * (doc.width / img.imageWidth)
+                    story.append(img)
+                    if name:
+                        story.append(Spacer(1, 4))
+                        story.append(Paragraph(f"<font color='#6B7280'>{name}</font>", styles["SmallX"]))
+                    story.append(Spacer(1, 10))
+                except Exception:
+                    story.append(Paragraph(f"(Could not embed chart: {name})", styles["SmallX"]))
+            else:
+                story.append(Paragraph(f"(Chart PNG unavailable: {name})", styles["SmallX"]))
+
+        # Tables
+        for t in s.get("tables", []):
+            df = t.get("df")
+            tname = t.get("name","Table")
+            if df is None or not hasattr(df, "columns"):
+                continue
+            story.append(Paragraph(tname, styles["SmallX"]))
+            # Convert to table data
+            max_rows = min(len(df), 60)  # keep PDF readable; still includes 'everything' via ZIP CSV
+            data = [list(map(str, df.columns.tolist()))] + [list(map(lambda x: "" if pd.isna(x) else str(x), row)) for row in df.head(max_rows).values.tolist()]
+            table = RLTable(data, repeatRows=1, colWidths=None)
+            table.setStyle(TableStyle([
+                ('BACKGROUND',(0,0),(-1,0), colors.HexColor("#111827")),
+                ('TEXTCOLOR',(0,0),(-1,0), colors.white),
+                ('FONTNAME',(0,0),(-1,0), 'Helvetica-Bold'),
+                ('FONTSIZE',(0,0),(-1,0), 9),
+                ('GRID',(0,0),(-1,-1), 0.3, colors.HexColor("#E5E7EB")),
+                ('FONTSIZE',(0,1),(-1,-1), 8),
+                ('VALIGN',(0,0),(-1,-1), 'TOP'),
+                ('LEFTPADDING',(0,0),(-1,-1), 4),
+                ('RIGHTPADDING',(0,0),(-1,-1), 4),
+                ('TOPPADDING',(0,0),(-1,-1), 3),
+                ('BOTTOMPADDING',(0,0),(-1,-1), 3),
+            ]))
+            # zebra striping
+            for r in range(1, len(data)):
+                if r % 2 == 0:
+                    table.setStyle(TableStyle([('BACKGROUND',(0,r),(-1,r), colors.HexColor("#F9FAFB"))]))
+            story.append(table)
+            if len(df) > max_rows:
+                story.append(Paragraph(f"<font color='#6B7280'>Showing first {max_rows} rows in PDF. Full table is included in ZIP as CSV.</font>", styles["SmallX"]))
+            story.append(Spacer(1, 12))
+
+    doc.build(story)
+    return buf.getvalue()
 from gsheets import load_all_sheets
 from datetime import date, timedelta, datetime
 import numpy as np
@@ -2929,40 +3057,69 @@ Same period last year: **{report['yoy_period']}**
             sections=sections_payload
         )
 
-        # ZIP: HTML + PNG charts + CSV tables
-        zip_files = []
+        # Build PDF + HTML exports (includes charts/tables as rendered above)
+
+        pdf_bytes = build_weekly_pdf_report(
+            title="Performance Report (Full Export)",
+            subtitle=f"{report['report_start']} to {report['report_end']}",
+            report_meta=report_meta,
+            kpi_rows=kpi_rows,
+            sections=sections_payload
+        )
+
+        html_bytes = build_weekly_html_report(
+            title="Performance Report (Full Export)",
+            subtitle=f"{report['report_start']} to {report['report_end']}",
+            report_meta=report_meta,
+            kpi_rows=kpi_rows,
+            sections=sections_payload
+        )
+
+        # ZIP bundle: PDF + HTML + PNG charts + CSV tables
+        zip_files = [("weekly_report.pdf", pdf_bytes)]
+
+        # Add charts
         for i, (n, fig) in enumerate(export_figs, start=1):
             png = _fig_to_png_bytes(fig)
             if png:
                 safe = n.lower().replace(" ", "_").replace("/", "_")
                 zip_files.append((f"charts/{i:02d}_{safe}.png", png))
 
+        # Add tables
         for i, (n, df) in enumerate(export_tables, start=1):
             safe = n.lower().replace(" ", "_").replace("/", "_")
             zip_files.append((f"tables/{i:02d}_{safe}.csv", _df_to_csv_bytes(df)))
 
         zip_bytes = build_weekly_zip_bundle(html_bytes, zip_files)
 
-        ex1, ex2, ex3 = st.columns(3)
+        ex1, ex2, ex3, ex4 = st.columns(4)
         with ex1:
             st.download_button(
-                "📥 Download FULL Report (HTML)",
+                "📄 Download Report (PDF)",
+                pdf_bytes,
+                f"weekly_report_{report['report_start']}_{report['report_end']}.pdf",
+                "application/pdf",
+                key="download_pdf"
+            )
+        with ex2:
+            st.download_button(
+                "🖥️ Download Report (HTML)",
                 html_bytes,
                 f"weekly_report_{report['report_start']}_{report['report_end']}.html",
                 "text/html",
                 key="download_html"
             )
-        with ex2:
+        with ex3:
             st.download_button(
-                "📦 Download FULL Bundle (ZIP)",
+                "📦 Download Bundle (ZIP)",
                 zip_bytes,
                 f"weekly_report_{report['report_start']}_{report['report_end']}.zip",
                 "application/zip",
                 key="download_zip"
             )
-        with ex3:
+        with ex4:
             st.download_button(
-                "📝 Download Text Summary (Markdown)",
+                "📝 Text Summary (Markdown)",
                 markdown_report,
                 f"report_{report['report_start']}_{report['report_end']}.md",
                 "text/markdown",
