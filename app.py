@@ -2,283 +2,37 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-
-import plotly.io as pio
-import io, base64, zipfile
-import re, html
-
-try:
-    from reportlab.lib.pagesizes import LETTER
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, Table as RLTable, TableStyle, PageBreak
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib import colors
-    from reportlab.lib.units import inch
-    REPORTLAB_AVAILABLE = True
-except ModuleNotFoundError:
-    REPORTLAB_AVAILABLE = False
-
-def _fig_to_png_bytes(fig, width=1200, height=650, scale=2):
-    """Convert a Plotly figure to PNG bytes (uses kaleido if available)."""
-    try:
-        return pio.to_image(fig, format="png", width=width, height=height, scale=scale)
-    except Exception:
-        return None
-
-def _df_to_csv_bytes(df: pd.DataFrame) -> bytes:
-    return df.to_csv(index=False).encode("utf-8")
-
-def _render_df_html(df: pd.DataFrame, max_rows: int = 250) -> str:
-    view = df.copy()
-    if len(view) > max_rows:
-        view = view.head(max_rows)
-    return view.to_html(index=False, escape=False)
-
-
-
-def _rl_safe_paragraph(text: str) -> str:
-    """Sanitize text for ReportLab Paragraph (very strict XML-like parser)."""
-    if text is None:
-        return ""
-    t = str(text)
-
-    # Normalize breaks
-    t = t.replace("\r\n", "\n").replace("\r", "\n")
-
-    # Convert common HTML breaks to newlines
-    t = re.sub(r"(?i)<br\s*/?>", "\n", t)
-
-    # Strip all remaining HTML tags (ReportLab supports only a small subset)
-    t = re.sub(r"<[^>]+>", "", t)
-
-    # Escape XML special chars
-    t = html.escape(t)
-
-    # ReportLab uses <br/> for line breaks
-    t = t.replace("\n", "<br/>")
-    return t
-
-def build_weekly_html_report(title: str, subtitle: str, report_meta: dict, kpi_rows: list, sections: list) -> bytes:
-    """
-    sections: list of dicts:
-      {
-        "title": "...",
-        "text": "...optional (HTML allowed)...",
-        "figs": [{"name": "...", "png_bytes": b"..."}],
-        "tables": [{"name": "...", "df": dataframe}]
-      }
-    """
-    css = """
-    <style>
-      body{font-family:Inter,Arial,sans-serif;background:#0f1116;color:#e5e7eb;margin:0;padding:24px}
-      .container{max-width:1100px;margin:0 auto}
-      .h1{font-size:28px;font-weight:800;margin:0 0 6px}
-      .sub{color:#9ca3af;margin:0 0 18px}
-      .meta{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:12px 14px;margin:10px 0 18px;color:#cbd5e1}
-      .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 18px}
-      .kpi{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:12px}
-      .kpi .label{font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em}
-      .kpi .val{font-size:20px;font-weight:800;margin-top:6px}
-      .kpi .delta{color:#9ca3af;font-size:12px;margin-top:6px}
-      .sec{margin:18px 0 22px;padding:14px;border:1px solid #1f2937;border-radius:14px;background:#0b1220}
-      .sec h2{margin:0 0 10px;font-size:18px}
-      .sec p{margin:8px 0;color:#cbd5e1}
-      .img{margin:12px 0;padding:10px;background:#0f172a;border:1px solid #1f2937;border-radius:12px}
-      .img .cap{color:#9ca3af;font-size:12px;margin:6px 0 0}
-      table{width:100%;border-collapse:collapse;margin-top:10px}
-      th,td{border:1px solid #1f2937;padding:8px;font-size:12px}
-      th{background:#111827;color:#e5e7eb}
-      td{color:#d1d5db}
-      .footer{color:#6b7280;font-size:12px;margin-top:18px}
-      @media print { body{background:#fff;color:#111} .sec,.meta,.kpi{background:#fff} th{background:#f3f4f6;color:#111} }
-    </style>
-    """
-
-    meta_html = "<br>".join([f"<b>{k}</b>: {v}" for k, v in report_meta.items()])
-
-    kpi_html = ""
-    for r in kpi_rows:
-        kpi_html += f"""
-          <div class="kpi">
-            <div class="label">{r.get('label','')}</div>
-            <div class="val">{r.get('value','')}</div>
-            <div class="delta">{r.get('delta','')}</div>
-          </div>
-        """
-
-    sec_html = ""
-    for s in sections:
-        sec_html += f'<div class="sec"><h2>{s.get("title","")}</h2>'
-        if s.get("text"):
-            sec_html += f'<p>{s["text"]}</p>'
-
-        for f in s.get("figs", []):
-            if f.get("png_bytes"):
-                b64 = base64.b64encode(f["png_bytes"]).decode("utf-8")
-                sec_html += f"""
-                  <div class="img">
-                    <img src="data:image/png;base64,{b64}" style="width:100%;height:auto;border-radius:10px" />
-                    <div class="cap">{f.get("name","")}</div>
-                  </div>
-                """
-            else:
-                sec_html += f"<p><i>Chart '{f.get('name','')}' could not be embedded (PNG export failed).</i></p>"
-
-        for t in s.get("tables", []):
-            sec_html += f"<h3 style='margin:14px 0 6px;font-size:14px;color:#e5e7eb'>{t.get('name','')}</h3>"
-            sec_html += _render_df_html(t["df"])
-
-        sec_html += "</div>"
-
-    html = f"""
-    <html><head><meta charset="utf-8"/>{css}</head>
-    <body><div class="container">
-      <div class="h1">{title}</div>
-      <div class="sub">{subtitle}</div>
-      <div class="meta">{meta_html}</div>
-      <div class="kpis">{kpi_html}</div>
-      {sec_html}
-      <div class="footer">Generated by Marketplace Business Insights Dashboard</div>
-    </div></body></html>
-    """
-    return html.encode("utf-8")
-
-def build_weekly_zip_bundle(html_bytes: bytes, files: list) -> bytes:
-    """files: list of tuples -> (filename, bytes)"""
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
-        z.writestr("weekly_report.html", html_bytes)
-        for fname, b in files:
-            z.writestr(fname, b)
-    return buf.getvalue()
-
-
-def build_weekly_pdf_report(title: str, subtitle: str, report_meta: dict, kpi_rows: list, sections: list) -> bytes:
-    """Create an attractive, printable PDF report that includes all charts (as PNGs) and tables."""
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf,
-        pagesize=LETTER,
-        leftMargin=0.6*inch,
-        rightMargin=0.6*inch,
-        topMargin=0.6*inch,
-        bottomMargin=0.6*inch
-    )
-
-    styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="TitleX", parent=styles["Title"], fontSize=20, leading=24, spaceAfter=6))
-    styles.add(ParagraphStyle(name="SubX", parent=styles["Normal"], fontSize=11, textColor=colors.HexColor("#4B5563"), spaceAfter=14))
-    styles.add(ParagraphStyle(name="H2X", parent=styles["Heading2"], fontSize=13, leading=16, spaceBefore=10, spaceAfter=6))
-    styles.add(ParagraphStyle(name="MetaX", parent=styles["Normal"], fontSize=9, textColor=colors.HexColor("#374151"), leading=12))
-    styles.add(ParagraphStyle(name="SmallX", parent=styles["Normal"], fontSize=9, leading=12))
-
-    story = []
-    story.append(Paragraph(_rl_safe_paragraph(title), styles["TitleX"]))
-    story.append(Paragraph(_rl_safe_paragraph(subtitle), styles["SubX"]))
-
-    # Meta box
-    meta_lines = []
-    for k, v in (report_meta or {}).items():
-        meta_lines.append(f"<b>{html.escape(str(k))}:</b> {html.escape(str(v))}")
-    if meta_lines:
-        story.append(Paragraph("<br/>".join(meta_lines), styles["MetaX"]))
-        story.append(Spacer(1, 10))
-
-    # KPI cards as a table (2 rows x 4 cols if possible)
-    if kpi_rows:
-        kpi_cells = []
-        for r in kpi_rows:
-            label = html.escape(str(r.get("label","")))
-            value = html.escape(str(r.get("value","")))
-            delta = html.escape(str(r.get("delta","")))
-            cell = f"<b>{label}</b><br/><font size='14'>{value}</font><br/><font size='9' color='#6B7280'>{delta}</font>"
-            kpi_cells.append(Paragraph(cell, styles["SmallX"]))
-        cols = 4
-        rows = [kpi_cells[i:i+cols] for i in range(0, len(kpi_cells), cols)]
-        # pad last row
-        if rows and len(rows[-1]) < cols:
-            rows[-1] += [Paragraph("", styles["SmallX"]) for _ in range(cols-len(rows[-1]))]
-
-        kpi_table = RLTable(rows, colWidths=[(doc.width/cols)]*cols)
-        kpi_table.setStyle(TableStyle([
-            ('BACKGROUND',(0,0),(-1,-1), colors.HexColor("#F9FAFB")),
-            ('BOX',(0,0),(-1,-1), 0.7, colors.HexColor("#E5E7EB")),
-            ('INNERGRID',(0,0),(-1,-1), 0.4, colors.HexColor("#E5E7EB")),
-            ('VALIGN',(0,0),(-1,-1), 'TOP'),
-            ('LEFTPADDING',(0,0),(-1,-1), 8),
-            ('RIGHTPADDING',(0,0),(-1,-1), 8),
-            ('TOPPADDING',(0,0),(-1,-1), 8),
-            ('BOTTOMPADDING',(0,0),(-1,-1), 8),
-        ]))
-        story.append(kpi_table)
-        story.append(Spacer(1, 14))
-
-    # Sections
-    for s in sections or []:
-        story.append(Paragraph(_rl_safe_paragraph(s.get("title","")), styles["H2X"]))
-        if s.get("text"):
-            story.append(Paragraph(_rl_safe_paragraph(s.get("text","")), styles["SmallX"]))
-            story.append(Spacer(1, 8))
-
-        # Figures
-        for f in s.get("figs", []):
-            png = f.get("png_bytes")
-            name = f.get("name","")
-            if png:
-                try:
-                    img = RLImage(io.BytesIO(png))
-                    img.drawWidth = doc.width
-                    img.drawHeight = img.imageHeight * (doc.width / img.imageWidth)
-                    story.append(img)
-                    if name:
-                        story.append(Spacer(1, 4))
-                        story.append(Paragraph(f"<font color='#6B7280'>{name}</font>", styles["SmallX"]))
-                    story.append(Spacer(1, 10))
-                except Exception:
-                    story.append(Paragraph(f"(Could not embed chart: {name})", styles["SmallX"]))
-            else:
-                story.append(Paragraph(f"(Chart PNG unavailable: {name})", styles["SmallX"]))
-
-        # Tables
-        for t in s.get("tables", []):
-            df = t.get("df")
-            tname = t.get("name","Table")
-            if df is None or not hasattr(df, "columns"):
-                continue
-            story.append(Paragraph(tname, styles["SmallX"]))
-            # Convert to table data
-            max_rows = min(len(df), 60)  # keep PDF readable; still includes 'everything' via ZIP CSV
-            data = [list(map(str, df.columns.tolist()))] + [list(map(lambda x: "" if pd.isna(x) else str(x), row)) for row in df.head(max_rows).values.tolist()]
-            table = RLTable(data, repeatRows=1, colWidths=None)
-            table.setStyle(TableStyle([
-                ('BACKGROUND',(0,0),(-1,0), colors.HexColor("#111827")),
-                ('TEXTCOLOR',(0,0),(-1,0), colors.white),
-                ('FONTNAME',(0,0),(-1,0), 'Helvetica-Bold'),
-                ('FONTSIZE',(0,0),(-1,0), 9),
-                ('GRID',(0,0),(-1,-1), 0.3, colors.HexColor("#E5E7EB")),
-                ('FONTSIZE',(0,1),(-1,-1), 8),
-                ('VALIGN',(0,0),(-1,-1), 'TOP'),
-                ('LEFTPADDING',(0,0),(-1,-1), 4),
-                ('RIGHTPADDING',(0,0),(-1,-1), 4),
-                ('TOPPADDING',(0,0),(-1,-1), 3),
-                ('BOTTOMPADDING',(0,0),(-1,-1), 3),
-            ]))
-            # zebra striping
-            for r in range(1, len(data)):
-                if r % 2 == 0:
-                    table.setStyle(TableStyle([('BACKGROUND',(0,r),(-1,r), colors.HexColor("#F9FAFB"))]))
-            story.append(table)
-            if len(df) > max_rows:
-                story.append(Paragraph(f"<font color='#6B7280'>Showing first {max_rows} rows in PDF. Full table is included in ZIP as CSV.</font>", styles["SmallX"]))
-            story.append(Spacer(1, 12))
-
-    doc.build(story)
-    return buf.getvalue()
 from gsheets import load_all_sheets
 from datetime import date, timedelta, datetime
 import numpy as np
 import json
 import hashlib
 import re
+import io as _io
+
+# PDF generation
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+        HRFlowable, Image as RLImage, PageBreak, KeepTogether
+    )
+    REPORTLAB_OK = True
+except ImportError:
+    REPORTLAB_OK = False
+
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker as mticker
+    MATPLOTLIB_OK = True
+except ImportError:
+    MATPLOTLIB_OK = False
 
 # Configure Plotly
 import plotly.io as pio
@@ -2546,6 +2300,527 @@ with tabs[6]:
                         st.rerun()
     else:
         st.info("📝 No A/B tests created yet. Use the forms above to create your first test!")
+# ─────────────────────────────────────────────────────────────────────────────
+# PDF REPORT GENERATOR
+# ─────────────────────────────────────────────────────────────────────────────
+def _make_chart_revenue_trend(daily_df, yoy_df=None, period_label="", yoy_label=""):
+    """Return BytesIO PNG: daily revenue area chart, optionally with YoY overlay."""
+    fig, ax = plt.subplots(figsize=(7.5, 2.8), facecolor="#0f1117")
+    ax.set_facecolor("#0f1117")
+
+    x = range(len(daily_df))
+    y = daily_df["revenue"].values
+    ax.fill_between(x, y, alpha=0.25, color="#3b82f6")
+    ax.plot(x, y, color="#3b82f6", linewidth=2.2, label=period_label or "This Period")
+
+    if yoy_df is not None and len(yoy_df) > 0:
+        xy = range(len(yoy_df))
+        yy = yoy_df["revenue"].values
+        ax.plot(xy, yy, color="#f59e0b", linewidth=1.6, linestyle="--", label=yoy_label or "Last Year")
+
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"${v:,.0f}"))
+    ax.set_xlabel("Day of Period", color="#9ca3af", fontsize=8)
+    ax.set_ylabel("Revenue", color="#9ca3af", fontsize=8)
+    ax.tick_params(colors="#9ca3af", labelsize=7)
+    for spine in ax.spines.values():
+        spine.set_edgecolor("#2d303e")
+    ax.legend(fontsize=7, facecolor="#1a1d29", edgecolor="#2d303e", labelcolor="white")
+    ax.grid(axis="y", color="#2d303e", linewidth=0.5)
+    plt.tight_layout(pad=0.5)
+
+    buf = _io.BytesIO()
+    fig.savefig(buf, format="png", dpi=140, bbox_inches="tight", facecolor="#0f1117")
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
+def _make_chart_marketplace(ch_df):
+    """Return BytesIO PNG: horizontal bar chart of marketplace revenue."""
+    ch = ch_df.sort_values("revenue").tail(10)
+    fig, ax = plt.subplots(figsize=(7.5, max(2.4, len(ch) * 0.42)), facecolor="#0f1117")
+    ax.set_facecolor("#0f1117")
+
+    colors_list = ["#3b82f6", "#6366f1", "#8b5cf6", "#a78bfa", "#60a5fa",
+                   "#34d399", "#f59e0b", "#f87171", "#fb923c", "#38bdf8"]
+    bars = ax.barh(ch["channel"], ch["revenue"],
+                   color=[colors_list[i % len(colors_list)] for i in range(len(ch))],
+                   height=0.6, edgecolor="none")
+
+    for bar, val in zip(bars, ch["revenue"]):
+        ax.text(bar.get_width() + max(ch["revenue"]) * 0.01, bar.get_y() + bar.get_height() / 2,
+                f"${val:,.0f}", va="center", ha="left", color="white", fontsize=7.5)
+
+    ax.set_xlabel("Revenue ($)", color="#9ca3af", fontsize=8)
+    ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"${v:,.0f}"))
+    ax.tick_params(colors="#9ca3af", labelsize=8)
+    for spine in ax.spines.values():
+        spine.set_edgecolor("#2d303e")
+    ax.grid(axis="x", color="#2d303e", linewidth=0.5)
+    plt.tight_layout(pad=0.5)
+
+    buf = _io.BytesIO()
+    fig.savefig(buf, format="png", dpi=140, bbox_inches="tight", facecolor="#0f1117")
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
+def _make_chart_kpi_bars(m, ym=None):
+    """Return BytesIO PNG: grouped bar chart comparing This Period vs Last Year for key metrics."""
+    metrics  = ["Revenue", "Net Profit", "Ad Spend", "Orders"]
+    keys_m   = ["Revenue", "Net",        "Spend",    "Orders"]
+    curr_vals = [m.get(k, 0) for k in keys_m]
+    yoy_vals  = [ym.get(k, 0) for k in keys_m] if ym else None
+
+    fig, ax = plt.subplots(figsize=(7.5, 2.6), facecolor="#0f1117")
+    ax.set_facecolor("#0f1117")
+    x = np.arange(len(metrics))
+    width = 0.35 if yoy_vals else 0.5
+
+    ax.bar(x - (width/2 if yoy_vals else 0), curr_vals, width,
+           label="This Period", color="#3b82f6", edgecolor="none")
+    if yoy_vals:
+        ax.bar(x + width/2, yoy_vals, width,
+               label="Last Year", color="#f59e0b", alpha=0.75, edgecolor="none")
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(metrics, color="#9ca3af", fontsize=8)
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"${v:,.0f}" if v >= 1000 else f"{v:,.0f}"))
+    ax.tick_params(colors="#9ca3af", labelsize=7)
+    for spine in ax.spines.values():
+        spine.set_edgecolor("#2d303e")
+    ax.grid(axis="y", color="#2d303e", linewidth=0.5)
+    if yoy_vals:
+        ax.legend(fontsize=7, facecolor="#1a1d29", edgecolor="#2d303e", labelcolor="white")
+    plt.tight_layout(pad=0.5)
+
+    buf = _io.BytesIO()
+    fig.savefig(buf, format="png", dpi=140, bbox_inches="tight", facecolor="#0f1117")
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
+def _make_chart_roas_acos(ch_df):
+    """Return BytesIO PNG: ROAS vs ACOS scatter / bar per marketplace."""
+    if ch_df is None or len(ch_df) == 0:
+        return None
+    ch = ch_df[ch_df["spend"] > 0].head(10)
+    if ch.empty:
+        return None
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.5, 2.6), facecolor="#0f1117")
+    for ax in (ax1, ax2):
+        ax.set_facecolor("#0f1117")
+        for spine in ax.spines.values():
+            spine.set_edgecolor("#2d303e")
+        ax.tick_params(colors="#9ca3af", labelsize=7)
+        ax.grid(axis="y", color="#2d303e", linewidth=0.5)
+
+    labels = ch["channel"].str[:12].tolist()
+    x = np.arange(len(labels))
+
+    ax1.bar(x, ch["roas"], color="#34d399", edgecolor="none", width=0.6)
+    ax1.set_title("ROAS by Marketplace", color="white", fontsize=8, pad=4)
+    ax1.set_xticks(x); ax1.set_xticklabels(labels, rotation=30, ha="right", fontsize=6.5)
+    ax1.axhline(y=1, color="#f87171", linewidth=1, linestyle="--", alpha=0.7)
+
+    ax2.bar(x, ch["acos"], color="#f59e0b", edgecolor="none", width=0.6)
+    ax2.set_title("ACOS % by Marketplace", color="white", fontsize=8, pad=4)
+    ax2.set_xticks(x); ax2.set_xticklabels(labels, rotation=30, ha="right", fontsize=6.5)
+    ax2.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{v:.0f}%"))
+
+    plt.tight_layout(pad=0.8)
+    buf = _io.BytesIO()
+    fig.savefig(buf, format="png", dpi=140, bbox_inches="tight", facecolor="#0f1117")
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
+def generate_pdf_report(report, m, ym, has_yoy, ch_report, sku_now_df, recommendations_list, safe_margin=0.62):
+    """Build and return PDF bytes for the weekly performance report."""
+    buf = _io.BytesIO()
+
+    # ── Colour palette ────────────────────────────────────────────────────────
+    BG       = colors.HexColor("#0f1117")
+    CARD_BG  = colors.HexColor("#1a1d29")
+    BORDER   = colors.HexColor("#2d303e")
+    BLUE     = colors.HexColor("#3b82f6")
+    AMBER    = colors.HexColor("#f59e0b")
+    GREEN    = colors.HexColor("#34d399")
+    RED      = colors.HexColor("#f87171")
+    PURPLE   = colors.HexColor("#8b5cf6")
+    WHITE    = colors.white
+    MUTED    = colors.HexColor("#9ca3af")
+
+    PAGE_W, PAGE_H = A4
+
+    # ── Document ─────────────────────────────────────────────────────────────
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=14*mm, rightMargin=14*mm,
+        topMargin=12*mm,  bottomMargin=12*mm,
+    )
+
+    # ── Styles ───────────────────────────────────────────────────────────────
+    def S(name, **kw):
+        base = getSampleStyleSheet()["Normal"]
+        return ParagraphStyle(name, parent=base, **kw)
+
+    sTitle     = S("sTitle",     fontSize=22, textColor=WHITE,  alignment=TA_CENTER, leading=28, fontName="Helvetica-Bold")
+    sSubtitle  = S("sSubtitle",  fontSize=10, textColor=MUTED,  alignment=TA_CENTER, leading=14)
+    sH1        = S("sH1",        fontSize=13, textColor=WHITE,  leading=18, fontName="Helvetica-Bold", spaceBefore=10)
+    sH2        = S("sH2",        fontSize=10, textColor=BLUE,   leading=14, fontName="Helvetica-Bold", spaceBefore=6)
+    sBody      = S("sBody",      fontSize=8.5, textColor=MUTED, leading=12)
+    sKpiVal    = S("sKpiVal",    fontSize=16, textColor=WHITE,  alignment=TA_CENTER, fontName="Helvetica-Bold", leading=20)
+    sKpiLabel  = S("sKpiLabel",  fontSize=7,  textColor=MUTED,  alignment=TA_CENTER, leading=10)
+    sKpiDelta  = S("sKpiDelta",  fontSize=7.5, alignment=TA_CENTER, leading=10)
+    sRec       = S("sRec",       fontSize=8.5, textColor=WHITE, leading=13, leftIndent=6)
+    sFooter    = S("sFooter",    fontSize=7,  textColor=MUTED,  alignment=TA_CENTER)
+    sTH        = S("sTH",        fontSize=7.5, textColor=WHITE, fontName="Helvetica-Bold", alignment=TA_CENTER, leading=11)
+    sTD        = S("sTD",        fontSize=7.5, textColor=MUTED, alignment=TA_CENTER, leading=11)
+    sTDL       = S("sTDL",       fontSize=7.5, textColor=MUTED, alignment=TA_LEFT,   leading=11)
+
+    story = []
+    avail_w = PAGE_W - 28*mm   # usable width
+
+    # ─── Helper: KPI card table ───────────────────────────────────────────────
+    def kpi_card(label, value_str, delta_str=None, delta_good=True):
+        delta_color = GREEN if delta_good else RED
+        d_cell = Paragraph(delta_str, ParagraphStyle("d", parent=sKpiDelta, textColor=delta_color)) \
+                 if delta_str else Spacer(1, 8)
+        return Table(
+            [[Paragraph(value_str, sKpiVal)],
+             [Paragraph(label,     sKpiLabel)],
+             [d_cell]],
+            colWidths=[avail_w / 4 - 3*mm],
+            rowHeights=[22, 12, 12],
+            style=TableStyle([
+                ("BACKGROUND", (0,0), (-1,-1), CARD_BG),
+                ("BOX",        (0,0), (-1,-1), 0.5, BORDER),
+                ("ROUNDEDCORNERS", [4]),
+                ("TOPPADDING",    (0,0), (-1,-1), 6),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+                ("LEFTPADDING",   (0,0), (-1,-1), 4),
+                ("RIGHTPADDING",  (0,0), (-1,-1), 4),
+            ])
+        )
+
+    # ─── Helper: pct delta string ─────────────────────────────────────────────
+    def pct_delta(curr, prev):
+        if prev is None or prev == 0:
+            return None, True
+        p = (curr - prev) / abs(prev) * 100
+        sign = "▲" if p > 0 else "▼"
+        return f"{sign} {abs(p):.1f}% vs LY", p > 0
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # PAGE 1 — COVER
+    # ══════════════════════════════════════════════════════════════════════════
+    story.append(Spacer(1, 18*mm))
+
+    # Coloured accent bar
+    story.append(Table(
+        [[""]],
+        colWidths=[avail_w], rowHeights=[3],
+        style=TableStyle([("BACKGROUND", (0,0), (-1,-1), BLUE)])
+    ))
+    story.append(Spacer(1, 6*mm))
+
+    story.append(Paragraph("📊 Performance Report", sTitle))
+    story.append(Spacer(1, 4*mm))
+    story.append(Paragraph(f"Period: {report['period']}", sSubtitle))
+    if has_yoy:
+        story.append(Paragraph(f"YoY Baseline: {report['yoy_period']}", sSubtitle))
+    mp_scope = report.get("marketplace_label", "All Marketplaces")
+    story.append(Paragraph(f"Marketplace Scope: {mp_scope}", sSubtitle))
+    story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y  %H:%M')}", sSubtitle))
+    story.append(Spacer(1, 8*mm))
+
+    story.append(Table(
+        [[""]],
+        colWidths=[avail_w], rowHeights=[1.5],
+        style=TableStyle([("BACKGROUND", (0,0), (-1,-1), BORDER)])
+    ))
+    story.append(Spacer(1, 8*mm))
+
+    # ── KPI summary block on cover ─────────────────────────────────────────
+    story.append(Paragraph("Key Performance Indicators", sH1))
+    story.append(Spacer(1, 3*mm))
+
+    def _kpi_row(kpi_list):
+        """kpi_list: list of (label, value_str, delta_str, delta_good)"""
+        cells = [kpi_card(lbl, val, dstr, dgood) for lbl, val, dstr, dgood in kpi_list]
+        t = Table([cells], colWidths=[avail_w/4]*4,
+                  style=TableStyle([("LEFTPADDING", (0,0), (-1,-1), 2),
+                                    ("RIGHTPADDING", (0,0), (-1,-1), 2)]))
+        return t
+
+    d1, g1 = pct_delta(m["Revenue"],    ym["Revenue"]    if ym else None)
+    d2, g2 = pct_delta(m["Orders"],     ym["Orders"]     if ym else None)
+    d3, g3 = pct_delta(m["ROAS"],       ym["ROAS"]       if ym else None)
+    d4, g4 = pct_delta(m["Net"],        ym["Net"]        if ym else None)
+    d5, g5 = pct_delta(m["Spend"],      ym["Spend"]      if ym else None)
+    d6, g6 = pct_delta(m["Commission"], ym["Commission"] if ym else None)
+    d7, _  = pct_delta(m["ACOS"],       ym["ACOS"]       if ym else None); g7 = (d7 is not None and "▼" in d7)  # lower ACOS = good
+    d8, g8 = pct_delta(m["AOV"],        ym["AOV"]        if ym else None)
+
+    story.append(_kpi_row([
+        ("💰 Revenue",    f"${m['Revenue']:,.0f}",    d1, g1),
+        ("🛒 Orders",     f"{m['Orders']:,.0f}",      d2, g2),
+        ("🎯 ROAS",       f"{m['ROAS']:.2f}x",        d3, g3),
+        ("💹 Net Profit", f"${m['Net']:,.0f}",         d4, g4),
+    ]))
+    story.append(Spacer(1, 2*mm))
+    story.append(_kpi_row([
+        ("📢 Ad Spend",   f"${m['Spend']:,.0f}",      d5, not g5),   # lower spend delta may or may not be good — neutral
+        ("🏪 Commission", f"${m['Commission']:,.0f}",  d6, not g6),
+        ("📊 ACOS",       f"{m['ACOS']:.1f}%",         d7, g7),
+        ("🧾 AOV",        f"${m['AOV']:.2f}",           d8, g8),
+    ]))
+
+    story.append(Spacer(1, 6*mm))
+
+    # ── KPI comparison bar chart ──────────────────────────────────────────
+    if MATPLOTLIB_OK:
+        chart_kpi = _make_chart_kpi_bars(m, ym if has_yoy else None)
+        story.append(Paragraph("Revenue, Profit & Spend at a Glance", sH2))
+        story.append(Spacer(1, 1*mm))
+        img = RLImage(chart_kpi, width=avail_w, height=avail_w * 2.6/7.5)
+        story.append(img)
+
+    story.append(PageBreak())
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # PAGE 2 — REVENUE TRENDS
+    # ══════════════════════════════════════════════════════════════════════════
+    if report["sections"].get("trends") or (has_yoy and report["sections"].get("yoy")):
+        story.append(Paragraph("📈 Revenue Trends", sH1))
+        story.append(HRFlowable(width=avail_w, thickness=0.5, color=BORDER, spaceAfter=4))
+
+        s_data = report["sales_data"]
+        y_data = report.get("yoy_sales", pd.DataFrame())
+
+        if not s_data.empty:
+            daily_curr = s_data.groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
+            daily_curr["day"] = range(len(daily_curr))
+
+            daily_yoy = None
+            if has_yoy and not y_data.empty:
+                daily_yoy = y_data.groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
+                daily_yoy["day"] = range(len(daily_yoy))
+
+            if MATPLOTLIB_OK:
+                trend_buf = _make_chart_revenue_trend(
+                    daily_curr, daily_yoy,
+                    period_label=f"This Period ({report['period'][:6]})",
+                    yoy_label=f"Last Year ({report['yoy_period'][:6]})" if has_yoy else ""
+                )
+                story.append(Paragraph("Daily Revenue — This Period vs Last Year" if has_yoy else "Daily Revenue Trend", sH2))
+                story.append(Spacer(1, 1*mm))
+                img = RLImage(trend_buf, width=avail_w, height=avail_w * 2.8/7.5)
+                story.append(img)
+                story.append(Spacer(1, 4*mm))
+
+        # ── YoY comparison table ──────────────────────────────────────────
+        if has_yoy:
+            story.append(Paragraph("Year-over-Year Comparison", sH2))
+            story.append(Spacer(1, 1*mm))
+
+            yoy_data = [
+                ["Metric", "This Period", "Last Year", "Change", "Trend"],
+                ["Revenue",    f"${m['Revenue']:,.0f}",    f"${ym['Revenue']:,.0f}",    f"{(m['Revenue']-ym['Revenue'])/ym['Revenue']*100 if ym['Revenue'] else 0:+.1f}%", "📈" if m['Revenue'] >= ym['Revenue'] else "📉"],
+                ["Orders",     f"{m['Orders']:,.0f}",      f"{ym['Orders']:,.0f}",      f"{(m['Orders']-ym['Orders'])/ym['Orders']*100 if ym['Orders'] else 0:+.1f}%",   "📈" if m['Orders'] >= ym['Orders'] else "📉"],
+                ["ROAS",       f"{m['ROAS']:.2f}x",        f"{ym['ROAS']:.2f}x",        f"{(m['ROAS']-ym['ROAS'])/ym['ROAS']*100 if ym['ROAS'] else 0:+.1f}%",          "📈" if m['ROAS'] >= ym['ROAS'] else "📉"],
+                ["Net Profit", f"${m['Net']:,.0f}",         f"${ym['Net']:,.0f}",        f"{(m['Net']-ym['Net'])/abs(ym['Net'])*100 if ym['Net'] else 0:+.1f}%",         "📈" if m['Net'] >= ym['Net'] else "📉"],
+                ["Ad Spend",   f"${m['Spend']:,.0f}",      f"${ym['Spend']:,.0f}",      f"{(m['Spend']-ym['Spend'])/ym['Spend']*100 if ym['Spend'] else 0:+.1f}%",      "—"],
+                ["ACOS",       f"{m['ACOS']:.1f}%",         f"{ym['ACOS']:.1f}%",        f"{(m['ACOS']-ym['ACOS'])/ym['ACOS']*100 if ym['ACOS'] else 0:+.1f}%",         "📉" if m['ACOS'] < ym['ACOS'] else "📈"],
+                ["AOV",        f"${m['AOV']:.2f}",           f"${ym['AOV']:.2f}",         f"{(m['AOV']-ym['AOV'])/ym['AOV']*100 if ym['AOV'] else 0:+.1f}%",             "📈" if m['AOV'] >= ym['AOV'] else "📉"],
+            ]
+
+            col_w = [avail_w*0.26, avail_w*0.20, avail_w*0.20, avail_w*0.20, avail_w*0.14]
+            tbl_yoy = Table(
+                [[Paragraph(c, sTH if r == 0 else sTD) for c in row] for r, row in enumerate(yoy_data)],
+                colWidths=col_w,
+                style=TableStyle([
+                    ("BACKGROUND", (0,0), (-1,0), BLUE),
+                    ("BACKGROUND", (0,1), (-1,-1), CARD_BG),
+                    ("ROWBACKGROUNDS", (0,1), (-1,-1), [CARD_BG, colors.HexColor("#1f2335")]),
+                    ("BOX",       (0,0), (-1,-1), 0.5, BORDER),
+                    ("INNERGRID", (0,0), (-1,-1), 0.3, BORDER),
+                    ("TOPPADDING",    (0,0), (-1,-1), 5),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+                    ("LEFTPADDING",   (0,0), (-1,-1), 6),
+                ])
+            )
+            story.append(tbl_yoy)
+            story.append(Spacer(1, 4*mm))
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # PAGE 3 — MARKETPLACE BREAKDOWN
+    # ══════════════════════════════════════════════════════════════════════════
+    if report["sections"].get("marketplaces") and ch_report is not None and len(ch_report) > 0:
+        story.append(PageBreak())
+        story.append(Paragraph("🛒 Marketplace Breakdown", sH1))
+        story.append(HRFlowable(width=avail_w, thickness=0.5, color=BORDER, spaceAfter=4))
+
+        if MATPLOTLIB_OK:
+            # Revenue bar chart
+            mp_buf = _make_chart_marketplace(ch_report)
+            story.append(Paragraph("Revenue by Marketplace", sH2))
+            story.append(Spacer(1, 1*mm))
+            img = RLImage(mp_buf, width=avail_w, height=avail_w * max(2.4, len(ch_report)*0.42) / 7.5)
+            story.append(img)
+            story.append(Spacer(1, 3*mm))
+
+            # ROAS/ACOS side-by-side
+            roas_buf = _make_chart_roas_acos(ch_report)
+            if roas_buf:
+                story.append(Paragraph("ROAS & ACOS by Marketplace", sH2))
+                story.append(Spacer(1, 1*mm))
+                img2 = RLImage(roas_buf, width=avail_w, height=avail_w * 2.6/7.5)
+                story.append(img2)
+                story.append(Spacer(1, 3*mm))
+
+        # Detailed table
+        story.append(Paragraph("Marketplace Detail Table", sH2))
+        story.append(Spacer(1, 1*mm))
+
+        has_yoy_col = "yoy_revenue" in ch_report.columns
+        if has_yoy_col:
+            mp_headers = ["Marketplace", "Revenue", "Orders", "Ad Spend", "ROAS", "ACOS", "LY Rev", "YoY Δ"]
+            col_w_mp = [avail_w*0.20, avail_w*0.12, avail_w*0.09, avail_w*0.12,
+                        avail_w*0.09, avail_w*0.09, avail_w*0.12, avail_w*0.10, avail_w*0.07]
+        else:
+            mp_headers = ["Marketplace", "Revenue", "Orders", "Ad Spend", "ROAS", "ACOS"]
+            col_w_mp = [avail_w*0.28, avail_w*0.16, avail_w*0.12, avail_w*0.16, avail_w*0.14, avail_w*0.14]
+
+        mp_rows = [[Paragraph(h, sTH) for h in mp_headers]]
+        for _, row in ch_report.iterrows():
+            r = [
+                Paragraph(str(row["channel"]), sTDL),
+                Paragraph(f"${row['revenue']:,.0f}", sTD),
+                Paragraph(f"{row['orders']:,.0f}", sTD),
+                Paragraph(f"${row['spend']:,.0f}", sTD),
+                Paragraph(f"{row['roas']:.2f}x", sTD),
+                Paragraph(f"{row['acos']:.1f}%", sTD),
+            ]
+            if has_yoy_col:
+                yoy_g = row.get("yoy_growth", float("nan"))
+                yoy_str = f"{yoy_g:+.1f}%" if not np.isnan(yoy_g) else "—"
+                r += [Paragraph(f"${row.get('yoy_revenue',0):,.0f}", sTD),
+                      Paragraph(yoy_str, sTD)]
+            mp_rows.append(r)
+
+        tbl_mp = Table(mp_rows, colWidths=col_w_mp[:len(mp_headers)],
+                       style=TableStyle([
+                           ("BACKGROUND", (0,0), (-1,0), PURPLE),
+                           ("ROWBACKGROUNDS", (0,1), (-1,-1), [CARD_BG, colors.HexColor("#1f2335")]),
+                           ("BOX",       (0,0), (-1,-1), 0.5, BORDER),
+                           ("INNERGRID", (0,0), (-1,-1), 0.3, BORDER),
+                           ("TOPPADDING",    (0,0), (-1,-1), 5),
+                           ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+                           ("LEFTPADDING",   (0,0), (-1,-1), 5),
+                       ]))
+        story.append(tbl_mp)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # PAGE 4 — TOP SKUs & RECOMMENDATIONS
+    # ══════════════════════════════════════════════════════════════════════════
+    story.append(PageBreak())
+
+    # ── Top SKUs ────────────────────────────────────────────────────────────
+    if report["sections"].get("skus") and sku_now_df is not None and len(sku_now_df) > 0:
+        story.append(Paragraph("🏷️ Top SKU Performance", sH1))
+        story.append(HRFlowable(width=avail_w, thickness=0.5, color=BORDER, spaceAfter=4))
+
+        has_sku_yoy = "yoy_revenue" in sku_now_df.columns
+        if has_sku_yoy:
+            sku_headers = ["SKU / Parent", "Revenue", "Orders", "AOV", "LY Rev", "YoY Δ"]
+            col_w_sku = [avail_w*0.35, avail_w*0.14, avail_w*0.10, avail_w*0.12, avail_w*0.14, avail_w*0.13, avail_w*0.02]
+        else:
+            sku_headers = ["SKU / Parent", "Revenue", "Orders", "AOV"]
+            col_w_sku = [avail_w*0.46, avail_w*0.20, avail_w*0.16, avail_w*0.18]
+
+        sku_rows = [[Paragraph(h, sTH) for h in sku_headers]]
+        for _, row in sku_now_df.head(10).iterrows():
+            r = [
+                Paragraph(str(row.get("Parent", ""))[:40], sTDL),
+                Paragraph(f"${row['revenue']:,.0f}", sTD),
+                Paragraph(f"{row['orders']:,.0f}", sTD),
+                Paragraph(f"${row.get('aov', 0):.2f}", sTD),
+            ]
+            if has_sku_yoy:
+                yoy_g = row.get("yoy_growth", float("nan"))
+                yoy_str = f"{yoy_g:+.1f}%" if not np.isnan(yoy_g) else "—"
+                r += [Paragraph(f"${row.get('yoy_revenue',0):,.0f}", sTD),
+                      Paragraph(yoy_str, sTD)]
+            sku_rows.append(r)
+
+        tbl_sku = Table(sku_rows, colWidths=col_w_sku[:len(sku_headers)],
+                        style=TableStyle([
+                            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#059669")),
+                            ("ROWBACKGROUNDS", (0,1), (-1,-1), [CARD_BG, colors.HexColor("#1f2335")]),
+                            ("BOX",       (0,0), (-1,-1), 0.5, BORDER),
+                            ("INNERGRID", (0,0), (-1,-1), 0.3, BORDER),
+                            ("TOPPADDING",    (0,0), (-1,-1), 5),
+                            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+                            ("LEFTPADDING",   (0,0), (-1,-1), 5),
+                        ]))
+        story.append(tbl_sku)
+        story.append(Spacer(1, 5*mm))
+
+    # ── Recommendations ──────────────────────────────────────────────────────
+    if report["sections"].get("recommendations") and recommendations_list:
+        story.append(Paragraph("🚀 Strategic Recommendations", sH1))
+        story.append(HRFlowable(width=avail_w, thickness=0.5, color=BORDER, spaceAfter=4))
+
+        icon_map  = {"scale": "📈", "warn": "⚠️", "crit": "🚨", "info": "💡"}
+        color_map = {"scale": GREEN, "warn": AMBER,  "crit": RED, "info": BLUE}
+
+        for rec in recommendations_list[:6]:
+            rec_type = rec.get("type", "info")
+            accent   = color_map.get(rec_type, BLUE)
+            icon     = icon_map.get(rec_type, "💡")
+            rec_tbl = Table(
+                [[Paragraph(f"{icon} <b>{rec['title']}</b>", ParagraphStyle("rt", parent=sRec, textColor=WHITE, fontName="Helvetica-Bold", fontSize=9)),
+                  Paragraph(rec["msg"], ParagraphStyle("rm", parent=sRec, textColor=MUTED, fontSize=8))]],
+                colWidths=[avail_w*0.28, avail_w*0.72],
+                style=TableStyle([
+                    ("BACKGROUND", (0,0), (-1,-1), CARD_BG),
+                    ("LEFTBORDERPADDING", (0,0), (0,-1), 0),
+                    ("LINEAFTER",  (0,0), (0,-1), 2.5, accent),
+                    ("BOX",        (0,0), (-1,-1), 0.5, BORDER),
+                    ("TOPPADDING",    (0,0), (-1,-1), 6),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+                    ("LEFTPADDING",   (0,0), (-1,-1), 8),
+                ])
+            )
+            story.append(rec_tbl)
+            story.append(Spacer(1, 2*mm))
+
+    # ── Footer ───────────────────────────────────────────────────────────────
+    story.append(Spacer(1, 6*mm))
+    story.append(HRFlowable(width=avail_w, thickness=0.5, color=BORDER, spaceAfter=3))
+    story.append(Paragraph(
+        f"Generated by Marketplace Business Insights Dashboard  ·  {datetime.now().strftime('%B %d, %Y')}  ·  Safe Margin {safe_margin*100:.0f}%",
+        sFooter
+    ))
+
+    # ── Build ─────────────────────────────────────────────────────────────────
+    def _bg_canvas(canvas, doc_obj):
+        canvas.saveState()
+        canvas.setFillColor(BG)
+        canvas.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=_bg_canvas, onLaterPages=_bg_canvas)
+    buf.seek(0)
+    return buf.read()
+
+
 # TAB 8: Weekly Reports
 with tabs[7]:
     st.markdown('<div class="section-header">📅 Weekly Performance Reports</div>', unsafe_allow_html=True)
@@ -2697,11 +2972,6 @@ with tabs[7]:
         ym     = report['yoy_metrics']   # None if no last-year data
         has_yoy = ym is not None and report['sections']['yoy']
 
-        # Collect everything rendered in this tab for full exports
-        export_figs = []   # list of (name, plotly_fig)
-        export_tables = [] # list of (name, dataframe)
-        export_text_blocks = []  # list of (title, html_text)
-
         def _delta(curr, prev, fmt="$"):
             if prev is None or prev == 0:
                 return None
@@ -2805,7 +3075,6 @@ with tabs[7]:
                 })
 
             df_yoy = pd.DataFrame(yoy_rows)
-            export_tables.append(("YoY Comparison Table", df_yoy.copy()))
             st.dataframe(
                 df_yoy,
                 column_config={
@@ -2851,7 +3120,6 @@ with tabs[7]:
                 height=320
             )
             st.plotly_chart(fig_yoy, config={"displayModeBar": False})
-            export_figs.append(("YoY Revenue Trend", fig_yoy))
 
             # Overall YoY summary callout
             rev_growth = ((m['Revenue'] - ym['Revenue']) / ym['Revenue'] * 100) if ym['Revenue'] > 0 else 0
@@ -2881,7 +3149,6 @@ with tabs[7]:
                 margin=dict(l=0, r=0, t=10, b=0), height=260
             )
             st.plotly_chart(fig_trend, config={"displayModeBar": False})
-            export_figs.append(("Revenue Trend", fig_trend))
 
         # ── MARKETPLACE BREAKDOWN ─────────────────────────────────────────────
         ch_report = pd.DataFrame()
@@ -2925,7 +3192,6 @@ with tabs[7]:
                     "acos":    st.column_config.NumberColumn("ACOS",     format="%.1f%%"),
                 }
 
-            export_tables.append(("Marketplace Performance", ch_report.copy()))
             st.dataframe(ch_report[display_mp_cols], column_config=col_cfg_mp,
                          hide_index=True, use_container_width=True)
 
@@ -2940,7 +3206,6 @@ with tabs[7]:
             sku_now = report['sales_data'].groupby("Parent").agg({"revenue":"sum","orders":"sum"}).reset_index()
             sku_now["aov"] = sku_now["revenue"] / sku_now["orders"].replace(0, np.nan)
             sku_now = sku_now.sort_values("revenue", ascending=False).head(10)
-            export_tables.append(("Top SKUs", sku_now.copy()))
 
             if has_yoy and "Parent" in report['yoy_sales'].columns:
                 sku_yoy = report['yoy_sales'].groupby("Parent")["revenue"].sum().reset_index().rename(columns={"revenue":"yoy_revenue"})
@@ -2981,12 +3246,6 @@ with tabs[7]:
                     else:                        st.info(f"{icon} **{rec['title']}** — {rec['msg']}")
                 if not recommendations_list:
                     st.info("✅ No critical issues. Performance is stable.")
-                else:
-                    try:
-                        rec_html = "<br>".join([f"• <b>{r['title']}</b>: {r['msg']}" for r in recommendations_list[:8]])
-                        export_text_blocks.append(("Recommendations", rec_html))
-                    except Exception:
-                        pass
             except Exception:
                 st.warning("⚠️ Could not generate recommendations. Include Marketplace Breakdown for best results.")
 
@@ -3042,121 +3301,57 @@ Same period last year: **{report['yoy_period']}**
 *Generated by Marketplace Business Insights Dashboard*
 """
 
-        # Build FULL export (HTML + ZIP) that includes charts + tables shown above
-        report_meta = {
-            "This Period": report["period"],
-            "Last Year Same Period": report["yoy_period"],
-            "Marketplace Scope": report.get("marketplace_label", "All Marketplaces"),
-        }
-
-        def _fmt_money(x): 
-            return f"${x:,.0f}"
-
-        kpi_rows = [
-            {"label": "Revenue", "value": _fmt_money(m["Revenue"]), "delta": _delta(m["Revenue"], ym["Revenue"] if has_yoy else None) or ""},
-            {"label": "Orders", "value": f"{m['Orders']:,.0f}", "delta": _delta(m["Orders"], ym["Orders"] if has_yoy else None, fmt="") or ""},
-            {"label": "Ad Spend", "value": _fmt_money(m["Spend"]), "delta": _delta(m["Spend"], ym["Spend"] if has_yoy else None) or ""},
-            {"label": "ROAS", "value": f"{m['ROAS']:.2f}x", "delta": _delta(m["ROAS"], ym["ROAS"] if has_yoy else None, fmt="x") or ""},
-        ]
-
-        # Prepare section payloads
-        sections_payload = []
-
-        # Summary: charts
-        figs_payload = [{"name": n, "png_bytes": _fig_to_png_bytes(fig)} for (n, fig) in export_figs]
-        tables_payload = [{"name": n, "df": df} for (n, df) in export_tables]
-
-        sections_payload.append({
-            "title": "Weekly / Monthly Performance",
-            "text": "Charts and tables shown in the Weekly Reports tab (including YoY where available).",
-            "figs": figs_payload,
-            "tables": tables_payload
-        })
-
-        # Recommendations
-        if export_text_blocks:
-            for t, html_txt in export_text_blocks:
-                sections_payload.append({"title": t, "text": html_txt, "figs": [], "tables": []})
-
-        html_bytes = build_weekly_html_report(
-            title="Performance Report (Full Export)",
-            subtitle=f"{report['report_start']} to {report['report_end']}",
-            report_meta=report_meta,
-            kpi_rows=kpi_rows,
-            sections=sections_payload
-        )
-
-        # Build HTML export (includes charts/tables as rendered above)
-
-        pdf_bytes = None
-        if REPORTLAB_AVAILABLE:
-            pdf_bytes = build_weekly_pdf_report(
-                title="Performance Report (Full Export)",
-                subtitle=f"{report['report_start']} to {report['report_end']}",
-                report_meta=report_meta,
-                kpi_rows=kpi_rows,
-                sections=sections_payload
-            )
-        else:
-            st.warning("PDF export requires the 'reportlab' package. Add it to requirements.txt (reportlab==4.*) or use the HTML export and print to PDF from your browser.")
-
-
-        # ZIP bundle: PDF + HTML + PNG charts + CSV tables
-        zip_files = [("weekly_report.pdf", pdf_bytes)]
-
-        # Add charts
-        for i, (n, fig) in enumerate(export_figs, start=1):
-            png = _fig_to_png_bytes(fig)
-            if png:
-                safe = n.lower().replace(" ", "_").replace("/", "_")
-                zip_files.append((f"charts/{i:02d}_{safe}.png", png))
-
-        # Add tables
-        for i, (n, df) in enumerate(export_tables, start=1):
-            safe = n.lower().replace(" ", "_").replace("/", "_")
-            zip_files.append((f"tables/{i:02d}_{safe}.csv", _df_to_csv_bytes(df)))
-
-        zip_bytes = build_weekly_zip_bundle(html_bytes, zip_files)
-
-        ex1, ex2, ex3, ex4 = st.columns(4)
+        ex1, ex2, ex3 = st.columns(3)
         with ex1:
-            if pdf_bytes:
-                st.download_button(
-                    "📄 Download Report (PDF)",
-                    pdf_bytes,
-                    f"weekly_report_{report['report_start']}_{report['report_end']}.pdf",
-                    "application/pdf",
-                    key="download_pdf"
-                )
-            else:
-                st.caption("📄 PDF export unavailable (install reportlab) — use HTML → Print to PDF.")
-        with ex2:
             st.download_button(
-                "🖥️ Download Report (HTML)",
-                html_bytes,
-                f"weekly_report_{report['report_start']}_{report['report_end']}.html",
-                "text/html",
-                key="download_html"
-            )
-        with ex3:
-            st.download_button(
-                "📦 Download Bundle (ZIP)",
-                zip_bytes,
-                f"weekly_report_{report['report_start']}_{report['report_end']}.zip",
-                "application/zip",
-                key="download_zip"
-            )
-        with ex4:
-            st.download_button(
-                "📝 Text Summary (Markdown)",
+                "📥 Download Markdown",
                 markdown_report,
                 f"report_{report['report_start']}_{report['report_end']}.md",
                 "text/markdown",
                 key="download_md"
             )
+        with ex2:
+            # PDF download
+            if REPORTLAB_OK and MATPLOTLIB_OK:
+                try:
+                    # Collect sku_now_df safely
+                    _sku_df = None
+                    if report['sections']['skus'] and "Parent" in report['sales_data'].columns:
+                        _sku_now = report['sales_data'].groupby("Parent").agg({"revenue": "sum", "orders": "sum"}).reset_index()
+                        _sku_now["aov"] = _sku_now["revenue"] / _sku_now["orders"].replace(0, np.nan)
+                        _sku_now = _sku_now.sort_values("revenue", ascending=False).head(10)
+                        if has_yoy and "Parent" in report.get("yoy_sales", pd.DataFrame()).columns:
+                            _sku_yoy = report["yoy_sales"].groupby("Parent")["revenue"].sum().reset_index().rename(columns={"revenue": "yoy_revenue"})
+                            _sku_now = _sku_now.merge(_sku_yoy, on="Parent", how="left").fillna(0)
+                            _sku_now["yoy_growth"] = _sku_now.apply(
+                                lambda r: (r["revenue"] - r["yoy_revenue"]) / r["yoy_revenue"] * 100 if r["yoy_revenue"] > 0 else float("nan"), axis=1
+                            )
+                        _sku_df = _sku_now
 
-        if st.button("📋 Show Copyable Text", key="show_copy"):
-            st.text_area("Select all & copy:", markdown_report, height=200)
+                    pdf_bytes = generate_pdf_report(
+                        report=report,
+                        m=m,
+                        ym=ym,
+                        has_yoy=has_yoy,
+                        ch_report=ch_report if len(ch_report) > 0 else None,
+                        sku_now_df=_sku_df,
+                        recommendations_list=recommendations_list,
+                        safe_margin=SAFE_MARGIN,
+                    )
+                    st.download_button(
+                        "📄 Download PDF Report",
+                        pdf_bytes,
+                        f"report_{report['report_start']}_{report['report_end']}.pdf",
+                        "application/pdf",
+                        key="download_pdf"
+                    )
+                except Exception as _pdf_err:
+                    st.error(f"⚠️ PDF generation failed: {_pdf_err}")
+            else:
+                st.info("Add `reportlab` and `matplotlib` to requirements.txt to enable PDF export.")
+        with ex3:
+            if st.button("📋 Show Copyable Text", key="show_copy"):
+                st.text_area("Select all & copy:", markdown_report, height=200)
 
 # TAB 9: Data Explorer
 with tabs[8]:
