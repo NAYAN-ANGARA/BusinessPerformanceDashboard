@@ -2300,296 +2300,488 @@ with tabs[6]:
                         st.rerun()
     else:
         st.info("📝 No A/B tests created yet. Use the forms above to create your first test!")
+
 # ─────────────────────────────────────────────────────────────────────────────
-# PDF REPORT GENERATOR
+# PDF REPORT GENERATOR  (v2 – emoji-safe, visually rich)
 # ─────────────────────────────────────────────────────────────────────────────
-def _make_chart_revenue_trend(daily_df, yoy_df=None, period_label="", yoy_label=""):
-    """Return BytesIO PNG: daily revenue area chart, optionally with YoY overlay."""
-    fig, ax = plt.subplots(figsize=(7.5, 2.8), facecolor="#0f1117")
-    ax.set_facecolor("#0f1117")
 
-    x = range(len(daily_df))
-    y = daily_df["revenue"].values
-    ax.fill_between(x, y, alpha=0.25, color="#3b82f6")
-    ax.plot(x, y, color="#3b82f6", linewidth=2.2, label=period_label or "This Period")
+# ── Shared chart style ────────────────────────────────────────────────────────
+_CHART_BG   = "#0e1117"
+_CHART_CARD = "#161b27"
+_GRID_COL   = "#232736"
+_BLUE       = "#4f8ef7"
+_AMBER      = "#f5a623"
+_GREEN      = "#3ecf8e"
+_RED        = "#f87171"
+_PURPLE     = "#a78bfa"
+_TEAL       = "#38bdf8"
+_MUTED_TXT  = "#8b95a7"
+_WHITE      = "#e8eaf0"
 
-    if yoy_df is not None and len(yoy_df) > 0:
-        xy = range(len(yoy_df))
-        yy = yoy_df["revenue"].values
-        ax.plot(xy, yy, color="#f59e0b", linewidth=1.6, linestyle="--", label=yoy_label or "Last Year")
+_MP_PALETTE = [_BLUE, _PURPLE, _TEAL, _GREEN, _AMBER, "#fb923c", "#f472b6", "#34d399", "#60a5fa", "#a3e635"]
 
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"${v:,.0f}"))
-    ax.set_xlabel("Day of Period", color="#9ca3af", fontsize=8)
-    ax.set_ylabel("Revenue", color="#9ca3af", fontsize=8)
-    ax.tick_params(colors="#9ca3af", labelsize=7)
+
+def _style_ax(ax, grid_axis="y"):
+    ax.set_facecolor(_CHART_CARD)
     for spine in ax.spines.values():
-        spine.set_edgecolor("#2d303e")
-    ax.legend(fontsize=7, facecolor="#1a1d29", edgecolor="#2d303e", labelcolor="white")
-    ax.grid(axis="y", color="#2d303e", linewidth=0.5)
-    plt.tight_layout(pad=0.5)
+        spine.set_edgecolor(_GRID_COL)
+        spine.set_linewidth(0.6)
+    ax.tick_params(colors=_MUTED_TXT, labelsize=7.5, length=0)
+    if grid_axis:
+        ax.grid(axis=grid_axis, color=_GRID_COL, linewidth=0.6, linestyle="--", alpha=0.8)
+        ax.set_axisbelow(True)
 
+
+def _save_fig(fig, bg=_CHART_BG):
     buf = _io.BytesIO()
-    fig.savefig(buf, format="png", dpi=140, bbox_inches="tight", facecolor="#0f1117")
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor=bg)
     plt.close(fig)
     buf.seek(0)
     return buf
+
+
+def _make_chart_revenue_trend(daily_df, yoy_df=None, period_label="", yoy_label=""):
+    """Area + line chart: daily revenue this period vs last year."""
+    fig, ax = plt.subplots(figsize=(8, 3.0), facecolor=_CHART_BG)
+    _style_ax(ax)
+
+    x  = np.arange(len(daily_df))
+    y  = daily_df["revenue"].values
+    ax.fill_between(x, y, alpha=0.18, color=_BLUE)
+    ax.plot(x, y, color=_BLUE, linewidth=2.4, label=period_label or "This Period", zorder=3)
+
+    # Add 7-day rolling average
+    if len(y) >= 7:
+        roll = pd.Series(y).rolling(7, center=True).mean().values
+        ax.plot(x, roll, color=_TEAL, linewidth=1.4, linestyle="-", alpha=0.7, label="7-day avg")
+
+    if yoy_df is not None and len(yoy_df) > 0:
+        yy = yoy_df["revenue"].values
+        ax.plot(np.arange(len(yy)), yy, color=_AMBER, linewidth=1.8,
+                linestyle="--", alpha=0.85, label=yoy_label or "Last Year")
+
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"${v/1000:.0f}k" if v >= 1000 else f"${v:.0f}"))
+    ax.set_xlabel("Day of Period", color=_MUTED_TXT, fontsize=8, labelpad=4)
+    ax.set_ylabel("Daily Revenue", color=_MUTED_TXT, fontsize=8, labelpad=4)
+    leg = ax.legend(fontsize=7.5, facecolor=_CHART_CARD, edgecolor=_GRID_COL, labelcolor=_WHITE, loc="upper left")
+    leg.get_frame().set_linewidth(0.5)
+
+    # Annotate max point
+    max_idx = int(np.argmax(y))
+    ax.annotate(f"${y[max_idx]:,.0f}",
+                xy=(max_idx, y[max_idx]), xytext=(max_idx, y[max_idx] * 1.06),
+                color=_WHITE, fontsize=7, ha="center",
+                arrowprops=dict(arrowstyle="->", color=_MUTED_TXT, lw=0.8))
+
+    plt.tight_layout(pad=0.6)
+    return _save_fig(fig)
 
 
 def _make_chart_marketplace(ch_df):
-    """Return BytesIO PNG: horizontal bar chart of marketplace revenue."""
-    ch = ch_df.sort_values("revenue").tail(10)
-    fig, ax = plt.subplots(figsize=(7.5, max(2.4, len(ch) * 0.42)), facecolor="#0f1117")
-    ax.set_facecolor("#0f1117")
+    """Horizontal bar chart: revenue by marketplace."""
+    ch = ch_df.sort_values("revenue").tail(10).copy()
+    n  = len(ch)
+    fig, ax = plt.subplots(figsize=(8, max(2.6, n * 0.46)), facecolor=_CHART_BG)
+    _style_ax(ax, grid_axis="x")
 
-    colors_list = ["#3b82f6", "#6366f1", "#8b5cf6", "#a78bfa", "#60a5fa",
-                   "#34d399", "#f59e0b", "#f87171", "#fb923c", "#38bdf8"]
-    bars = ax.barh(ch["channel"], ch["revenue"],
-                   color=[colors_list[i % len(colors_list)] for i in range(len(ch))],
-                   height=0.6, edgecolor="none")
+    bar_colors = [_MP_PALETTE[i % len(_MP_PALETTE)] for i in range(n)]
+    bars = ax.barh(ch["channel"], ch["revenue"], color=bar_colors, height=0.58, edgecolor="none")
 
+    max_rev = ch["revenue"].max()
     for bar, val in zip(bars, ch["revenue"]):
-        ax.text(bar.get_width() + max(ch["revenue"]) * 0.01, bar.get_y() + bar.get_height() / 2,
-                f"${val:,.0f}", va="center", ha="left", color="white", fontsize=7.5)
+        pct = val / max_rev * 100 if max_rev > 0 else 0
+        ax.text(val + max_rev * 0.012, bar.get_y() + bar.get_height() / 2,
+                f"  ${val:,.0f}  ({pct:.0f}%)",
+                va="center", ha="left", color=_WHITE, fontsize=7.5, fontweight="bold")
 
-    ax.set_xlabel("Revenue ($)", color="#9ca3af", fontsize=8)
-    ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"${v:,.0f}"))
-    ax.tick_params(colors="#9ca3af", labelsize=8)
-    for spine in ax.spines.values():
-        spine.set_edgecolor("#2d303e")
-    ax.grid(axis="x", color="#2d303e", linewidth=0.5)
-    plt.tight_layout(pad=0.5)
-
-    buf = _io.BytesIO()
-    fig.savefig(buf, format="png", dpi=140, bbox_inches="tight", facecolor="#0f1117")
-    plt.close(fig)
-    buf.seek(0)
-    return buf
+    ax.set_xlim(0, max_rev * 1.28)
+    ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"${v/1000:.0f}k" if v >= 1000 else f"${v:.0f}"))
+    ax.set_xlabel("Revenue", color=_MUTED_TXT, fontsize=8, labelpad=4)
+    ax.tick_params(axis="y", labelcolor=_WHITE, labelsize=8)
+    plt.tight_layout(pad=0.6)
+    return _save_fig(fig)
 
 
 def _make_chart_kpi_bars(m, ym=None):
-    """Return BytesIO PNG: grouped bar chart comparing This Period vs Last Year for key metrics."""
-    metrics  = ["Revenue", "Net Profit", "Ad Spend", "Orders"]
-    keys_m   = ["Revenue", "Net",        "Spend",    "Orders"]
-    curr_vals = [m.get(k, 0) for k in keys_m]
-    yoy_vals  = [ym.get(k, 0) for k in keys_m] if ym else None
+    """Grouped bar chart: Revenue / Net Profit / Ad Spend / Orders."""
+    labels    = ["Revenue", "Net Profit", "Ad Spend", "Orders"]
+    keys      = ["Revenue", "Net",        "Spend",    "Orders"]
+    curr_vals = [m.get(k, 0) for k in keys]
+    yoy_vals  = [ym.get(k, 0) for k in keys] if ym else None
 
-    fig, ax = plt.subplots(figsize=(7.5, 2.6), facecolor="#0f1117")
-    ax.set_facecolor("#0f1117")
-    x = np.arange(len(metrics))
-    width = 0.35 if yoy_vals else 0.5
+    fig, axes = plt.subplots(1, 4, figsize=(8, 2.8), facecolor=_CHART_BG)
+    kpi_colors = [_BLUE, _GREEN, _AMBER, _PURPLE]
 
-    ax.bar(x - (width/2 if yoy_vals else 0), curr_vals, width,
-           label="This Period", color="#3b82f6", edgecolor="none")
-    if yoy_vals:
-        ax.bar(x + width/2, yoy_vals, width,
-               label="Last Year", color="#f59e0b", alpha=0.75, edgecolor="none")
+    for i, (ax, lbl, cv, kc) in enumerate(zip(axes, labels, curr_vals, kpi_colors)):
+        ax.set_facecolor(_CHART_CARD)
+        for spine in ax.spines.values():
+            spine.set_edgecolor(_GRID_COL)
+            spine.set_linewidth(0.5)
+        ax.tick_params(colors=_MUTED_TXT, labelsize=6.5, length=0)
 
-    ax.set_xticks(x)
-    ax.set_xticklabels(metrics, color="#9ca3af", fontsize=8)
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"${v:,.0f}" if v >= 1000 else f"{v:,.0f}"))
-    ax.tick_params(colors="#9ca3af", labelsize=7)
-    for spine in ax.spines.values():
-        spine.set_edgecolor("#2d303e")
-    ax.grid(axis="y", color="#2d303e", linewidth=0.5)
-    if yoy_vals:
-        ax.legend(fontsize=7, facecolor="#1a1d29", edgecolor="#2d303e", labelcolor="white")
-    plt.tight_layout(pad=0.5)
+        if yoy_vals:
+            pv = yoy_vals[i]
+            x  = np.array([0, 1])
+            bars = ax.bar(x, [cv, pv], color=[kc, _MUTED_TXT], width=0.55, edgecolor="none")
+            bars[1].set_alpha(0.55)
+            ax.set_xticks(x)
+            ax.set_xticklabels(["Now", "LY"], color=_MUTED_TXT, fontsize=7)
+            # delta annotation
+            if pv > 0:
+                pct = (cv - pv) / abs(pv) * 100
+                col = _GREEN if pct > 0 else _RED
+                sign = "+" if pct > 0 else ""
+                ax.text(0.5, max(cv, pv) * 1.08, f"{sign}{pct:.1f}%",
+                        ha="center", color=col, fontsize=7.5, fontweight="bold", transform=ax.transData)
+        else:
+            ax.bar([0], [cv], color=kc, width=0.55, edgecolor="none")
+            ax.set_xticks([])
 
-    buf = _io.BytesIO()
-    fig.savefig(buf, format="png", dpi=140, bbox_inches="tight", facecolor="#0f1117")
-    plt.close(fig)
-    buf.seek(0)
-    return buf
+        ax.yaxis.set_major_formatter(mticker.FuncFormatter(
+            lambda v, _: f"${v/1000:.0f}k" if v >= 1000 else f"{v:,.0f}"))
+        ax.set_title(lbl, color=_WHITE, fontsize=8, pad=4, fontweight="bold")
+        ax.grid(axis="y", color=_GRID_COL, linewidth=0.5, linestyle="--")
+        ax.set_axisbelow(True)
+
+    plt.tight_layout(pad=0.7)
+    return _save_fig(fig)
 
 
 def _make_chart_roas_acos(ch_df):
-    """Return BytesIO PNG: ROAS vs ACOS scatter / bar per marketplace."""
+    """Side-by-side ROAS / ACOS bar charts with color-coded thresholds."""
     if ch_df is None or len(ch_df) == 0:
         return None
-    ch = ch_df[ch_df["spend"] > 0].head(10)
+    ch = ch_df[ch_df["spend"] > 0].head(10).copy()
     if ch.empty:
         return None
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.5, 2.6), facecolor="#0f1117")
-    for ax in (ax1, ax2):
-        ax.set_facecolor("#0f1117")
-        for spine in ax.spines.values():
-            spine.set_edgecolor("#2d303e")
-        ax.tick_params(colors="#9ca3af", labelsize=7)
-        ax.grid(axis="y", color="#2d303e", linewidth=0.5)
+    labels = [c[:10] for c in ch["channel"].tolist()]
+    x      = np.arange(len(labels))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 2.8), facecolor=_CHART_BG)
 
-    labels = ch["channel"].str[:12].tolist()
-    x = np.arange(len(labels))
+    # ROAS — green if ≥ 2, amber if ≥ 1, red if < 1
+    roas_cols = [_GREEN if r >= 2 else (_AMBER if r >= 1 else _RED) for r in ch["roas"]]
+    ax1.bar(x, ch["roas"], color=roas_cols, width=0.6, edgecolor="none")
+    ax1.axhline(y=2, color=_GREEN,  linewidth=1.0, linestyle="--", alpha=0.6, label="Target 2x")
+    ax1.axhline(y=1, color=_RED,    linewidth=0.8, linestyle=":",  alpha=0.6, label="Break-even")
+    _style_ax(ax1)
+    ax1.set_title("ROAS by Marketplace", color=_WHITE, fontsize=8.5, pad=5, fontweight="bold")
+    ax1.set_xticks(x); ax1.set_xticklabels(labels, rotation=32, ha="right", fontsize=6.5, color=_MUTED_TXT)
+    leg1 = ax1.legend(fontsize=6.5, facecolor=_CHART_CARD, edgecolor=_GRID_COL, labelcolor=_WHITE)
+    leg1.get_frame().set_linewidth(0.4)
+    for bar, val in zip(ax1.patches, ch["roas"]):
+        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.05,
+                 f"{val:.1f}x", ha="center", color=_WHITE, fontsize=6.5)
 
-    ax1.bar(x, ch["roas"], color="#34d399", edgecolor="none", width=0.6)
-    ax1.set_title("ROAS by Marketplace", color="white", fontsize=8, pad=4)
-    ax1.set_xticks(x); ax1.set_xticklabels(labels, rotation=30, ha="right", fontsize=6.5)
-    ax1.axhline(y=1, color="#f87171", linewidth=1, linestyle="--", alpha=0.7)
-
-    ax2.bar(x, ch["acos"], color="#f59e0b", edgecolor="none", width=0.6)
-    ax2.set_title("ACOS % by Marketplace", color="white", fontsize=8, pad=4)
-    ax2.set_xticks(x); ax2.set_xticklabels(labels, rotation=30, ha="right", fontsize=6.5)
+    # ACOS — green if ≤ 20%, amber if ≤ 35%, red if > 35%
+    acos_cols = [_GREEN if a <= 20 else (_AMBER if a <= 35 else _RED) for a in ch["acos"]]
+    ax2.bar(x, ch["acos"], color=acos_cols, width=0.6, edgecolor="none")
+    ax2.axhline(y=20, color=_GREEN, linewidth=1.0, linestyle="--", alpha=0.6, label="Good (<20%)")
+    ax2.axhline(y=35, color=_RED,   linewidth=0.8, linestyle=":",  alpha=0.6, label="Warning (35%)")
+    _style_ax(ax2)
+    ax2.set_title("ACOS % by Marketplace", color=_WHITE, fontsize=8.5, pad=5, fontweight="bold")
+    ax2.set_xticks(x); ax2.set_xticklabels(labels, rotation=32, ha="right", fontsize=6.5, color=_MUTED_TXT)
     ax2.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{v:.0f}%"))
+    leg2 = ax2.legend(fontsize=6.5, facecolor=_CHART_CARD, edgecolor=_GRID_COL, labelcolor=_WHITE)
+    leg2.get_frame().set_linewidth(0.4)
+    for bar, val in zip(ax2.patches, ch["acos"]):
+        ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5,
+                 f"{val:.1f}%", ha="center", color=_WHITE, fontsize=6.5)
 
     plt.tight_layout(pad=0.8)
-    buf = _io.BytesIO()
-    fig.savefig(buf, format="png", dpi=140, bbox_inches="tight", facecolor="#0f1117")
-    plt.close(fig)
-    buf.seek(0)
-    return buf
+    return _save_fig(fig)
 
 
+def _make_chart_sku_bars(sku_df):
+    """Horizontal bar chart: top SKU revenue."""
+    if sku_df is None or len(sku_df) == 0:
+        return None
+    df = sku_df.head(10).sort_values("revenue")
+    fig, ax = plt.subplots(figsize=(8, max(2.4, len(df) * 0.44)), facecolor=_CHART_BG)
+    _style_ax(ax, grid_axis="x")
+
+    gradient_colors = [_BLUE if i >= len(df) - 3 else _TEAL if i >= len(df) - 6 else _PURPLE
+                       for i in range(len(df))]
+    bars = ax.barh(df["Parent"].str[:25], df["revenue"], color=gradient_colors, height=0.6, edgecolor="none")
+
+    max_rev = df["revenue"].max()
+    for bar, val in zip(bars, df["revenue"]):
+        ax.text(val + max_rev * 0.01, bar.get_y() + bar.get_height() / 2,
+                f"${val:,.0f}", va="center", ha="left", color=_WHITE, fontsize=7.5)
+
+    ax.set_xlim(0, max_rev * 1.22)
+    ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"${v/1000:.0f}k" if v >= 1000 else f"${v:.0f}"))
+    ax.set_xlabel("Revenue", color=_MUTED_TXT, fontsize=8, labelpad=4)
+    ax.tick_params(axis="y", labelcolor=_WHITE, labelsize=7.5)
+    plt.tight_layout(pad=0.6)
+    return _save_fig(fig)
+
+
+def _make_chart_spend_efficiency(ch_df):
+    """Scatter: Ad Spend vs Revenue per marketplace, bubble = ROAS."""
+    if ch_df is None or len(ch_df) == 0:
+        return None
+    ch = ch_df[ch_df["spend"] > 0].copy()
+    if len(ch) < 2:
+        return None
+
+    fig, ax = plt.subplots(figsize=(8, 3.0), facecolor=_CHART_BG)
+    _style_ax(ax)
+
+    sizes   = (ch["roas"] * 60).clip(30, 600)
+    scatter = ax.scatter(ch["spend"], ch["revenue"],
+                         s=sizes, c=[_MP_PALETTE[i % len(_MP_PALETTE)] for i in range(len(ch))],
+                         alpha=0.85, edgecolors="none", zorder=3)
+
+    for _, row in ch.iterrows():
+        ax.annotate(row["channel"][:10],
+                    xy=(row["spend"], row["revenue"]),
+                    xytext=(4, 4), textcoords="offset points",
+                    fontsize=6.5, color=_WHITE, alpha=0.9)
+
+    # Break-even line (ROAS=1 → revenue = spend)
+    xs = np.linspace(0, ch["spend"].max() * 1.1, 100)
+    ax.plot(xs, xs, color=_RED, linewidth=0.9, linestyle="--", alpha=0.5, label="Break-even (ROAS=1x)")
+    ax.plot(xs, xs * 2, color=_GREEN, linewidth=0.9, linestyle="--", alpha=0.5, label="Target (ROAS=2x)")
+
+    ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"${v/1000:.0f}k" if v >= 1000 else f"${v:.0f}"))
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"${v/1000:.0f}k" if v >= 1000 else f"${v:.0f}"))
+    ax.set_xlabel("Ad Spend", color=_MUTED_TXT, fontsize=8, labelpad=4)
+    ax.set_ylabel("Revenue", color=_MUTED_TXT, fontsize=8, labelpad=4)
+    ax.set_title("Spend vs Revenue (bubble size = ROAS)", color=_WHITE, fontsize=9, pad=6)
+    leg = ax.legend(fontsize=7, facecolor=_CHART_CARD, edgecolor=_GRID_COL, labelcolor=_WHITE)
+    leg.get_frame().set_linewidth(0.4)
+    plt.tight_layout(pad=0.6)
+    return _save_fig(fig)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN PDF BUILDER
+# ─────────────────────────────────────────────────────────────────────────────
 def generate_pdf_report(report, m, ym, has_yoy, ch_report, sku_now_df, recommendations_list, safe_margin=0.62):
     """Build and return PDF bytes for the weekly performance report."""
     buf = _io.BytesIO()
 
-    # ── Colour palette ────────────────────────────────────────────────────────
-    BG       = colors.HexColor("#0f1117")
-    CARD_BG  = colors.HexColor("#1a1d29")
-    BORDER   = colors.HexColor("#2d303e")
-    BLUE     = colors.HexColor("#3b82f6")
-    AMBER    = colors.HexColor("#f59e0b")
-    GREEN    = colors.HexColor("#34d399")
-    RED      = colors.HexColor("#f87171")
-    PURPLE   = colors.HexColor("#8b5cf6")
-    WHITE    = colors.white
-    MUTED    = colors.HexColor("#9ca3af")
+    # ── ReportLab colours ────────────────────────────────────────────────────
+    C_BG       = colors.HexColor("#0e1117")
+    C_CARD     = colors.HexColor("#161b27")
+    C_CARD2    = colors.HexColor("#1a2035")
+    C_BORDER   = colors.HexColor("#232736")
+    C_BLUE     = colors.HexColor("#4f8ef7")
+    C_AMBER    = colors.HexColor("#f5a623")
+    C_GREEN    = colors.HexColor("#3ecf8e")
+    C_RED      = colors.HexColor("#f87171")
+    C_PURPLE   = colors.HexColor("#a78bfa")
+    C_TEAL     = colors.HexColor("#38bdf8")
+    C_WHITE    = colors.HexColor("#e8eaf0")
+    C_MUTED    = colors.HexColor("#8b95a7")
+    C_DIMMED   = colors.HexColor("#4b5563")
 
     PAGE_W, PAGE_H = A4
+    avail_w = PAGE_W - 28*mm
 
     # ── Document ─────────────────────────────────────────────────────────────
     doc = SimpleDocTemplate(
         buf, pagesize=A4,
         leftMargin=14*mm, rightMargin=14*mm,
-        topMargin=12*mm,  bottomMargin=12*mm,
+        topMargin=14*mm,  bottomMargin=14*mm,
     )
 
-    # ── Styles ───────────────────────────────────────────────────────────────
+    # ── Paragraph styles ─────────────────────────────────────────────────────
     def S(name, **kw):
-        base = getSampleStyleSheet()["Normal"]
-        return ParagraphStyle(name, parent=base, **kw)
+        return ParagraphStyle(name, parent=getSampleStyleSheet()["Normal"], **kw)
 
-    sTitle     = S("sTitle",     fontSize=22, textColor=WHITE,  alignment=TA_CENTER, leading=28, fontName="Helvetica-Bold")
-    sSubtitle  = S("sSubtitle",  fontSize=10, textColor=MUTED,  alignment=TA_CENTER, leading=14)
-    sH1        = S("sH1",        fontSize=13, textColor=WHITE,  leading=18, fontName="Helvetica-Bold", spaceBefore=10)
-    sH2        = S("sH2",        fontSize=10, textColor=BLUE,   leading=14, fontName="Helvetica-Bold", spaceBefore=6)
-    sBody      = S("sBody",      fontSize=8.5, textColor=MUTED, leading=12)
-    sKpiVal    = S("sKpiVal",    fontSize=16, textColor=WHITE,  alignment=TA_CENTER, fontName="Helvetica-Bold", leading=20)
-    sKpiLabel  = S("sKpiLabel",  fontSize=7,  textColor=MUTED,  alignment=TA_CENTER, leading=10)
-    sKpiDelta  = S("sKpiDelta",  fontSize=7.5, alignment=TA_CENTER, leading=10)
-    sRec       = S("sRec",       fontSize=8.5, textColor=WHITE, leading=13, leftIndent=6)
-    sFooter    = S("sFooter",    fontSize=7,  textColor=MUTED,  alignment=TA_CENTER)
-    sTH        = S("sTH",        fontSize=7.5, textColor=WHITE, fontName="Helvetica-Bold", alignment=TA_CENTER, leading=11)
-    sTD        = S("sTD",        fontSize=7.5, textColor=MUTED, alignment=TA_CENTER, leading=11)
-    sTDL       = S("sTDL",       fontSize=7.5, textColor=MUTED, alignment=TA_LEFT,   leading=11)
+    sCoverTitle   = S("sCoverTitle",   fontSize=26, textColor=C_WHITE, alignment=TA_CENTER,
+                      fontName="Helvetica-Bold", leading=32, spaceAfter=0)
+    sCoverSub     = S("sCoverSub",     fontSize=10, textColor=C_MUTED, alignment=TA_CENTER, leading=15)
+    sCoverBadge   = S("sCoverBadge",   fontSize=9,  textColor=C_WHITE, alignment=TA_CENTER,
+                      fontName="Helvetica-Bold", leading=13)
+    sSecHeader    = S("sSecHeader",    fontSize=13, textColor=C_WHITE,
+                      fontName="Helvetica-Bold", leading=17, spaceBefore=6, spaceAfter=2)
+    sSubHeader    = S("sSubHeader",    fontSize=9.5, textColor=C_BLUE,
+                      fontName="Helvetica-Bold", leading=13, spaceBefore=4, spaceAfter=2)
+    sKpiValue     = S("sKpiValue",     fontSize=17, textColor=C_WHITE,
+                      fontName="Helvetica-Bold", alignment=TA_CENTER, leading=21)
+    sKpiLabel     = S("sKpiLabel",     fontSize=6.5, textColor=C_MUTED, alignment=TA_CENTER, leading=9)
+    sKpiDelta     = S("sKpiDelta",     fontSize=7.5, alignment=TA_CENTER, leading=10)
+    sTH           = S("sTH",           fontSize=7.5, textColor=C_WHITE,
+                      fontName="Helvetica-Bold", alignment=TA_CENTER, leading=11)
+    sTD           = S("sTD",           fontSize=7.5, textColor=C_MUTED, alignment=TA_CENTER, leading=11)
+    sTDL          = S("sTDL",          fontSize=7.5, textColor=C_MUTED, alignment=TA_LEFT,   leading=11)
+    sTDG          = S("sTDG",          fontSize=7.5, textColor=C_GREEN,  alignment=TA_CENTER, leading=11,
+                      fontName="Helvetica-Bold")
+    sTDR          = S("sTDR",          fontSize=7.5, textColor=C_RED,    alignment=TA_CENTER, leading=11,
+                      fontName="Helvetica-Bold")
+    sRecTitle     = S("sRecTitle",     fontSize=8.5, textColor=C_WHITE,
+                      fontName="Helvetica-Bold", leading=12)
+    sRecMsg       = S("sRecMsg",       fontSize=8,   textColor=C_MUTED, leading=12)
+    sBadge        = S("sBadge",        fontSize=7,   textColor=C_WHITE,
+                      fontName="Helvetica-Bold", alignment=TA_CENTER, leading=10)
+    sFooter       = S("sFooter",       fontSize=7,   textColor=C_DIMMED, alignment=TA_CENTER, leading=10)
+    sInsight      = S("sInsight",      fontSize=8,   textColor=C_MUTED, leading=12, leftIndent=6)
 
     story = []
-    avail_w = PAGE_W - 28*mm   # usable width
 
-    # ─── Helper: KPI card table ───────────────────────────────────────────────
-    def kpi_card(label, value_str, delta_str=None, delta_good=True):
-        delta_color = GREEN if delta_good else RED
-        d_cell = Paragraph(delta_str, ParagraphStyle("d", parent=sKpiDelta, textColor=delta_color)) \
-                 if delta_str else Spacer(1, 8)
+    # ── Helper: horizontal rule ───────────────────────────────────────────────
+    def HR(color=C_BORDER, thickness=0.6, space_before=2, space_after=4):
+        return HRFlowable(width=avail_w, thickness=thickness, color=color,
+                          spaceBefore=space_before, spaceAfter=space_after)
+
+    # ── Helper: section header with left accent bar ───────────────────────────
+    def sec_header(title, accent=C_BLUE):
+        """Returns a Table that draws a colored left-border accent + title text."""
         return Table(
-            [[Paragraph(value_str, sKpiVal)],
+            [[Table([[""]],
+                    colWidths=[3], rowHeights=[18],
+                    style=TableStyle([("BACKGROUND", (0,0), (-1,-1), accent),
+                                      ("TOPPADDING", (0,0), (-1,-1), 0),
+                                      ("BOTTOMPADDING", (0,0), (-1,-1), 0)])),
+              Paragraph(title, sSecHeader)]],
+            colWidths=[5, avail_w - 5],
+            style=TableStyle([("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                               ("LEFTPADDING", (0,0), (-1,-1), 0),
+                               ("RIGHTPADDING", (0,0), (-1,-1), 0),
+                               ("TOPPADDING", (0,0), (-1,-1), 2),
+                               ("BOTTOMPADDING", (0,0), (-1,-1), 2)])
+        )
+
+    # ── Helper: colored text badge ────────────────────────────────────────────
+    def badge(text, bg, fg=C_WHITE):
+        return Table([[Paragraph(text, sBadge)]],
+                     colWidths=[20*mm], rowHeights=[11],
+                     style=TableStyle([
+                         ("BACKGROUND",    (0,0), (-1,-1), bg),
+                         ("TOPPADDING",    (0,0), (-1,-1), 2),
+                         ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+                         ("LEFTPADDING",   (0,0), (-1,-1), 3),
+                         ("RIGHTPADDING",  (0,0), (-1,-1), 3),
+                     ]))
+
+    # ── Helper: pct delta ────────────────────────────────────────────────────
+    def pct_delta(curr, prev):
+        if prev is None or prev == 0:
+            return None, True
+        p = (curr - prev) / abs(prev) * 100
+        arrow = "▲" if p > 0 else "▼"
+        return f"{arrow} {abs(p):.1f}% vs LY", p > 0
+
+    # ── Helper: KPI card ─────────────────────────────────────────────────────
+    def kpi_card(label, value_str, delta_str=None, delta_good=True, accent=C_BLUE):
+        delta_color = C_GREEN if delta_good else C_RED
+        delta_cell  = (Paragraph(delta_str, ParagraphStyle("dk", parent=sKpiDelta, textColor=delta_color))
+                       if delta_str else Paragraph("", sKpiLabel))
+        return Table(
+            [[Table([[""]],  # top accent stripe
+                    colWidths=[avail_w/4 - 4*mm], rowHeights=[4],
+                    style=TableStyle([("BACKGROUND", (0,0), (-1,-1), accent),
+                                      ("TOPPADDING",    (0,0), (-1,-1), 0),
+                                      ("BOTTOMPADDING", (0,0), (-1,-1), 0)]))],
+             [Paragraph(value_str, sKpiValue)],
              [Paragraph(label,     sKpiLabel)],
-             [d_cell]],
-            colWidths=[avail_w / 4 - 3*mm],
-            rowHeights=[22, 12, 12],
+             [delta_cell]],
+            colWidths=[avail_w/4 - 4*mm],
+            rowHeights=[4, 24, 11, 12],
             style=TableStyle([
-                ("BACKGROUND", (0,0), (-1,-1), CARD_BG),
-                ("BOX",        (0,0), (-1,-1), 0.5, BORDER),
-                ("ROUNDEDCORNERS", [4]),
-                ("TOPPADDING",    (0,0), (-1,-1), 6),
-                ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+                ("BACKGROUND",    (0,1), (-1,-1), C_CARD),
+                ("BOX",           (0,0), (-1,-1), 0.5, C_BORDER),
+                ("TOPPADDING",    (0,0), (-1,-1), 0),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 5),
                 ("LEFTPADDING",   (0,0), (-1,-1), 4),
                 ("RIGHTPADDING",  (0,0), (-1,-1), 4),
             ])
         )
 
-    # ─── Helper: pct delta string ─────────────────────────────────────────────
-    def pct_delta(curr, prev):
-        if prev is None or prev == 0:
-            return None, True
-        p = (curr - prev) / abs(prev) * 100
-        sign = "▲" if p > 0 else "▼"
-        return f"{sign} {abs(p):.1f}% vs LY", p > 0
+    def kpi_row(items):
+        """items: list of (label, value_str, delta_str, delta_good, accent_color)"""
+        cells = [kpi_card(lbl, val, dstr, dgood, acc) for lbl, val, dstr, dgood, acc in items]
+        return Table([cells], colWidths=[avail_w/4]*4,
+                     style=TableStyle([("LEFTPADDING",  (0,0), (-1,-1), 2),
+                                       ("RIGHTPADDING", (0,0), (-1,-1), 2)]))
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # PAGE 1 — COVER
-    # ══════════════════════════════════════════════════════════════════════════
-    story.append(Spacer(1, 18*mm))
-
-    # Coloured accent bar
-    story.append(Table(
-        [[""]],
-        colWidths=[avail_w], rowHeights=[3],
-        style=TableStyle([("BACKGROUND", (0,0), (-1,-1), BLUE)])
-    ))
-    story.append(Spacer(1, 6*mm))
-
-    story.append(Paragraph("📊 Performance Report", sTitle))
-    story.append(Spacer(1, 4*mm))
-    story.append(Paragraph(f"Period: {report['period']}", sSubtitle))
-    if has_yoy:
-        story.append(Paragraph(f"YoY Baseline: {report['yoy_period']}", sSubtitle))
-    mp_scope = report.get("marketplace_label", "All Marketplaces")
-    story.append(Paragraph(f"Marketplace Scope: {mp_scope}", sSubtitle))
-    story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y  %H:%M')}", sSubtitle))
-    story.append(Spacer(1, 8*mm))
-
-    story.append(Table(
-        [[""]],
-        colWidths=[avail_w], rowHeights=[1.5],
-        style=TableStyle([("BACKGROUND", (0,0), (-1,-1), BORDER)])
-    ))
-    story.append(Spacer(1, 8*mm))
-
-    # ── KPI summary block on cover ─────────────────────────────────────────
-    story.append(Paragraph("Key Performance Indicators", sH1))
-    story.append(Spacer(1, 3*mm))
-
-    def _kpi_row(kpi_list):
-        """kpi_list: list of (label, value_str, delta_str, delta_good)"""
-        cells = [kpi_card(lbl, val, dstr, dgood) for lbl, val, dstr, dgood in kpi_list]
-        t = Table([cells], colWidths=[avail_w/4]*4,
-                  style=TableStyle([("LEFTPADDING", (0,0), (-1,-1), 2),
-                                    ("RIGHTPADDING", (0,0), (-1,-1), 2)]))
-        return t
-
+    # ── Pre-compute deltas ────────────────────────────────────────────────────
     d1, g1 = pct_delta(m["Revenue"],    ym["Revenue"]    if ym else None)
     d2, g2 = pct_delta(m["Orders"],     ym["Orders"]     if ym else None)
     d3, g3 = pct_delta(m["ROAS"],       ym["ROAS"]       if ym else None)
     d4, g4 = pct_delta(m["Net"],        ym["Net"]        if ym else None)
     d5, g5 = pct_delta(m["Spend"],      ym["Spend"]      if ym else None)
     d6, g6 = pct_delta(m["Commission"], ym["Commission"] if ym else None)
-    d7, _  = pct_delta(m["ACOS"],       ym["ACOS"]       if ym else None); g7 = (d7 is not None and "▼" in d7)  # lower ACOS = good
+    d7, _  = pct_delta(m["ACOS"],       ym["ACOS"]       if ym else None)
+    g7     = d7 is not None and "▼" in d7  # lower ACOS = good
     d8, g8 = pct_delta(m["AOV"],        ym["AOV"]        if ym else None)
 
-    story.append(_kpi_row([
-        ("💰 Revenue",    f"${m['Revenue']:,.0f}",    d1, g1),
-        ("🛒 Orders",     f"{m['Orders']:,.0f}",      d2, g2),
-        ("🎯 ROAS",       f"{m['ROAS']:.2f}x",        d3, g3),
-        ("💹 Net Profit", f"${m['Net']:,.0f}",         d4, g4),
-    ]))
-    story.append(Spacer(1, 2*mm))
-    story.append(_kpi_row([
-        ("📢 Ad Spend",   f"${m['Spend']:,.0f}",      d5, not g5),   # lower spend delta may or may not be good — neutral
-        ("🏪 Commission", f"${m['Commission']:,.0f}",  d6, not g6),
-        ("📊 ACOS",       f"{m['ACOS']:.1f}%",         d7, g7),
-        ("🧾 AOV",        f"${m['AOV']:.2f}",           d8, g8),
-    ]))
+    # ══════════════════════════════════════════════════════════════════════════
+    # COVER PAGE
+    # ══════════════════════════════════════════════════════════════════════════
 
+    # Top gradient bar (3-segment to simulate gradient)
+    story.append(Table([["", "", ""]],
+        colWidths=[avail_w*0.33]*3, rowHeights=[5],
+        style=TableStyle([
+            ("BACKGROUND", (0,0), (0,0), C_BLUE),
+            ("BACKGROUND", (1,0), (1,0), C_PURPLE),
+            ("BACKGROUND", (2,0), (2,0), C_TEAL),
+            ("TOPPADDING", (0,0), (-1,-1), 0),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+        ])))
+
+    story.append(Spacer(1, 16*mm))
+    story.append(Paragraph("PERFORMANCE REPORT", sCoverTitle))
+    story.append(Spacer(1, 2*mm))
+
+    # Period / scope info box
+    mp_scope = report.get("marketplace_label", "All Marketplaces")
+    info_rows = [
+        ["Period", report["period"]],
+        ["YoY Baseline", report["yoy_period"] if has_yoy else "N/A"],
+        ["Marketplace", mp_scope],
+        ["Generated", datetime.now().strftime("%B %d, %Y  %H:%M")],
+    ]
+    info_tbl = Table(
+        [[Paragraph(k, ParagraphStyle("ik", parent=sCoverSub, textColor=C_MUTED, alignment=TA_RIGHT, fontName="Helvetica-Bold")),
+          Paragraph(v, ParagraphStyle("iv", parent=sCoverSub, textColor=C_WHITE,  alignment=TA_LEFT))]
+         for k, v in info_rows],
+        colWidths=[avail_w*0.35, avail_w*0.65],
+        style=TableStyle([
+            ("BACKGROUND",    (0,0), (-1,-1), C_CARD),
+            ("BOX",           (0,0), (-1,-1), 0.6, C_BORDER),
+            ("TOPPADDING",    (0,0), (-1,-1), 5),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+            ("LEFTPADDING",   (0,0), (-1,-1), 10),
+            ("RIGHTPADDING",  (0,0), (-1,-1), 10),
+            ("LINEBELOW",     (0,0), (-1,-2), 0.3, C_BORDER),
+        ]))
+    story.append(info_tbl)
+    story.append(Spacer(1, 8*mm))
+
+    # KPI Cards
+    story.append(kpi_row([
+        ("REVENUE",    f"${m['Revenue']:,.0f}",    d1, g1,  C_BLUE),
+        ("ORDERS",     f"{m['Orders']:,.0f}",      d2, g2,  C_PURPLE),
+        ("ROAS",       f"{m['ROAS']:.2f}x",        d3, g3,  C_TEAL),
+        ("NET PROFIT", f"${m['Net']:,.0f}",        d4, g4,  C_GREEN),
+    ]))
+    story.append(Spacer(1, 3*mm))
+    story.append(kpi_row([
+        ("AD SPEND",   f"${m['Spend']:,.0f}",      d5, not g5, C_AMBER),
+        ("COMMISSION", f"${m['Commission']:,.0f}", d6, not g6, colors.HexColor("#fb923c")),
+        ("ACOS",       f"{m['ACOS']:.1f}%",        d7, g7,  C_RED),
+        ("AOV",        f"${m['AOV']:.2f}",         d8, g8,  colors.HexColor("#06b6d4")),
+    ]))
     story.append(Spacer(1, 6*mm))
 
-    # ── KPI comparison bar chart ──────────────────────────────────────────
+    # KPI comparison chart
     if MATPLOTLIB_OK:
-        chart_kpi = _make_chart_kpi_bars(m, ym if has_yoy else None)
-        story.append(Paragraph("Revenue, Profit & Spend at a Glance", sH2))
+        story.append(Paragraph("Revenue, Profit & Spend at a Glance", sSubHeader))
         story.append(Spacer(1, 1*mm))
-        img = RLImage(chart_kpi, width=avail_w, height=avail_w * 2.6/7.5)
-        story.append(img)
+        chart_kpi = _make_chart_kpi_bars(m, ym if has_yoy else None)
+        story.append(RLImage(chart_kpi, width=avail_w, height=avail_w * 2.8/8.0))
+
+    # Cover page footer
+    story.append(Spacer(1, 4*mm))
+    story.append(HR(C_BORDER, thickness=0.5))
+    story.append(Paragraph(
+        f"Marketplace Business Insights Dashboard  |  Safe Margin {safe_margin*100:.0f}%  |  Confidential",
+        sFooter))
 
     story.append(PageBreak())
 
@@ -2597,229 +2789,324 @@ def generate_pdf_report(report, m, ym, has_yoy, ch_report, sku_now_df, recommend
     # PAGE 2 — REVENUE TRENDS
     # ══════════════════════════════════════════════════════════════════════════
     if report["sections"].get("trends") or (has_yoy and report["sections"].get("yoy")):
-        story.append(Paragraph("📈 Revenue Trends", sH1))
-        story.append(HRFlowable(width=avail_w, thickness=0.5, color=BORDER, spaceAfter=4))
+        story.append(sec_header("Revenue Trends", C_BLUE))
+        story.append(Spacer(1, 2*mm))
 
         s_data = report["sales_data"]
         y_data = report.get("yoy_sales", pd.DataFrame())
 
-        if not s_data.empty:
+        if not s_data.empty and MATPLOTLIB_OK:
             daily_curr = s_data.groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
-            daily_curr["day"] = range(len(daily_curr))
-
-            daily_yoy = None
+            daily_yoy  = None
             if has_yoy and not y_data.empty:
                 daily_yoy = y_data.groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
-                daily_yoy["day"] = range(len(daily_yoy))
 
-            if MATPLOTLIB_OK:
-                trend_buf = _make_chart_revenue_trend(
-                    daily_curr, daily_yoy,
-                    period_label=f"This Period ({report['period'][:6]})",
-                    yoy_label=f"Last Year ({report['yoy_period'][:6]})" if has_yoy else ""
-                )
-                story.append(Paragraph("Daily Revenue — This Period vs Last Year" if has_yoy else "Daily Revenue Trend", sH2))
-                story.append(Spacer(1, 1*mm))
-                img = RLImage(trend_buf, width=avail_w, height=avail_w * 2.8/7.5)
-                story.append(img)
-                story.append(Spacer(1, 4*mm))
-
-        # ── YoY comparison table ──────────────────────────────────────────
-        if has_yoy:
-            story.append(Paragraph("Year-over-Year Comparison", sH2))
+            story.append(Paragraph(
+                "Daily Revenue — This Period vs Last Year" if has_yoy else "Daily Revenue Trend",
+                sSubHeader))
             story.append(Spacer(1, 1*mm))
+            trend_buf = _make_chart_revenue_trend(
+                daily_curr, daily_yoy,
+                period_label=f"This Period ({report['period'][:6]})",
+                yoy_label=f"Last Year ({report['yoy_period'][:6]})" if has_yoy else ""
+            )
+            story.append(RLImage(trend_buf, width=avail_w, height=avail_w * 3.0/8.0))
+            story.append(Spacer(1, 4*mm))
 
-            yoy_data = [
-                ["Metric", "This Period", "Last Year", "Change", "Trend"],
-                ["Revenue",    f"${m['Revenue']:,.0f}",    f"${ym['Revenue']:,.0f}",    f"{(m['Revenue']-ym['Revenue'])/ym['Revenue']*100 if ym['Revenue'] else 0:+.1f}%", "📈" if m['Revenue'] >= ym['Revenue'] else "📉"],
-                ["Orders",     f"{m['Orders']:,.0f}",      f"{ym['Orders']:,.0f}",      f"{(m['Orders']-ym['Orders'])/ym['Orders']*100 if ym['Orders'] else 0:+.1f}%",   "📈" if m['Orders'] >= ym['Orders'] else "📉"],
-                ["ROAS",       f"{m['ROAS']:.2f}x",        f"{ym['ROAS']:.2f}x",        f"{(m['ROAS']-ym['ROAS'])/ym['ROAS']*100 if ym['ROAS'] else 0:+.1f}%",          "📈" if m['ROAS'] >= ym['ROAS'] else "📉"],
-                ["Net Profit", f"${m['Net']:,.0f}",         f"${ym['Net']:,.0f}",        f"{(m['Net']-ym['Net'])/abs(ym['Net'])*100 if ym['Net'] else 0:+.1f}%",         "📈" if m['Net'] >= ym['Net'] else "📉"],
-                ["Ad Spend",   f"${m['Spend']:,.0f}",      f"${ym['Spend']:,.0f}",      f"{(m['Spend']-ym['Spend'])/ym['Spend']*100 if ym['Spend'] else 0:+.1f}%",      "—"],
-                ["ACOS",       f"{m['ACOS']:.1f}%",         f"{ym['ACOS']:.1f}%",        f"{(m['ACOS']-ym['ACOS'])/ym['ACOS']*100 if ym['ACOS'] else 0:+.1f}%",         "📉" if m['ACOS'] < ym['ACOS'] else "📈"],
-                ["AOV",        f"${m['AOV']:.2f}",           f"${ym['AOV']:.2f}",         f"{(m['AOV']-ym['AOV'])/ym['AOV']*100 if ym['AOV'] else 0:+.1f}%",             "📈" if m['AOV'] >= ym['AOV'] else "📉"],
+        # Quick insight strip
+        if not s_data.empty:
+            daily_c = s_data.groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum()
+            peak_day   = daily_c.idxmax()
+            peak_rev   = daily_c.max()
+            avg_daily  = daily_c.mean()
+            total_days = len(daily_c[daily_c > 0])
+            insights_data = [
+                ["Peak Day",      peak_day.strftime("%b %d") if pd.notna(peak_day) else "—"],
+                ["Peak Revenue",  f"${peak_rev:,.0f}"],
+                ["Avg Daily Rev", f"${avg_daily:,.0f}"],
+                ["Active Days",   f"{total_days}"],
             ]
-
-            col_w = [avail_w*0.26, avail_w*0.20, avail_w*0.20, avail_w*0.20, avail_w*0.14]
-            tbl_yoy = Table(
-                [[Paragraph(c, sTH if r == 0 else sTD) for c in row] for r, row in enumerate(yoy_data)],
-                colWidths=col_w,
+            ins_tbl = Table(
+                [[Paragraph(k, ParagraphStyle("ik", parent=sCoverBadge, textColor=C_MUTED, alignment=TA_LEFT)),
+                  Paragraph(v, ParagraphStyle("iv", parent=sCoverBadge, textColor=C_WHITE,  alignment=TA_LEFT))]
+                 for k, v in insights_data],
+                colWidths=[avail_w*0.25, avail_w*0.75],
                 style=TableStyle([
-                    ("BACKGROUND", (0,0), (-1,0), BLUE),
-                    ("BACKGROUND", (0,1), (-1,-1), CARD_BG),
-                    ("ROWBACKGROUNDS", (0,1), (-1,-1), [CARD_BG, colors.HexColor("#1f2335")]),
-                    ("BOX",       (0,0), (-1,-1), 0.5, BORDER),
-                    ("INNERGRID", (0,0), (-1,-1), 0.3, BORDER),
+                    ("BACKGROUND",    (0,0), (-1,-1), C_CARD),
+                    ("BOX",           (0,0), (-1,-1), 0.5, C_BORDER),
+                    ("LINEBELOW",     (0,0), (-1,-2), 0.3, C_BORDER),
                     ("TOPPADDING",    (0,0), (-1,-1), 5),
                     ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-                    ("LEFTPADDING",   (0,0), (-1,-1), 6),
+                    ("LEFTPADDING",   (0,0), (-1,-1), 10),
+                ]))
+            story.append(Paragraph("Period Insights", sSubHeader))
+            story.append(Spacer(1, 1*mm))
+            story.append(ins_tbl)
+            story.append(Spacer(1, 5*mm))
+
+        # YoY Comparison Table
+        if has_yoy:
+            story.append(Paragraph("Year-over-Year Comparison", sSubHeader))
+            story.append(Spacer(1, 1*mm))
+
+            def _yoy_pct(curr, prev):
+                if prev == 0: return 0
+                return (curr - prev) / abs(prev) * 100
+
+            rows_data = [
+                ("REVENUE",    f"${m['Revenue']:,.0f}",    f"${ym['Revenue']:,.0f}",    _yoy_pct(m['Revenue'],    ym['Revenue'])),
+                ("ORDERS",     f"{m['Orders']:,.0f}",      f"{ym['Orders']:,.0f}",      _yoy_pct(m['Orders'],     ym['Orders'])),
+                ("ROAS",       f"{m['ROAS']:.2f}x",        f"{ym['ROAS']:.2f}x",        _yoy_pct(m['ROAS'],       ym['ROAS'])),
+                ("NET PROFIT", f"${m['Net']:,.0f}",         f"${ym['Net']:,.0f}",        _yoy_pct(m['Net'],        ym['Net'])),
+                ("AD SPEND",   f"${m['Spend']:,.0f}",      f"${ym['Spend']:,.0f}",      _yoy_pct(m['Spend'],      ym['Spend'])),
+                ("ACOS",       f"{m['ACOS']:.1f}%",         f"{ym['ACOS']:.1f}%",        _yoy_pct(m['ACOS'],       ym['ACOS'])),
+                ("AOV",        f"${m['AOV']:.2f}",           f"${ym['AOV']:.2f}",         _yoy_pct(m['AOV'],        ym['AOV'])),
+            ]
+            # metrics where lower = better
+            lower_better = {"ACOS", "AD SPEND"}
+
+            header_row = [Paragraph(h, sTH) for h in ["METRIC", "THIS PERIOD", "LAST YEAR", "CHANGE", "STATUS"]]
+            tbl_rows   = [header_row]
+            for metric, curr_s, prev_s, pct in rows_data:
+                is_better = (pct > 0) if metric not in lower_better else (pct < 0)
+                chg_style = sTDG if is_better else sTDR
+                chg_str   = f"{'▲' if pct > 0 else '▼'} {abs(pct):.1f}%"
+                status    = "BETTER" if is_better else "WORSE"
+                st_style  = sTDG if is_better else sTDR
+                tbl_rows.append([
+                    Paragraph(metric,  sTDL),
+                    Paragraph(curr_s,  sTD),
+                    Paragraph(prev_s,  sTD),
+                    Paragraph(chg_str, chg_style),
+                    Paragraph(status,  st_style),
                 ])
-            )
-            story.append(tbl_yoy)
-            story.append(Spacer(1, 4*mm))
+
+            col_w_yoy = [avail_w*0.24, avail_w*0.19, avail_w*0.19, avail_w*0.19, avail_w*0.19]
+            yoy_tbl = Table(tbl_rows, colWidths=col_w_yoy,
+                            style=TableStyle([
+                                ("BACKGROUND",    (0,0), (-1,0), C_BLUE),
+                                ("ROWBACKGROUNDS",(0,1), (-1,-1), [C_CARD, C_CARD2]),
+                                ("BOX",           (0,0), (-1,-1), 0.5, C_BORDER),
+                                ("INNERGRID",     (0,0), (-1,-1), 0.3, C_BORDER),
+                                ("TOPPADDING",    (0,0), (-1,-1), 6),
+                                ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+                                ("LEFTPADDING",   (0,0), (-1,-1), 7),
+                                ("RIGHTPADDING",  (0,0), (-1,-1), 7),
+                            ]))
+            story.append(yoy_tbl)
+
+    story.append(PageBreak())
 
     # ══════════════════════════════════════════════════════════════════════════
     # PAGE 3 — MARKETPLACE BREAKDOWN
     # ══════════════════════════════════════════════════════════════════════════
     if report["sections"].get("marketplaces") and ch_report is not None and len(ch_report) > 0:
-        story.append(PageBreak())
-        story.append(Paragraph("🛒 Marketplace Breakdown", sH1))
-        story.append(HRFlowable(width=avail_w, thickness=0.5, color=BORDER, spaceAfter=4))
+        story.append(sec_header("Marketplace Breakdown", C_PURPLE))
+        story.append(Spacer(1, 2*mm))
 
         if MATPLOTLIB_OK:
-            # Revenue bar chart
-            mp_buf = _make_chart_marketplace(ch_report)
-            story.append(Paragraph("Revenue by Marketplace", sH2))
+            story.append(Paragraph("Revenue by Marketplace", sSubHeader))
             story.append(Spacer(1, 1*mm))
-            img = RLImage(mp_buf, width=avail_w, height=avail_w * max(2.4, len(ch_report)*0.42) / 7.5)
-            story.append(img)
+            mp_buf = _make_chart_marketplace(ch_report)
+            story.append(RLImage(mp_buf, width=avail_w, height=avail_w * max(2.6, len(ch_report)*0.46)/8.0))
             story.append(Spacer(1, 3*mm))
 
-            # ROAS/ACOS side-by-side
             roas_buf = _make_chart_roas_acos(ch_report)
             if roas_buf:
-                story.append(Paragraph("ROAS & ACOS by Marketplace", sH2))
+                story.append(Paragraph("ROAS & ACOS by Marketplace", sSubHeader))
                 story.append(Spacer(1, 1*mm))
-                img2 = RLImage(roas_buf, width=avail_w, height=avail_w * 2.6/7.5)
-                story.append(img2)
+                story.append(RLImage(roas_buf, width=avail_w, height=avail_w * 2.8/8.0))
                 story.append(Spacer(1, 3*mm))
 
-        # Detailed table
-        story.append(Paragraph("Marketplace Detail Table", sH2))
+            # Spend efficiency scatter
+            eff_buf = _make_chart_spend_efficiency(ch_report)
+            if eff_buf:
+                story.append(Paragraph("Ad Spend Efficiency Analysis", sSubHeader))
+                story.append(Spacer(1, 1*mm))
+                story.append(RLImage(eff_buf, width=avail_w, height=avail_w * 3.0/8.0))
+                story.append(Spacer(1, 3*mm))
+
+        # Marketplace detail table
+        story.append(Paragraph("Marketplace Detail Table", sSubHeader))
         story.append(Spacer(1, 1*mm))
 
         has_yoy_col = "yoy_revenue" in ch_report.columns
         if has_yoy_col:
-            mp_headers = ["Marketplace", "Revenue", "Orders", "Ad Spend", "ROAS", "ACOS", "LY Rev", "YoY Δ"]
+            mp_hdrs = ["MARKETPLACE", "REVENUE", "ORDERS", "AD SPEND", "ROAS", "ACOS", "LY REV", "YOY"]
             col_w_mp = [avail_w*0.20, avail_w*0.12, avail_w*0.09, avail_w*0.12,
                         avail_w*0.09, avail_w*0.09, avail_w*0.12, avail_w*0.10, avail_w*0.07]
         else:
-            mp_headers = ["Marketplace", "Revenue", "Orders", "Ad Spend", "ROAS", "ACOS"]
+            mp_hdrs = ["MARKETPLACE", "REVENUE", "ORDERS", "AD SPEND", "ROAS", "ACOS"]
             col_w_mp = [avail_w*0.28, avail_w*0.16, avail_w*0.12, avail_w*0.16, avail_w*0.14, avail_w*0.14]
 
-        mp_rows = [[Paragraph(h, sTH) for h in mp_headers]]
-        for _, row in ch_report.iterrows():
+        mp_rows = [[Paragraph(h, sTH) for h in mp_hdrs]]
+        style_extra = []
+        for row_idx, (_, row) in enumerate(ch_report.iterrows(), start=1):
+            roas_val = row.get("roas", 0)
+            acos_val = row.get("acos", 0)
+            roas_sty = sTDG if roas_val >= 2 else (sTDR if roas_val < 1 else sTD)
+            acos_sty = sTDG if acos_val <= 20 else (sTDR if acos_val > 35 else sTD)
             r = [
-                Paragraph(str(row["channel"]), sTDL),
-                Paragraph(f"${row['revenue']:,.0f}", sTD),
-                Paragraph(f"{row['orders']:,.0f}", sTD),
-                Paragraph(f"${row['spend']:,.0f}", sTD),
-                Paragraph(f"{row['roas']:.2f}x", sTD),
-                Paragraph(f"{row['acos']:.1f}%", sTD),
+                Paragraph(str(row["channel"]),          sTDL),
+                Paragraph(f"${row['revenue']:,.0f}",    sTD),
+                Paragraph(f"{row['orders']:,.0f}",      sTD),
+                Paragraph(f"${row['spend']:,.0f}",      sTD),
+                Paragraph(f"{roas_val:.2f}x",           roas_sty),
+                Paragraph(f"{acos_val:.1f}%",           acos_sty),
             ]
             if has_yoy_col:
-                yoy_g = row.get("yoy_growth", float("nan"))
-                yoy_str = f"{yoy_g:+.1f}%" if not np.isnan(yoy_g) else "—"
+                yoy_g   = row.get("yoy_growth", float("nan"))
+                yoy_str = f"{'▲' if yoy_g > 0 else '▼'} {abs(yoy_g):.1f}%" if not np.isnan(yoy_g) else "—"
+                yoy_sty = sTDG if (not np.isnan(yoy_g) and yoy_g > 0) else (sTDR if not np.isnan(yoy_g) else sTD)
                 r += [Paragraph(f"${row.get('yoy_revenue',0):,.0f}", sTD),
-                      Paragraph(yoy_str, sTD)]
+                      Paragraph(yoy_str, yoy_sty)]
             mp_rows.append(r)
 
-        tbl_mp = Table(mp_rows, colWidths=col_w_mp[:len(mp_headers)],
+        tbl_mp = Table(mp_rows, colWidths=col_w_mp[:len(mp_hdrs)],
                        style=TableStyle([
-                           ("BACKGROUND", (0,0), (-1,0), PURPLE),
-                           ("ROWBACKGROUNDS", (0,1), (-1,-1), [CARD_BG, colors.HexColor("#1f2335")]),
-                           ("BOX",       (0,0), (-1,-1), 0.5, BORDER),
-                           ("INNERGRID", (0,0), (-1,-1), 0.3, BORDER),
-                           ("TOPPADDING",    (0,0), (-1,-1), 5),
-                           ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-                           ("LEFTPADDING",   (0,0), (-1,-1), 5),
+                           ("BACKGROUND",    (0,0), (-1,0), C_PURPLE),
+                           ("ROWBACKGROUNDS",(0,1), (-1,-1), [C_CARD, C_CARD2]),
+                           ("BOX",           (0,0), (-1,-1), 0.5, C_BORDER),
+                           ("INNERGRID",     (0,0), (-1,-1), 0.3, C_BORDER),
+                           ("TOPPADDING",    (0,0), (-1,-1), 6),
+                           ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+                           ("LEFTPADDING",   (0,0), (-1,-1), 6),
+                           ("RIGHTPADDING",  (0,0), (-1,-1), 6),
                        ]))
         story.append(tbl_mp)
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # PAGE 4 — TOP SKUs & RECOMMENDATIONS
-    # ══════════════════════════════════════════════════════════════════════════
     story.append(PageBreak())
 
-    # ── Top SKUs ────────────────────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    # PAGE 4 — TOP SKUs + RECOMMENDATIONS
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # Top SKUs
     if report["sections"].get("skus") and sku_now_df is not None and len(sku_now_df) > 0:
-        story.append(Paragraph("🏷️ Top SKU Performance", sH1))
-        story.append(HRFlowable(width=avail_w, thickness=0.5, color=BORDER, spaceAfter=4))
+        story.append(sec_header("Top SKU Performance", C_GREEN))
+        story.append(Spacer(1, 2*mm))
+
+        if MATPLOTLIB_OK:
+            story.append(Paragraph("Top SKUs by Revenue", sSubHeader))
+            story.append(Spacer(1, 1*mm))
+            sku_chart_buf = _make_chart_sku_bars(sku_now_df)
+            if sku_chart_buf:
+                story.append(RLImage(sku_chart_buf, width=avail_w, height=avail_w * max(2.4, len(sku_now_df.head(10))*0.44)/8.0))
+            story.append(Spacer(1, 3*mm))
 
         has_sku_yoy = "yoy_revenue" in sku_now_df.columns
+        sku_hdrs = ["SKU / PARENT", "REVENUE", "ORDERS", "AOV"] + (["LY REV", "YOY DELTA"] if has_sku_yoy else [])
         if has_sku_yoy:
-            sku_headers = ["SKU / Parent", "Revenue", "Orders", "AOV", "LY Rev", "YoY Δ"]
-            col_w_sku = [avail_w*0.35, avail_w*0.14, avail_w*0.10, avail_w*0.12, avail_w*0.14, avail_w*0.13, avail_w*0.02]
+            col_w_sku = [avail_w*0.34, avail_w*0.14, avail_w*0.09, avail_w*0.13, avail_w*0.14, avail_w*0.16]
         else:
-            sku_headers = ["SKU / Parent", "Revenue", "Orders", "AOV"]
             col_w_sku = [avail_w*0.46, avail_w*0.20, avail_w*0.16, avail_w*0.18]
 
-        sku_rows = [[Paragraph(h, sTH) for h in sku_headers]]
+        sku_rows = [[Paragraph(h, sTH) for h in sku_hdrs]]
         for _, row in sku_now_df.head(10).iterrows():
             r = [
-                Paragraph(str(row.get("Parent", ""))[:40], sTDL),
+                Paragraph(str(row.get("Parent", ""))[:36], sTDL),
                 Paragraph(f"${row['revenue']:,.0f}", sTD),
                 Paragraph(f"{row['orders']:,.0f}", sTD),
                 Paragraph(f"${row.get('aov', 0):.2f}", sTD),
             ]
             if has_sku_yoy:
-                yoy_g = row.get("yoy_growth", float("nan"))
-                yoy_str = f"{yoy_g:+.1f}%" if not np.isnan(yoy_g) else "—"
+                yoy_g   = row.get("yoy_growth", float("nan"))
+                yoy_str = f"{'▲' if yoy_g > 0 else '▼'} {abs(yoy_g):.1f}%" if not np.isnan(yoy_g) else "—"
+                yoy_sty = sTDG if (not np.isnan(yoy_g) and yoy_g > 0) else (sTDR if not np.isnan(yoy_g) else sTD)
                 r += [Paragraph(f"${row.get('yoy_revenue',0):,.0f}", sTD),
-                      Paragraph(yoy_str, sTD)]
+                      Paragraph(yoy_str, yoy_sty)]
             sku_rows.append(r)
 
-        tbl_sku = Table(sku_rows, colWidths=col_w_sku[:len(sku_headers)],
+        tbl_sku = Table(sku_rows, colWidths=col_w_sku,
                         style=TableStyle([
-                            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#059669")),
-                            ("ROWBACKGROUNDS", (0,1), (-1,-1), [CARD_BG, colors.HexColor("#1f2335")]),
-                            ("BOX",       (0,0), (-1,-1), 0.5, BORDER),
-                            ("INNERGRID", (0,0), (-1,-1), 0.3, BORDER),
-                            ("TOPPADDING",    (0,0), (-1,-1), 5),
-                            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-                            ("LEFTPADDING",   (0,0), (-1,-1), 5),
+                            ("BACKGROUND",    (0,0), (-1,0), colors.HexColor("#059669")),
+                            ("ROWBACKGROUNDS",(0,1), (-1,-1), [C_CARD, C_CARD2]),
+                            ("BOX",           (0,0), (-1,-1), 0.5, C_BORDER),
+                            ("INNERGRID",     (0,0), (-1,-1), 0.3, C_BORDER),
+                            ("TOPPADDING",    (0,0), (-1,-1), 6),
+                            ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+                            ("LEFTPADDING",   (0,0), (-1,-1), 6),
+                            ("RIGHTPADDING",  (0,0), (-1,-1), 6),
                         ]))
         story.append(tbl_sku)
-        story.append(Spacer(1, 5*mm))
+        story.append(Spacer(1, 6*mm))
 
-    # ── Recommendations ──────────────────────────────────────────────────────
+    # Recommendations
     if report["sections"].get("recommendations") and recommendations_list:
-        story.append(Paragraph("🚀 Strategic Recommendations", sH1))
-        story.append(HRFlowable(width=avail_w, thickness=0.5, color=BORDER, spaceAfter=4))
+        story.append(sec_header("Strategic Recommendations", C_AMBER))
+        story.append(Spacer(1, 2*mm))
 
-        icon_map  = {"scale": "📈", "warn": "⚠️", "crit": "🚨", "info": "💡"}
-        color_map = {"scale": GREEN, "warn": AMBER,  "crit": RED, "info": BLUE}
+        badge_cfg = {
+            "scale": ("SCALE UP",   C_GREEN,  C_CARD),
+            "warn":  ("WARNING",    C_AMBER,  C_CARD),
+            "crit":  ("CRITICAL",   C_RED,    C_CARD),
+            "info":  ("INSIGHT",    C_BLUE,   C_CARD),
+        }
+        left_accent = {"scale": C_GREEN, "warn": C_AMBER, "crit": C_RED, "info": C_BLUE}
 
         for rec in recommendations_list[:6]:
-            rec_type = rec.get("type", "info")
-            accent   = color_map.get(rec_type, BLUE)
-            icon     = icon_map.get(rec_type, "💡")
+            rtype  = rec.get("type", "info")
+            blbl, bbg, _bfg = badge_cfg.get(rtype, ("INFO", C_BLUE, C_CARD))
+            accent = left_accent.get(rtype, C_BLUE)
+
             rec_tbl = Table(
-                [[Paragraph(f"{icon} <b>{rec['title']}</b>", ParagraphStyle("rt", parent=sRec, textColor=WHITE, fontName="Helvetica-Bold", fontSize=9)),
-                  Paragraph(rec["msg"], ParagraphStyle("rm", parent=sRec, textColor=MUTED, fontSize=8))]],
-                colWidths=[avail_w*0.28, avail_w*0.72],
+                [[Table([[Paragraph(blbl, sBadge)]],
+                        colWidths=[18*mm], rowHeights=[11],
+                        style=TableStyle([
+                            ("BACKGROUND",    (0,0), (-1,-1), accent),
+                            ("TOPPADDING",    (0,0), (-1,-1), 2),
+                            ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+                            ("LEFTPADDING",   (0,0), (-1,-1), 3),
+                            ("RIGHTPADDING",  (0,0), (-1,-1), 3),
+                        ])),
+                  Table([[Paragraph(rec["title"], sRecTitle)],
+                         [Paragraph(rec["msg"],   sRecMsg)]],
+                        colWidths=[avail_w - 24*mm],
+                        style=TableStyle([
+                            ("TOPPADDING",    (0,0), (-1,-1), 2),
+                            ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+                            ("LEFTPADDING",   (0,0), (-1,-1), 6),
+                        ]))]],
+                colWidths=[20*mm, avail_w - 20*mm],
                 style=TableStyle([
-                    ("BACKGROUND", (0,0), (-1,-1), CARD_BG),
-                    ("LEFTBORDERPADDING", (0,0), (0,-1), 0),
-                    ("LINEAFTER",  (0,0), (0,-1), 2.5, accent),
-                    ("BOX",        (0,0), (-1,-1), 0.5, BORDER),
+                    ("BACKGROUND",    (0,0), (-1,-1), C_CARD),
+                    ("BOX",           (0,0), (-1,-1), 0.5, C_BORDER),
+                    ("LINEBEFORE",    (0,0), (0,-1),  3, accent),
+                    ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
                     ("TOPPADDING",    (0,0), (-1,-1), 6),
                     ("BOTTOMPADDING", (0,0), (-1,-1), 6),
-                    ("LEFTPADDING",   (0,0), (-1,-1), 8),
+                    ("LEFTPADDING",   (0,0), (-1,-1), 5),
                 ])
             )
             story.append(rec_tbl)
-            story.append(Spacer(1, 2*mm))
+            story.append(Spacer(1, 2.5*mm))
 
     # ── Footer ───────────────────────────────────────────────────────────────
-    story.append(Spacer(1, 6*mm))
-    story.append(HRFlowable(width=avail_w, thickness=0.5, color=BORDER, spaceAfter=3))
+    story.append(Spacer(1, 5*mm))
+    story.append(HR(C_BORDER, thickness=0.5))
     story.append(Paragraph(
-        f"Generated by Marketplace Business Insights Dashboard  ·  {datetime.now().strftime('%B %d, %Y')}  ·  Safe Margin {safe_margin*100:.0f}%",
-        sFooter
-    ))
+        f"Marketplace Business Insights Dashboard  |  {datetime.now().strftime('%B %d, %Y')}  |"
+        f"  Safe Margin {safe_margin*100:.0f}%  |  Confidential",
+        sFooter))
 
-    # ── Build ─────────────────────────────────────────────────────────────────
-    def _bg_canvas(canvas, doc_obj):
-        canvas.saveState()
-        canvas.setFillColor(BG)
-        canvas.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
-        canvas.restoreState()
+    # ── Canvas background callback ────────────────────────────────────────────
+    def _draw_bg(canvas_obj, doc_obj):
+        canvas_obj.saveState()
+        canvas_obj.setFillColor(C_BG)
+        canvas_obj.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
+        # Subtle left accent stripe on every page
+        canvas_obj.setFillColor(C_BLUE)
+        canvas_obj.rect(0, 0, 2.5, PAGE_H, fill=1, stroke=0)
+        # Page number
+        page_num = doc_obj.page
+        canvas_obj.setFont("Helvetica", 7)
+        canvas_obj.setFillColor(colors.HexColor("#4b5563"))
+        canvas_obj.drawRightString(PAGE_W - 14*mm, 8*mm, f"Page {page_num}")
+        canvas_obj.restoreState()
 
-    doc.build(story, onFirstPage=_bg_canvas, onLaterPages=_bg_canvas)
+    doc.build(story, onFirstPage=_draw_bg, onLaterPages=_draw_bg)
     buf.seek(0)
     return buf.read()
-
 
 # TAB 8: Weekly Reports
 with tabs[7]:
