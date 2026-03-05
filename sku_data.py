@@ -69,20 +69,7 @@ try:
 except ImportError:
     pass
 
-def _require_env(key: str) -> str:
-    """Read an env var; raise a clear error if it's missing."""
-    val = os.environ.get(key, "").strip()
-    if not val:
-        raise EnvironmentError(
-            f"Required environment variable '{key}' is not set.\n"
-            "  • Local dev: add it to a .env file in the project root.\n"
-            "  • GitHub Actions: add it under repo → Settings → Secrets → Actions.\n"
-            "  • Streamlit Cloud: add it under app → Settings → Secrets."
-        )
-    return val
-
-# Profile IDs are not secrets (just numeric IDs), but keep them in env too
-# so the same code file works across multiple Amazon accounts without editing.
+# Profile IDs (not secret — hardcoded defaults, overridable via env)
 PROFILES: dict = {
     "US": {
         "profile_id": os.environ.get("AMZN_PROFILE_ID_US", "1738642012820077"),
@@ -94,10 +81,58 @@ PROFILES: dict = {
     },
 }
 
-# These three are real secrets — must come from env, never from source code.
-CLIENT_ID     = _require_env("AMZN_CLIENT_ID")
-CLIENT_SECRET = _require_env("AMZN_CLIENT_SECRET")
-REFRESH_TOKEN = _require_env("AMZN_REFRESH_TOKEN")
+# Credentials are loaded LAZILY (only when first API call is made).
+# This means importing sku_data in app.py never crashes even if the
+# Streamlit Cloud secrets haven't been set yet — the error only appears
+# when the user actually clicks "Fetch".
+_CLIENT_ID:     Optional[str] = None
+_CLIENT_SECRET: Optional[str] = None
+_REFRESH_TOKEN: Optional[str] = None
+
+
+def _load_credentials():
+    """
+    Load credentials from environment on first use.
+    Checks os.environ first (GitHub Actions, .env file, shell exports),
+    then falls back to st.secrets if running inside Streamlit Cloud.
+    """
+    global _CLIENT_ID, _CLIENT_SECRET, _REFRESH_TOKEN
+
+    if _CLIENT_ID:          # already loaded
+        return
+
+    def _get(key: str) -> str:
+        # 1. Try plain environment variable (GitHub Actions / .env / shell)
+        val = os.environ.get(key, "").strip()
+        if val:
+            return val
+
+        # 2. Try Streamlit secrets (only available when running in Streamlit)
+        try:
+            import streamlit as st
+            val = st.secrets.get(key, "").strip()
+            if val:
+                return val
+        except Exception:
+            pass
+
+        raise EnvironmentError(
+            f"Required secret '{key}' is not set.\n"
+            "  • Local dev      → add to .env file in project root\n"
+            "  • GitHub Actions → repo Settings → Secrets → Actions\n"
+            "  • Streamlit Cloud→ app Settings → Secrets (TOML format):\n"
+            f'      {key} = "your-value-here"'
+        )
+
+    _CLIENT_ID     = _get("AMZN_CLIENT_ID")
+    _CLIENT_SECRET = _get("AMZN_CLIENT_SECRET")
+    _REFRESH_TOKEN = _get("AMZN_REFRESH_TOKEN")
+    log.debug("Credentials loaded OK")
+
+
+def _get_client_id()     -> str: _load_credentials(); return _CLIENT_ID      # type: ignore
+def _get_client_secret() -> str: _load_credentials(); return _CLIENT_SECRET  # type: ignore
+def _get_refresh_token() -> str: _load_credentials(); return _REFRESH_TOKEN  # type: ignore
 
 # ── concurrency / rate-limiting ───────────────────────────────────────────────
 #  Amazon Ads allows roughly 2 report-create calls/sec per profile.
@@ -271,9 +306,9 @@ class _TokenManager:
                     "https://api.amazon.com/auth/o2/token",
                     data={
                         "grant_type":    "refresh_token",
-                        "refresh_token": REFRESH_TOKEN,
-                        "client_id":     CLIENT_ID,
-                        "client_secret": CLIENT_SECRET,
+                        "refresh_token": _get_refresh_token(),
+                        "client_id":     _get_client_id(),
+                        "client_secret": _get_client_secret(),
                     },
                     timeout=T_TOKEN,
                 )
@@ -295,7 +330,7 @@ _tok = _TokenManager()
 def _headers(profile_id: str) -> dict:
     return {
         "Authorization":                   f"Bearer {_tok.get()}",
-        "Amazon-Advertising-API-ClientId": CLIENT_ID,
+        "Amazon-Advertising-API-ClientId": _get_client_id(),
         "Amazon-Advertising-API-Scope":    profile_id,
         "Content-Type":                    "application/json",
     }
