@@ -885,18 +885,29 @@ with tabs[3]:
     st.markdown('<div class="section-header">🏷️ SKU Performance Analysis</div>', unsafe_allow_html=True)
     
     if "Parent" in df_s.columns and df_s["Parent"].nunique() > 1:
+
+        # ── Top-X selector ────────────────────────────────────────────────────
+        tx_col, _, _ = st.columns([1, 2, 2])
+        with tx_col:
+            top_x = st.selectbox(
+                "📊 Show Top SKUs",
+                options=[10, 20, 50, 100],
+                index=0,
+                key="sku_top_x"
+            )
+
         # Calculate Parent SKU Performance
         Parent_perf = df_s.groupby("Parent").agg({
             "revenue": "sum",
             "orders": "sum"
         }).reset_index()
         Parent_perf["aov"] = Parent_perf["revenue"] / Parent_perf["orders"]
-        Parent_perf = Parent_perf.sort_values("revenue", ascending=False).head(10)
+        Parent_perf = Parent_perf.sort_values("revenue", ascending=False).head(top_x)
         
         col1, col2 = st.columns([2, 1])
         
         with col1:
-            st.markdown("**Top 10 Parent SKUs by Revenue**")
+            st.markdown(f"**Top {top_x} Parent SKUs by Revenue**")
             
             fig_sku_bar = px.bar(
                 Parent_perf, 
@@ -1135,7 +1146,7 @@ with tabs[3]:
 
         # ── Detailed SKU Cards with Child SKUs ───────────────────────────────
         st.markdown("---")
-        st.markdown("**📦 Top 10 SKU Breakdown (Click to expand for Child SKUs)**")
+        st.markdown(f"**📦 Top {top_x} SKU Breakdown (Click to expand for Child SKUs)**")
         
         for idx, parent_row in Parent_perf.iterrows():
             parent = parent_row['Parent']
