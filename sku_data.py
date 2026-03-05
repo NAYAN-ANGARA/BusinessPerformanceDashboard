@@ -758,24 +758,27 @@ def fetch_sku_ads_summary(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Amazon Ads SKU-wise fetcher (robust edition)")
-    parser.add_argument("--days",    type=int, default=10,               help="Trailing days (default 10)")
-    parser.add_argument("--market",  default="BOTH",                     help="US | CA | BOTH")
-    parser.add_argument("--workers", type=int, default=3,                help="Parallel threads (default 3, max 4 recommended)")
-    parser.add_argument("--out",     default="sku_ads_data.csv",         help="Output CSV path")
-    parser.add_argument("--verbose", action="store_true",                help="Enable DEBUG logging")
+    parser.add_argument("--start-date", default="2026-01-01",            help="Start date YYYY-MM-DD (default: 2026-01-01)")
+    parser.add_argument("--market",     default="BOTH",                  help="US | CA | BOTH")
+    parser.add_argument("--workers",    type=int, default=3,             help="Parallel threads (default 3, max 4 recommended)")
+    parser.add_argument("--out",        default="sku_ads_cache.csv",     help="Output CSV path")
+    parser.add_argument("--verbose",    action="store_true",             help="Enable DEBUG logging")
     args = parser.parse_args()
 
     if args.verbose:
         log.setLevel(logging.DEBUG)
 
-    end_d   = date.today() - timedelta(days=1)
-    start_d = end_d - timedelta(days=args.days - 1)
+    # Always fetch from fixed start date up to yesterday
+    # (Amazon Ads data for today is incomplete until midnight)
+    start_d = args.start_date
+    end_d   = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+
     log.info("Fetching %s → %s  |  market=%s  |  workers=%d",
              start_d, end_d, args.market, args.workers)
 
     df = fetch_sku_ads_data(
-        start_d.strftime("%Y-%m-%d"),
-        end_d.strftime("%Y-%m-%d"),
+        start_d,
+        end_d,
         market=args.market,
         max_workers=args.workers,
     )
