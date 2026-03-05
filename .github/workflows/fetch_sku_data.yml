@@ -3,19 +3,26 @@ name: Fetch SKU Ads Data
 # ── Schedule: 9 AM IST = 3:30 AM UTC ─────────────────────────────────────────
 on:
   schedule:
-    - cron: '30 3 * * *'     # every day 03:30 UTC = 09:00 AM IST
+    - cron: '30 3 * * *'
+  workflow_dispatch:
 
-  workflow_dispatch:          # lets you click "Run workflow" manually in GitHub UI
+# ── Give the bot write access to push the CSV back ────────────────────────────
+permissions:
+  contents: write
 
 # ==============================================================================
 jobs:
   fetch-and-commit:
     runs-on: ubuntu-latest
-    timeout-minutes: 60       # SKU data from Jan 1 2026 → today is a large fetch
+    timeout-minutes: 60
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          # persist-credentials lets the bot push without a PAT
+          persist-credentials: true
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -25,7 +32,6 @@ jobs:
       - name: Install dependencies
         run: pip install requests pandas python-dotenv urllib3
 
-      # Fetch all SKU data from 2026-01-01 up to yesterday
       - name: Fetch SKU ads data
         env:
           AMZN_CLIENT_ID:      ${{ secrets.AMZN_CLIENT_ID }}
@@ -40,8 +46,6 @@ jobs:
             --workers 3 \
             --out sku_ads_cache.csv
 
-      # Commit the refreshed CSV back to the repo
-      # Streamlit Cloud picks this up automatically on next rerun
       - name: Commit updated cache
         run: |
           git config user.name  "github-actions[bot]"
