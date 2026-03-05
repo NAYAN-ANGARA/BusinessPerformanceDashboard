@@ -1,0 +1,58 @@
+name: Fetch SKU Ads Data
+
+# ── Schedule: 9 AM IST = 3:30 AM UTC ─────────────────────────────────────────
+# (IST is UTC+5:30, so subtract 5h30m from 9:00 AM → 3:30 AM UTC)
+on:
+  schedule:
+    - cron: '30 3 * * *'     # runs every day at 03:30 UTC = 09:00 AM IST
+
+  workflow_dispatch:          # also lets you click "Run workflow" manually in GitHub
+
+# ==============================================================================
+jobs:
+  fetch-and-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30       # kill the job if something hangs
+
+    steps:
+      # 1. Check out the repo so we can read/write files
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # 2. Set up Python
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: |
+          pip install requests pandas python-dotenv urllib3
+
+      # 4. Run the SKU data fetcher
+      #    Secrets are injected as env vars from GitHub repo secrets
+      - name: Fetch SKU ads data
+        env:
+          AMZN_CLIENT_ID:      ${{ secrets.AMZN_CLIENT_ID }}
+          AMZN_CLIENT_SECRET:  ${{ secrets.AMZN_CLIENT_SECRET }}
+          AMZN_REFRESH_TOKEN:  ${{ secrets.AMZN_REFRESH_TOKEN }}
+          AMZN_PROFILE_ID_US:  ${{ secrets.AMZN_PROFILE_ID_US }}
+          AMZN_PROFILE_ID_CA:  ${{ secrets.AMZN_PROFILE_ID_CA }}
+        run: |
+          python sku_data.py \
+            --days 10 \
+            --market BOTH \
+            --workers 3 \
+            --out sku_ads_cache.csv
+
+      # 5. Commit the updated CSV back to the repo
+      #    The dashboard reads this file directly — no live API call needed
+      - name: Commit updated cache
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add sku_ads_cache.csv
+          # Only commit if the file actually changed
+          git diff --cached --quiet || git commit -m "chore: refresh SKU ads cache [$(date -u '+%Y-%m-%d %H:%M UTC')]"
+          git push
