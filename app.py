@@ -9,12 +9,7 @@ import json
 import hashlib
 import re
 
-# Amazon Ads SKU-level fetcher (sku_data.py must be in the same folder)
-try:
-    from sku_data import fetch_sku_ads_data, fetch_sku_ads_summary
-    _ADS_API_AVAILABLE = True
-except ImportError:
-    _ADS_API_AVAILABLE = False
+import os  # needed for sku_ads_cache.csv path check
 
 # Configure Plotly
 import plotly.io as pio
@@ -888,213 +883,210 @@ with tabs[2]:
     )
 
 # ==============================================================================
-# TAB 4: SKU Analysis  (with live Amazon Ads data)
+# TAB 4: SKU Analysis  —  Ads data loaded from daily-refreshed CSV cache
 # ==============================================================================
 
-# ── Cached wrapper so the API is only called once per session / TTL ──────────
-@st.cache_data(show_spinner=False, ttl=1800)   # 30-min cache
-def _load_sku_ads(start: str, end: str, market: str) -> pd.DataFrame:
-    """Call the Amazon Ads API and return a Parent-SKU summary DataFrame."""
-    if not _ADS_API_AVAILABLE:
+# Read the CSV that GitHub Actions writes every day at 9 AM IST.
+# Aggregate to Parent-SKU level (sum across all dates in the file).
+@st.cache_data(show_spinner=False, ttl=3600)
+def _load_sku_ads_cache() -> pd.DataFrame:
+    cache_path = "sku_ads_cache.csv"
+    if not os.path.exists(cache_path):
         return pd.DataFrame()
     try:
-        return fetch_sku_ads_summary(start, end, market)
+        df = pd.read_csv(cache_path, parse_dates=["Date"])
+        # Aggregate daily rows → one row per (Market, Parent_SKU)
+        needed = ["Market", "Parent_SKU", "Impressions", "Clicks",
+                  "Spend", "Ad_Sales", "Ad_Orders"]
+        df = df[[c for c in needed if c in df.columns]]
+        agg = (
+            df.groupby(["Market", "Parent_SKU"], as_index=False)
+            .agg(
+                Impressions=("Impressions", "sum"),
+                Clicks=("Clicks",           "sum"),
+                Spend=("Spend",             "sum"),
+                Ad_Sales=("Ad_Sales",       "sum"),
+                Ad_Orders=("Ad_Orders",     "sum"),
+            )
+        )
+        agg["CTR"]  = (agg["Clicks"]   / agg["Impressions"].replace(0, float("nan"))) * 100
+        agg["CPC"]  = (agg["Spend"]    / agg["Clicks"].replace(0,      float("nan")))
+        agg["ACOS"] = (agg["Spend"]    / agg["Ad_Sales"].replace(0,    float("nan"))) * 100
+        agg[["CTR","CPC","ACOS"]] = agg[["CTR","CPC","ACOS"]].fillna(0)
+        return agg.sort_values("Spend", ascending=False).reset_index(drop=True)
     except Exception as exc:
         return pd.DataFrame({"_error": [str(exc)]})
+
+
+# Load once at page render — instant, no API call
+_ads_cache = _load_sku_ads_cache()
+
+
+def _get_ads_for_sku(parent_sku: str) -> dict | None:
+    """Return ads metrics for a given Parent SKU from the cached CSV."""
+    if _ads_cache.empty or "_error" in _ads_cache.columns:
+        return None
+    row = _ads_cache[_ads_cache["Parent_SKU"] == parent_sku]
+    if row.empty:
+        return None
+    r = row.iloc[0]
+    return {
+        "Impressions": int(r["Impressions"]),
+        "Clicks":      int(r["Clicks"]),
+        "Spend":       float(r["Spend"]),
+        "Ad_Sales":    float(r["Ad_Sales"]),
+        "CTR":         float(r["CTR"]),
+        "CPC":         float(r["CPC"]),
+        "ACOS":        float(r["ACOS"]),
+    }
 
 
 with tabs[3]:
     st.markdown('<div class="section-header">🏷️ SKU Performance Analysis</div>', unsafe_allow_html=True)
 
     # ══════════════════════════════════════════════════════════════════════════
-    # SECTION 0  ──  Live Amazon Ads Panel
+    # SECTION 0  ──  Amazon Ads Summary  (from daily CSV cache)
     # ══════════════════════════════════════════════════════════════════════════
-    with st.expander("📡 Live Amazon Ads Data  —  Spend · Impressions · Clicks per SKU", expanded=True):
+    with st.expander("📡 Amazon Ads Data  —  Spend · Impressions · Clicks per SKU", expanded=True):
 
-        if not _ADS_API_AVAILABLE:
-            st.warning("⚠️ `sku_data.py` not found in the app folder. Place it alongside `app.py` to enable this panel.")
+        if _ads_cache.empty:
+            st.info("ℹ️ No ads cache found yet. The GitHub Action will generate `sku_ads_cache.csv` tonight at 9 AM IST and it will appear here automatically.")
+
+        elif "_error" in _ads_cache.columns:
+            st.error(f"❌ Error reading cache: {_ads_cache['_error'].iloc[0]}")
+
         else:
-            ads_c1, ads_c2, ads_c3, ads_c4 = st.columns([2, 2, 2, 1])
-            with ads_c1:
-                ads_start = st.date_input(
-                    "Ads Start Date",
-                    value=date.today() - timedelta(days=10),
-                    key="ads_start",
-                )
-            with ads_c2:
-                ads_end = st.date_input(
-                    "Ads End Date",
-                    value=date.today() - timedelta(days=1),
-                    key="ads_end",
-                )
-            with ads_c3:
-                ads_market = st.selectbox(
-                    "Market",
-                    options=["BOTH", "US", "CA"],
-                    key="ads_market",
-                )
-            with ads_c4:
-                st.markdown("<br>", unsafe_allow_html=True)
-                fetch_ads = st.button("🔄 Fetch / Refresh", key="fetch_ads_btn", use_container_width=True)
+            ads_df_raw = _ads_cache.copy()
 
-            # Trigger fetch
-            if fetch_ads:
-                _load_sku_ads.clear()
+            # ── Date range info from the raw CSV ─────────────────────────────
+            try:
+                raw_csv   = pd.read_csv("sku_ads_cache.csv", parse_dates=["Date"])
+                min_date  = raw_csv["Date"].min().strftime("%d %b %Y")
+                max_date  = raw_csv["Date"].max().strftime("%d %b %Y")
+                st.caption(f"📅 Cache covers **{min_date}** → **{max_date}**  ·  refreshed daily at 9 AM IST by GitHub Actions")
+            except Exception:
+                pass
 
-            ads_df_raw = pd.DataFrame()
-            if fetch_ads or "ads_data_loaded" in st.session_state:
-                st.session_state["ads_data_loaded"] = True
-                with st.spinner("Fetching SKU-level ads data from Amazon Ads API…"):
-                    ads_df_raw = _load_sku_ads(
-                        ads_start.strftime("%Y-%m-%d"),
-                        ads_end.strftime("%Y-%m-%d"),
-                        ads_market,
-                    )
+            # ── Market filter ─────────────────────────────────────────────────
+            mkt_filter = st.radio(
+                "Market", ["All", "US", "CA"],
+                horizontal=True, key="ads_mkt_filter"
+            )
+            if mkt_filter != "All":
+                ads_df_raw = ads_df_raw[ads_df_raw["Market"] == mkt_filter]
 
-            # Store in session for use below
-            st.session_state["ads_df_raw"] = ads_df_raw
+            # ── KPI row ───────────────────────────────────────────────────────
+            total_imp      = ads_df_raw["Impressions"].sum()
+            total_clk      = ads_df_raw["Clicks"].sum()
+            total_spend    = ads_df_raw["Spend"].sum()
+            total_ad_sales = ads_df_raw["Ad_Sales"].sum()
+            blended_acos   = (total_spend / total_ad_sales * 100) if total_ad_sales > 0 else 0
+            blended_ctr    = (total_clk / total_imp * 100) if total_imp > 0 else 0
 
-            if not ads_df_raw.empty and "_error" not in ads_df_raw.columns:
-                # ── KPI row ──────────────────────────────────────────────────
-                total_imp   = ads_df_raw["Impressions"].sum()
-                total_clk   = ads_df_raw["Clicks"].sum()
-                total_spend = ads_df_raw["Spend"].sum()
-                total_ad_sales = ads_df_raw["Ad_Sales"].sum()
-                blended_acos = (total_spend / total_ad_sales * 100) if total_ad_sales > 0 else 0
-                blended_ctr  = (total_clk / total_imp * 100) if total_imp > 0 else 0
+            ak1, ak2, ak3, ak4, ak5 = st.columns(5)
+            ak1.metric("👁️ Impressions",  f"{total_imp:,.0f}")
+            ak2.metric("🖱️ Clicks",       f"{total_clk:,.0f}")
+            ak3.metric("💸 Ad Spend",     f"${total_spend:,.2f}")
+            ak4.metric("📈 Ad Sales",     f"${total_ad_sales:,.2f}")
+            ak5.metric("🎯 Blended ACOS", f"{blended_acos:.1f}%")
 
-                ak1, ak2, ak3, ak4, ak5 = st.columns(5)
-                ak1.metric("👁️ Impressions",  f"{total_imp:,.0f}")
-                ak2.metric("🖱️ Clicks",       f"{total_clk:,.0f}")
-                ak3.metric("💸 Ad Spend",     f"${total_spend:,.2f}")
-                ak4.metric("📈 Ad Sales",     f"${total_ad_sales:,.2f}")
-                ak5.metric("🎯 Blended ACOS", f"{blended_acos:.1f}%")
+            st.markdown("---")
 
-                st.markdown("---")
-
-                # ── Top SKUs by Spend bar chart ───────────────────────────────
-                top_spend = ads_df_raw.nlargest(15, "Spend")
-                fig_ads_bar = px.bar(
-                    top_spend,
-                    x="Spend",
-                    y="Parent_SKU",
-                    orientation="h",
-                    color="ACOS",
-                    color_continuous_scale="RdYlGn_r",
-                    range_color=[0, 60],
-                    custom_data=["Impressions", "Clicks", "ACOS", "CTR", "CPC", "Ad_Sales"],
-                    labels={"Spend": "Ad Spend ($)", "Parent_SKU": "Parent SKU", "ACOS": "ACOS %"},
-                    title="Top 15 SKUs by Ad Spend  (colour = ACOS%)",
+            # ── Top 15 SKUs by Spend ──────────────────────────────────────────
+            top_spend = ads_df_raw.nlargest(15, "Spend")
+            fig_ads_bar = px.bar(
+                top_spend,
+                x="Spend", y="Parent_SKU",
+                orientation="h",
+                color="ACOS",
+                color_continuous_scale="RdYlGn_r",
+                range_color=[0, 60],
+                custom_data=["Impressions", "Clicks", "ACOS", "CTR", "CPC", "Ad_Sales"],
+                labels={"Spend": "Ad Spend ($)", "Parent_SKU": "Parent SKU", "ACOS": "ACOS %"},
+                title="Top 15 SKUs by Ad Spend  (colour = ACOS%)",
+            )
+            fig_ads_bar.update_traces(
+                hovertemplate=(
+                    "<b>%{y}</b><br>"
+                    "Spend: $%{x:,.2f}<br>"
+                    "Impressions: %{customdata[0]:,.0f}<br>"
+                    "Clicks: %{customdata[1]:,.0f}<br>"
+                    "CTR: %{customdata[3]:.2f}%<br>"
+                    "CPC: $%{customdata[4]:.2f}<br>"
+                    "Ad Sales: $%{customdata[5]:,.2f}<br>"
+                    "ACOS: %{customdata[2]:.1f}%<extra></extra>"
                 )
-                fig_ads_bar.update_traces(
-                    hovertemplate=(
-                        "<b>%{y}</b><br>"
-                        "Spend: $%{x:,.2f}<br>"
-                        "Impressions: %{customdata[0]:,.0f}<br>"
-                        "Clicks: %{customdata[1]:,.0f}<br>"
-                        "CTR: %{customdata[3]:.2f}%<br>"
-                        "CPC: $%{customdata[4]:.2f}<br>"
-                        "Ad Sales: $%{customdata[5]:,.2f}<br>"
-                        "ACOS: %{customdata[2]:.1f}%<extra></extra>"
-                    )
-                )
-                fig_ads_bar.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    height=430,
-                    margin=dict(l=0, r=0, t=40, b=0),
-                    yaxis=dict(autorange="reversed"),
-                    coloraxis_colorbar=dict(title="ACOS %"),
-                )
-                st.plotly_chart(fig_ads_bar, config={"displayModeBar": False}, use_container_width=True)
+            )
+            fig_ads_bar.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                height=430,
+                margin=dict(l=0, r=0, t=40, b=0),
+                yaxis=dict(autorange="reversed"),
+                coloraxis_colorbar=dict(title="ACOS %"),
+            )
+            st.plotly_chart(fig_ads_bar, config={"displayModeBar": False}, use_container_width=True)
 
-                # ── Impressions vs Clicks scatter ─────────────────────────────
-                fig_scatter = px.scatter(
-                    ads_df_raw[ads_df_raw["Impressions"] > 0],
-                    x="Impressions",
-                    y="Clicks",
-                    size="Spend",
-                    color="ACOS",
-                    color_continuous_scale="RdYlGn_r",
-                    range_color=[0, 60],
-                    hover_name="Parent_SKU",
-                    custom_data=["Spend", "ACOS", "CTR"],
-                    labels={"Impressions": "Impressions", "Clicks": "Clicks"},
-                    title="Impressions vs Clicks  (bubble = Spend, colour = ACOS%)",
+            # ── Impressions vs Clicks scatter ─────────────────────────────────
+            fig_scatter = px.scatter(
+                ads_df_raw[ads_df_raw["Impressions"] > 0],
+                x="Impressions", y="Clicks",
+                size="Spend",
+                color="ACOS",
+                color_continuous_scale="RdYlGn_r",
+                range_color=[0, 60],
+                hover_name="Parent_SKU",
+                custom_data=["Spend", "ACOS", "CTR"],
+                title="Impressions vs Clicks  (bubble = Spend, colour = ACOS%)",
+            )
+            fig_scatter.update_traces(
+                hovertemplate=(
+                    "<b>%{hovertext}</b><br>"
+                    "Impressions: %{x:,.0f}<br>"
+                    "Clicks: %{y:,.0f}<br>"
+                    "Spend: $%{customdata[0]:,.2f}<br>"
+                    "ACOS: %{customdata[1]:.1f}%<br>"
+                    "CTR: %{customdata[2]:.2f}%<extra></extra>"
                 )
-                fig_scatter.update_traces(
-                    hovertemplate=(
-                        "<b>%{hovertext}</b><br>"
-                        "Impressions: %{x:,.0f}<br>"
-                        "Clicks: %{y:,.0f}<br>"
-                        "Spend: $%{customdata[0]:,.2f}<br>"
-                        "ACOS: %{customdata[1]:.1f}%<br>"
-                        "CTR: %{customdata[2]:.2f}%<extra></extra>"
-                    )
-                )
-                fig_scatter.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(255,255,255,0.03)",
-                    height=400,
-                    margin=dict(l=0, r=0, t=40, b=0),
-                )
-                st.plotly_chart(fig_scatter, config={"displayModeBar": False}, use_container_width=True)
+            )
+            fig_scatter.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(255,255,255,0.03)",
+                height=400,
+                margin=dict(l=0, r=0, t=40, b=0),
+            )
+            st.plotly_chart(fig_scatter, config={"displayModeBar": False}, use_container_width=True)
 
-                # ── Full data table ───────────────────────────────────────────
-                st.markdown("**📋 Full SKU Ads Data Table**")
-                disp_ads = ads_df_raw.copy()
-                disp_ads = disp_ads.sort_values("Spend", ascending=False)
-                st.dataframe(
-                    disp_ads,
-                    column_config={
-                        "Market":      st.column_config.TextColumn("Market",      width="small"),
-                        "Parent_SKU":  st.column_config.TextColumn("Parent SKU",  width="medium"),
-                        "Impressions": st.column_config.NumberColumn("Impressions",format="%d"),
-                        "Clicks":      st.column_config.NumberColumn("Clicks",     format="%d"),
-                        "Spend":       st.column_config.ProgressColumn(
-                                           "Spend ($)", format="$%.2f",
-                                           min_value=0, max_value=float(disp_ads["Spend"].max())),
-                        "Ad_Sales":    st.column_config.NumberColumn("Ad Sales ($)",format="$%.2f"),
-                        "Ad_Orders":   st.column_config.NumberColumn("Ad Orders",  format="%d"),
-                        "CTR":         st.column_config.NumberColumn("CTR %",      format="%.2f%%"),
-                        "CPC":         st.column_config.NumberColumn("CPC ($)",    format="$%.2f"),
-                        "ACOS":        st.column_config.NumberColumn("ACOS %",     format="%.1f%%"),
-                    },
-                    hide_index=True, use_container_width=True, height=430,
-                )
-                st.download_button(
-                    "📥 Download SKU Ads Data (CSV)",
-                    disp_ads.to_csv(index=False).encode("utf-8"),
-                    "sku_ads_data.csv", "text/csv", key="dl_sku_ads",
-                )
-
-            elif "_error" in ads_df_raw.columns:
-                st.error(f"❌ Amazon Ads API error: {ads_df_raw['_error'].iloc[0]}")
-            else:
-                st.info("👆 Click **Fetch / Refresh** above to pull live SKU-level ads data from Amazon.")
+            # ── Full table + download ─────────────────────────────────────────
+            st.markdown("**📋 Full SKU Ads Data**")
+            disp_ads = ads_df_raw.sort_values("Spend", ascending=False)
+            st.dataframe(
+                disp_ads,
+                column_config={
+                    "Market":      st.column_config.TextColumn("Market",       width="small"),
+                    "Parent_SKU":  st.column_config.TextColumn("Parent SKU",   width="medium"),
+                    "Impressions": st.column_config.NumberColumn("Impressions", format="%d"),
+                    "Clicks":      st.column_config.NumberColumn("Clicks",      format="%d"),
+                    "Spend":       st.column_config.ProgressColumn(
+                                       "Spend ($)", format="$%.2f",
+                                       min_value=0, max_value=float(disp_ads["Spend"].max())),
+                    "Ad_Sales":    st.column_config.NumberColumn("Ad Sales ($)", format="$%.2f"),
+                    "Ad_Orders":   st.column_config.NumberColumn("Ad Orders",    format="%d"),
+                    "CTR":         st.column_config.NumberColumn("CTR %",        format="%.2f%%"),
+                    "CPC":         st.column_config.NumberColumn("CPC ($)",      format="$%.2f"),
+                    "ACOS":        st.column_config.NumberColumn("ACOS %",       format="%.1f%%"),
+                },
+                hide_index=True, use_container_width=True, height=430,
+            )
+            st.download_button(
+                "📥 Download SKU Ads Data (CSV)",
+                disp_ads.to_csv(index=False).encode("utf-8"),
+                "sku_ads_data.csv", "text/csv", key="dl_sku_ads",
+            )
 
     st.markdown("---")
-
-    # ── Helper: pull ads data for a specific Parent SKU ──────────────────────
-    def _get_ads_for_sku(parent_sku: str) -> dict | None:
-        ads_raw = st.session_state.get("ads_df_raw", pd.DataFrame())
-        if ads_raw.empty or "_error" in ads_raw.columns:
-            return None
-        row = ads_raw[ads_raw["Parent_SKU"] == parent_sku]
-        if row.empty:
-            return None
-        r = row.iloc[0]
-        return {
-            "Impressions": int(r["Impressions"]),
-            "Clicks":      int(r["Clicks"]),
-            "Spend":       float(r["Spend"]),
-            "Ad_Sales":    float(r["Ad_Sales"]),
-            "CTR":         float(r["CTR"]),
-            "CPC":         float(r["CPC"]),
-            "ACOS":        float(r["ACOS"]),
-        }
 
     if "Parent" in df_s.columns and df_s["Parent"].nunique() > 1:
         # ── Top N selector ───────────────────────────────────────────────────
