@@ -9,6 +9,13 @@ import json
 import hashlib
 import re
 
+# Amazon Ads SKU-level fetcher (sku_data.py must be in the same folder)
+try:
+    from sku_data import fetch_sku_ads_data, fetch_sku_ads_summary
+    _ADS_API_AVAILABLE = True
+except ImportError:
+    _ADS_API_AVAILABLE = False
+
 # Configure Plotly
 import plotly.io as pio
 pio.templates.default = "plotly_dark"
@@ -880,34 +887,228 @@ with tabs[2]:
         height=350
     )
 
-# TAB 4: SKU Analysis
+# ==============================================================================
+# TAB 4: SKU Analysis  (with live Amazon Ads data)
+# ==============================================================================
+
+# ── Cached wrapper so the API is only called once per session / TTL ──────────
+@st.cache_data(show_spinner=False, ttl=1800)   # 30-min cache
+def _load_sku_ads(start: str, end: str, market: str) -> pd.DataFrame:
+    """Call the Amazon Ads API and return a Parent-SKU summary DataFrame."""
+    if not _ADS_API_AVAILABLE:
+        return pd.DataFrame()
+    try:
+        return fetch_sku_ads_summary(start, end, market)
+    except Exception as exc:
+        return pd.DataFrame({"_error": [str(exc)]})
+
+
 with tabs[3]:
     st.markdown('<div class="section-header">🏷️ SKU Performance Analysis</div>', unsafe_allow_html=True)
-    
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # SECTION 0  ──  Live Amazon Ads Panel
+    # ══════════════════════════════════════════════════════════════════════════
+    with st.expander("📡 Live Amazon Ads Data  —  Spend · Impressions · Clicks per SKU", expanded=True):
+
+        if not _ADS_API_AVAILABLE:
+            st.warning("⚠️ `sku_data.py` not found in the app folder. Place it alongside `app.py` to enable this panel.")
+        else:
+            ads_c1, ads_c2, ads_c3, ads_c4 = st.columns([2, 2, 2, 1])
+            with ads_c1:
+                ads_start = st.date_input(
+                    "Ads Start Date",
+                    value=date.today() - timedelta(days=10),
+                    key="ads_start",
+                )
+            with ads_c2:
+                ads_end = st.date_input(
+                    "Ads End Date",
+                    value=date.today() - timedelta(days=1),
+                    key="ads_end",
+                )
+            with ads_c3:
+                ads_market = st.selectbox(
+                    "Market",
+                    options=["BOTH", "US", "CA"],
+                    key="ads_market",
+                )
+            with ads_c4:
+                st.markdown("<br>", unsafe_allow_html=True)
+                fetch_ads = st.button("🔄 Fetch / Refresh", key="fetch_ads_btn", use_container_width=True)
+
+            # Trigger fetch
+            if fetch_ads:
+                _load_sku_ads.clear()
+
+            ads_df_raw = pd.DataFrame()
+            if fetch_ads or "ads_data_loaded" in st.session_state:
+                st.session_state["ads_data_loaded"] = True
+                with st.spinner("Fetching SKU-level ads data from Amazon Ads API…"):
+                    ads_df_raw = _load_sku_ads(
+                        ads_start.strftime("%Y-%m-%d"),
+                        ads_end.strftime("%Y-%m-%d"),
+                        ads_market,
+                    )
+
+            # Store in session for use below
+            st.session_state["ads_df_raw"] = ads_df_raw
+
+            if not ads_df_raw.empty and "_error" not in ads_df_raw.columns:
+                # ── KPI row ──────────────────────────────────────────────────
+                total_imp   = ads_df_raw["Impressions"].sum()
+                total_clk   = ads_df_raw["Clicks"].sum()
+                total_spend = ads_df_raw["Spend"].sum()
+                total_ad_sales = ads_df_raw["Ad_Sales"].sum()
+                blended_acos = (total_spend / total_ad_sales * 100) if total_ad_sales > 0 else 0
+                blended_ctr  = (total_clk / total_imp * 100) if total_imp > 0 else 0
+
+                ak1, ak2, ak3, ak4, ak5 = st.columns(5)
+                ak1.metric("👁️ Impressions",  f"{total_imp:,.0f}")
+                ak2.metric("🖱️ Clicks",       f"{total_clk:,.0f}")
+                ak3.metric("💸 Ad Spend",     f"${total_spend:,.2f}")
+                ak4.metric("📈 Ad Sales",     f"${total_ad_sales:,.2f}")
+                ak5.metric("🎯 Blended ACOS", f"{blended_acos:.1f}%")
+
+                st.markdown("---")
+
+                # ── Top SKUs by Spend bar chart ───────────────────────────────
+                top_spend = ads_df_raw.nlargest(15, "Spend")
+                fig_ads_bar = px.bar(
+                    top_spend,
+                    x="Spend",
+                    y="Parent_SKU",
+                    orientation="h",
+                    color="ACOS",
+                    color_continuous_scale="RdYlGn_r",
+                    range_color=[0, 60],
+                    custom_data=["Impressions", "Clicks", "ACOS", "CTR", "CPC", "Ad_Sales"],
+                    labels={"Spend": "Ad Spend ($)", "Parent_SKU": "Parent SKU", "ACOS": "ACOS %"},
+                    title="Top 15 SKUs by Ad Spend  (colour = ACOS%)",
+                )
+                fig_ads_bar.update_traces(
+                    hovertemplate=(
+                        "<b>%{y}</b><br>"
+                        "Spend: $%{x:,.2f}<br>"
+                        "Impressions: %{customdata[0]:,.0f}<br>"
+                        "Clicks: %{customdata[1]:,.0f}<br>"
+                        "CTR: %{customdata[3]:.2f}%<br>"
+                        "CPC: $%{customdata[4]:.2f}<br>"
+                        "Ad Sales: $%{customdata[5]:,.2f}<br>"
+                        "ACOS: %{customdata[2]:.1f}%<extra></extra>"
+                    )
+                )
+                fig_ads_bar.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    height=430,
+                    margin=dict(l=0, r=0, t=40, b=0),
+                    yaxis=dict(autorange="reversed"),
+                    coloraxis_colorbar=dict(title="ACOS %"),
+                )
+                st.plotly_chart(fig_ads_bar, config={"displayModeBar": False}, use_container_width=True)
+
+                # ── Impressions vs Clicks scatter ─────────────────────────────
+                fig_scatter = px.scatter(
+                    ads_df_raw[ads_df_raw["Impressions"] > 0],
+                    x="Impressions",
+                    y="Clicks",
+                    size="Spend",
+                    color="ACOS",
+                    color_continuous_scale="RdYlGn_r",
+                    range_color=[0, 60],
+                    hover_name="Parent_SKU",
+                    custom_data=["Spend", "ACOS", "CTR"],
+                    labels={"Impressions": "Impressions", "Clicks": "Clicks"},
+                    title="Impressions vs Clicks  (bubble = Spend, colour = ACOS%)",
+                )
+                fig_scatter.update_traces(
+                    hovertemplate=(
+                        "<b>%{hovertext}</b><br>"
+                        "Impressions: %{x:,.0f}<br>"
+                        "Clicks: %{y:,.0f}<br>"
+                        "Spend: $%{customdata[0]:,.2f}<br>"
+                        "ACOS: %{customdata[1]:.1f}%<br>"
+                        "CTR: %{customdata[2]:.2f}%<extra></extra>"
+                    )
+                )
+                fig_scatter.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(255,255,255,0.03)",
+                    height=400,
+                    margin=dict(l=0, r=0, t=40, b=0),
+                )
+                st.plotly_chart(fig_scatter, config={"displayModeBar": False}, use_container_width=True)
+
+                # ── Full data table ───────────────────────────────────────────
+                st.markdown("**📋 Full SKU Ads Data Table**")
+                disp_ads = ads_df_raw.copy()
+                disp_ads = disp_ads.sort_values("Spend", ascending=False)
+                st.dataframe(
+                    disp_ads,
+                    column_config={
+                        "Market":      st.column_config.TextColumn("Market",      width="small"),
+                        "Parent_SKU":  st.column_config.TextColumn("Parent SKU",  width="medium"),
+                        "Impressions": st.column_config.NumberColumn("Impressions",format="%d"),
+                        "Clicks":      st.column_config.NumberColumn("Clicks",     format="%d"),
+                        "Spend":       st.column_config.ProgressColumn(
+                                           "Spend ($)", format="$%.2f",
+                                           min_value=0, max_value=float(disp_ads["Spend"].max())),
+                        "Ad_Sales":    st.column_config.NumberColumn("Ad Sales ($)",format="$%.2f"),
+                        "Ad_Orders":   st.column_config.NumberColumn("Ad Orders",  format="%d"),
+                        "CTR":         st.column_config.NumberColumn("CTR %",      format="%.2f%%"),
+                        "CPC":         st.column_config.NumberColumn("CPC ($)",    format="$%.2f"),
+                        "ACOS":        st.column_config.NumberColumn("ACOS %",     format="%.1f%%"),
+                    },
+                    hide_index=True, use_container_width=True, height=430,
+                )
+                st.download_button(
+                    "📥 Download SKU Ads Data (CSV)",
+                    disp_ads.to_csv(index=False).encode("utf-8"),
+                    "sku_ads_data.csv", "text/csv", key="dl_sku_ads",
+                )
+
+            elif "_error" in ads_df_raw.columns:
+                st.error(f"❌ Amazon Ads API error: {ads_df_raw['_error'].iloc[0]}")
+            else:
+                st.info("👆 Click **Fetch / Refresh** above to pull live SKU-level ads data from Amazon.")
+
+    st.markdown("---")
+
+    # ── Helper: pull ads data for a specific Parent SKU ──────────────────────
+    def _get_ads_for_sku(parent_sku: str) -> dict | None:
+        ads_raw = st.session_state.get("ads_df_raw", pd.DataFrame())
+        if ads_raw.empty or "_error" in ads_raw.columns:
+            return None
+        row = ads_raw[ads_raw["Parent_SKU"] == parent_sku]
+        if row.empty:
+            return None
+        r = row.iloc[0]
+        return {
+            "Impressions": int(r["Impressions"]),
+            "Clicks":      int(r["Clicks"]),
+            "Spend":       float(r["Spend"]),
+            "Ad_Sales":    float(r["Ad_Sales"]),
+            "CTR":         float(r["CTR"]),
+            "CPC":         float(r["CPC"]),
+            "ACOS":        float(r["ACOS"]),
+        }
+
     if "Parent" in df_s.columns and df_s["Parent"].nunique() > 1:
-
-        # ── Top-X selector ────────────────────────────────────────────────────
-        tx_col, _, _ = st.columns([1, 2, 2])
-        with tx_col:
-            top_x = st.selectbox(
-                "📊 Show Top SKUs",
-                options=[10, 20, 50, 100],
-                index=0,
-                key="sku_top_x"
-            )
-
-        # Calculate Parent SKU Performance
+        # Calculate Parent SKU Performance (same as before)
         Parent_perf = df_s.groupby("Parent").agg({
             "revenue": "sum",
             "orders": "sum"
         }).reset_index()
         Parent_perf["aov"] = Parent_perf["revenue"] / Parent_perf["orders"]
-        Parent_perf = Parent_perf.sort_values("revenue", ascending=False).head(top_x)
+        Parent_perf = Parent_perf.sort_values("revenue", ascending=False).head(10)
         
         col1, col2 = st.columns([2, 1])
         
         with col1:
-            st.markdown(f"**Top {top_x} Parent SKUs by Revenue**")
+            st.markdown("**Top 10 Parent SKUs by Revenue**")
             
             fig_sku_bar = px.bar(
                 Parent_perf, 
@@ -1031,6 +1232,18 @@ with tabs[3]:
                 revenue_share = (total_rev / df_s["revenue"].sum() * 100) if df_s["revenue"].sum() > 0 else 0
                 st.metric("📈 Rev Share",  f"{revenue_share:.1f}%")
 
+            # ── Amazon Ads metrics row (if API data is loaded) ────────────────
+            ads_info = _get_ads_for_sku(selected_sku)
+            if ads_info:
+                st.markdown("")
+                st.markdown("**📡 Amazon Ads Performance (fetched period)**")
+                a1, a2, a3, a4, a5 = st.columns(5)
+                a1.metric("👁️ Impressions", f"{ads_info['Impressions']:,}")
+                a2.metric("🖱️ Clicks",      f"{ads_info['Clicks']:,}")
+                a3.metric("💸 Spend",       f"${ads_info['Spend']:,.2f}")
+                a4.metric("🎯 ACOS",        f"{ads_info['ACOS']:.1f}%")
+                a5.metric("📊 CTR",         f"{ads_info['CTR']:.2f}%")
+
             st.markdown("")
 
             chart_col, info_col = st.columns([3, 2])
@@ -1146,7 +1359,7 @@ with tabs[3]:
 
         # ── Detailed SKU Cards with Child SKUs ───────────────────────────────
         st.markdown("---")
-        st.markdown(f"**📦 Top {top_x} SKU Breakdown (Click to expand for Child SKUs)**")
+        st.markdown("**📦 Top 10 SKU Breakdown (Click to expand for Child SKUs)**")
         
         for idx, parent_row in Parent_perf.iterrows():
             parent = parent_row['Parent']
@@ -1180,6 +1393,17 @@ with tabs[3]:
                         st.metric("Child SKUs", f"{len(child_data)}")
                     else:
                         st.metric("Child SKUs", "N/A")
+
+                # ── Ads data row (if available) ───────────────────────────────
+                ads_info_card = _get_ads_for_sku(parent)
+                if ads_info_card:
+                    st.markdown("**📡 Amazon Ads** (fetched period)")
+                    ac1, ac2, ac3, ac4, ac5 = st.columns(5)
+                    ac1.metric("👁️ Impressions", f"{ads_info_card['Impressions']:,}")
+                    ac2.metric("🖱️ Clicks",      f"{ads_info_card['Clicks']:,}")
+                    ac3.metric("💸 Spend",       f"${ads_info_card['Spend']:,.2f}")
+                    ac4.metric("🎯 ACOS",        f"{ads_info_card['ACOS']:.1f}%")
+                    ac5.metric("📊 CTR",         f"{ads_info_card['CTR']:.2f}%")
                 
                 # Show child SKUs if available
                 if has_children:
@@ -2965,10 +3189,6 @@ with tabs[9]:
 
     # ── Tab-level filters ─────────────────────────────────────────────────────
     st.markdown("### 🔧 Filters")
-    st.caption(
-        f"📅 Date range: **{start_date.strftime('%b %d, %Y')}** → **{end_date.strftime('%b %d, %Y')}**  "
-        f"· Adjust via the sidebar **Start / End Date** controls."
-    )
     fcol1, fcol2, fcol3 = st.columns([2, 2, 1])
 
     all_jtypes = sorted(merch_lookup["jewelry_type"].dropna().unique().tolist())
@@ -3009,12 +3229,13 @@ with tabs[9]:
     # Prepare a slim base frame once per rerun for this tab (keeps UI identical, speeds up filtering)
     _df_merch_base = df_enriched[FILTER_COLS].copy()
 
+    # A tiny signature so cache invalidates if underlying data changes (date range, file, etc.)
+    _data_sig = (int(_df_merch_base.shape[0]), float(_df_merch_base["revenue"].sum()), float(_df_merch_base["orders"].sum()))
+
     @st.cache_data(show_spinner=False, ttl=900, max_entries=128)
-    def _compute_merch_views(_base_df: pd.DataFrame, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple):
-        # _base_df is passed explicitly so Streamlit hashes the DataFrame as part of the
-        # cache key — this guarantees the cache is invalidated whenever the date range (or
-        # any upstream sidebar filter) changes the underlying data, fixing the stale-data bug.
-        df = _base_df.copy()
+    def _compute_merch_views(_data_sig_key: tuple, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple):
+        # Use the outer-scope base df; cache key is driven by _data_sig_key + filters only.
+        df = _df_merch_base.copy()
 
         # Normalize columns to robust plain strings for reliable filtering
         for _c in ["design_code", "jewelry_type", "stone"]:
@@ -3156,7 +3377,7 @@ with tabs[9]:
     _sel_jtype_t = tuple(sel_jtype or [])
     _sel_stone_t = tuple(sel_stone or [])
 
-    _views = _compute_merch_views(_df_merch_base, matched_only, _sel_jtype_t, _sel_stone_t)
+    _views = _compute_merch_views(_data_sig, matched_only, _sel_jtype_t, _sel_stone_t)
 
     df_m, _m_metrics, jtype_agg, stone_agg, parent_agg, design_agg, heat_raw, top15_stones = _views
     if df_m.empty:
