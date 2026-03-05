@@ -1097,18 +1097,35 @@ with tabs[3]:
         }
 
     if "Parent" in df_s.columns and df_s["Parent"].nunique() > 1:
-        # Calculate Parent SKU Performance (same as before)
-        Parent_perf = df_s.groupby("Parent").agg({
+        # ── Top N selector ───────────────────────────────────────────────────
+        tn_col1, tn_col2 = st.columns([3, 1])
+        with tn_col1:
+            st.markdown("**🏷️ Parent SKU Performance**")
+        with tn_col2:
+            top_n_sku = st.selectbox(
+                "Show top",
+                options=[10, 20, 50, 100],
+                index=0,
+                key="sku_top_n",
+                label_visibility="collapsed",
+                format_func=lambda x: f"Top {x} SKUs"
+            )
+
+        # Calculate Parent SKU Performance
+        Parent_perf_all = df_s.groupby("Parent").agg({
             "revenue": "sum",
             "orders": "sum"
         }).reset_index()
-        Parent_perf["aov"] = Parent_perf["revenue"] / Parent_perf["orders"]
-        Parent_perf = Parent_perf.sort_values("revenue", ascending=False).head(10)
-        
+        Parent_perf_all["aov"] = Parent_perf_all["revenue"] / Parent_perf_all["orders"]
+        Parent_perf_all = Parent_perf_all.sort_values("revenue", ascending=False)
+
+        # Apply top N
+        Parent_perf = Parent_perf_all.head(top_n_sku)
+
         col1, col2 = st.columns([2, 1])
-        
+
         with col1:
-            st.markdown("**Top 10 Parent SKUs by Revenue**")
+            st.markdown(f"**Top {top_n_sku} Parent SKUs by Revenue**")
             
             fig_sku_bar = px.bar(
                 Parent_perf, 
@@ -1124,7 +1141,7 @@ with tabs[3]:
                 template="plotly_dark",
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
-                height=450,
+                height=max(450, top_n_sku * 28),
                 margin=dict(l=0, r=0, t=20, b=0),
                 yaxis=dict(tickmode='linear')
             )
@@ -1359,8 +1376,8 @@ with tabs[3]:
 
         # ── Detailed SKU Cards with Child SKUs ───────────────────────────────
         st.markdown("---")
-        st.markdown("**📦 Top 10 SKU Breakdown (Click to expand for Child SKUs)**")
-        
+        st.markdown(f"**📦 Top {top_n_sku} SKU Breakdown (Click to expand for Child SKUs)**")
+
         for idx, parent_row in Parent_perf.iterrows():
             parent = parent_row['Parent']
             
