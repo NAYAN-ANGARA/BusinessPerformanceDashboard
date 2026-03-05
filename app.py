@@ -2998,21 +2998,12 @@ with tabs[9]:
     # Prepare a slim base frame once per rerun for this tab (keeps UI identical, speeds up filtering)
     _df_merch_base = df_enriched[FILTER_COLS].copy()
 
-    # A tiny signature so cache invalidates if underlying data changes (date range, file, etc.)
-    # Include start_date and end_date explicitly so the cache always refreshes when the date
-    # selection changes, even if row count / revenue happen to be identical across periods.
-    _data_sig = (
-        int(_df_merch_base.shape[0]),
-        float(_df_merch_base["revenue"].sum()),
-        float(_df_merch_base["orders"].sum()),
-        str(start_date),
-        str(end_date),
-    )
-
     @st.cache_data(show_spinner=False, ttl=900, max_entries=128)
-    def _compute_merch_views(_data_sig_key: tuple, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple):
-        # Use the outer-scope base df; cache key is driven by _data_sig_key + filters only.
-        df = _df_merch_base.copy()
+    def _compute_merch_views(_base_df: pd.DataFrame, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple):
+        # _base_df is passed explicitly so Streamlit hashes the DataFrame as part of the
+        # cache key — this guarantees the cache is invalidated whenever the date range (or
+        # any upstream sidebar filter) changes the underlying data, fixing the stale-data bug.
+        df = _base_df.copy()
 
         # Normalize columns to robust plain strings for reliable filtering
         for _c in ["design_code", "jewelry_type", "stone"]:
@@ -3154,7 +3145,7 @@ with tabs[9]:
     _sel_jtype_t = tuple(sel_jtype or [])
     _sel_stone_t = tuple(sel_stone or [])
 
-    _views = _compute_merch_views(_data_sig, matched_only, _sel_jtype_t, _sel_stone_t)
+    _views = _compute_merch_views(_df_merch_base, matched_only, _sel_jtype_t, _sel_stone_t)
 
     df_m, _m_metrics, jtype_agg, stone_agg, parent_agg, design_agg, heat_raw, top15_stones = _views
     if df_m.empty:
