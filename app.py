@@ -965,6 +965,14 @@ with tabs[3]:
                 if mkt_filter != "All":
                     ads_filtered = ads_filtered[ads_filtered["Market"] == mkt_filter]
 
+                # ── Product type filter (uses sheet data to map type → Parent SKUs) ──
+                if "type" in df_s.columns and "Parent" in df_s.columns and selected_types:
+                    # Build set of Parent SKUs that belong to the selected product types
+                    type_skus = set(
+                        df_s[df_s["type"].isin(selected_types)]["Parent"].dropna().unique()
+                    )
+                    ads_filtered = ads_filtered[ads_filtered["Parent_SKU"].isin(type_skus)]
+
                 # ── Aggregate filtered data ───────────────────────────────────
                 ads_df_raw = _aggregate_ads(ads_filtered)
 
