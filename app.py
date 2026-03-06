@@ -1053,29 +1053,48 @@ with tabs[3]:
                 st.plotly_chart(fig_scatter, config={"displayModeBar": False}, use_container_width=True)
     
                 # ── Full table + download ─────────────────────────────────────────
+                # Merge sheet orders into ads data — only keep SKUs present in ads data
+                sheet_orders = pd.DataFrame()
+                if "Parent" in df_s.columns and "orders" in df_s.columns:
+                    sheet_orders = (
+                        df_s.groupby("Parent", as_index=False)["orders"]
+                        .sum()
+                        .rename(columns={"Parent": "Parent_SKU", "orders": "Total_Orders"})
+                    )
+
+                disp_ads = ads_df_raw.sort_values("Spend", ascending=False).copy()
+
+                # Join sheet orders — inner-style: only rows already in ads data get the column
+                if not sheet_orders.empty:
+                    disp_ads = disp_ads.merge(sheet_orders, on="Parent_SKU", how="left")
+                    disp_ads["Total_Orders"] = disp_ads["Total_Orders"].fillna(0).astype(int)
+                else:
+                    disp_ads["Total_Orders"] = 0
+
                 st.markdown("**📋 Full SKU Ads Data**")
-                disp_ads = ads_df_raw.sort_values("Spend", ascending=False)
                 st.dataframe(
                     disp_ads,
                     column_config={
-                        "Market":      st.column_config.TextColumn("Market",       width="small"),
-                        "Parent_SKU":  st.column_config.TextColumn("Parent SKU",   width="medium"),
-                        "Impressions": st.column_config.NumberColumn("Impressions", format="%d"),
-                        "Clicks":      st.column_config.NumberColumn("Clicks",      format="%d"),
-                        "Spend":       st.column_config.ProgressColumn(
-                                           "Spend ($)", format="$%.2f",
-                                           min_value=0, max_value=float(disp_ads["Spend"].max())),
-                        "Ad_Sales":    st.column_config.NumberColumn("Ad Sales ($)", format="$%.2f"),
-                        "Ad_Orders":   st.column_config.NumberColumn("Ad Orders",    format="%d"),
-                        "CTR":         st.column_config.NumberColumn("CTR %",        format="%.2f%%"),
-                        "CPC":         st.column_config.NumberColumn("CPC ($)",      format="$%.2f"),
-                        "ACOS":        st.column_config.NumberColumn("ACOS %",       format="%.1f%%"),
+                        "Market":        st.column_config.TextColumn("Market",        width="small"),
+                        "Parent_SKU":    st.column_config.TextColumn("Parent SKU",    width="medium"),
+                        "Impressions":   st.column_config.NumberColumn("Impressions",  format="%d"),
+                        "Clicks":        st.column_config.NumberColumn("Clicks",       format="%d"),
+                        "Spend":         st.column_config.ProgressColumn(
+                                             "Spend ($)", format="$%.2f",
+                                             min_value=0, max_value=float(disp_ads["Spend"].max())),
+                        "Ad_Sales":      st.column_config.NumberColumn("Ad Sales ($)", format="$%.2f"),
+                        "Ad_Orders":     st.column_config.NumberColumn("Ad Orders",    format="%d"),
+                        "Total_Orders":  st.column_config.NumberColumn("Total Orders", format="%d"),
+                        "CTR":           st.column_config.NumberColumn("CTR %",        format="%.2f%%"),
+                        "CPC":           st.column_config.NumberColumn("CPC ($)",      format="$%.2f"),
+                        "ACOS":          st.column_config.NumberColumn("ACOS %",       format="%.1f%%"),
                     },
                     hide_index=True, use_container_width=True, height=430,
                 )
+
                 dl_col1, dl_col2 = st.columns(2)
 
-                # ── Download 1: Parent-SKU aggregated (current view) ──────────
+                # ── Download 1: Parent-SKU summary with Total Orders ──────────
                 with dl_col1:
                     st.download_button(
                         "📥 Download Parent-SKU Summary (CSV)",
@@ -1085,10 +1104,8 @@ with tabs[3]:
                         use_container_width=True,
                     )
 
-                # ── Download 2: Full SKU-level daily data ─────────────────────
+                # ── Download 2: Child-SKU level data ─────────────────────────
                 with dl_col2:
-                    # Build SKU-level export from the filtered raw data
-                    # Aggregate by SKU (not just Parent_SKU) to get one row per child SKU
                     sku_level_cols = [c for c in
                         ["Market", "Parent_SKU", "SKU", "ASIN",
                          "Impressions", "Clicks", "Spend", "Ad_Sales", "Ad_Orders"]
@@ -1107,9 +1124,13 @@ with tabs[3]:
                             Ad_Orders=("Ad_Orders",     "sum"),
                         )
                     )
-                    sku_export["CTR"]  = (sku_export["Clicks"]   / sku_export["Impressions"].replace(0, float("nan"))) * 100
-                    sku_export["CPC"]  = (sku_export["Spend"]    / sku_export["Clicks"].replace(0,      float("nan")))
-                    sku_export["ACOS"] = (sku_export["Spend"]    / sku_export["Ad_Sales"].replace(0,    float("nan"))) * 100
+                    # Add Total Orders from sheets at child SKU level too
+                    if not sheet_orders.empty:
+                        sku_export = sku_export.merge(sheet_orders, on="Parent_SKU", how="left")
+                        sku_export["Total_Orders"] = sku_export["Total_Orders"].fillna(0).astype(int)
+                    sku_export["CTR"]  = (sku_export["Clicks"]  / sku_export["Impressions"].replace(0, float("nan"))) * 100
+                    sku_export["CPC"]  = (sku_export["Spend"]   / sku_export["Clicks"].replace(0,      float("nan")))
+                    sku_export["ACOS"] = (sku_export["Spend"]   / sku_export["Ad_Sales"].replace(0,    float("nan"))) * 100
                     sku_export[["CTR","CPC","ACOS"]] = sku_export[["CTR","CPC","ACOS"]].fillna(0)
                     sku_export = sku_export.sort_values(["Market","Spend"], ascending=[True, False]).reset_index(drop=True)
 
