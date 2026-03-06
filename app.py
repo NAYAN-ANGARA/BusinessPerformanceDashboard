@@ -894,8 +894,8 @@ def _load_sku_ads_raw() -> pd.DataFrame:
         return pd.DataFrame()
     try:
         df = pd.read_csv(cache_path, parse_dates=["Date"])
-        needed = ["Date", "Market", "Parent_SKU", "Impressions",
-                  "Clicks", "Spend", "Ad_Sales", "Ad_Orders"]
+        needed = ["Date", "Market", "Parent_SKU", "SKU", "ASIN",
+                  "Impressions", "Clicks", "Spend", "Ad_Sales", "Ad_Orders"]
         return df[[c for c in needed if c in df.columns]]
     except Exception as exc:
         return pd.DataFrame({"_error": [str(exc)]})
@@ -1073,11 +1073,53 @@ with tabs[3]:
                     },
                     hide_index=True, use_container_width=True, height=430,
                 )
-                st.download_button(
-                    "📥 Download SKU Ads Data (CSV)",
-                    disp_ads.to_csv(index=False).encode("utf-8"),
-                    "sku_ads_data.csv", "text/csv", key="dl_sku_ads",
-                )
+                dl_col1, dl_col2 = st.columns(2)
+
+                # ── Download 1: Parent-SKU aggregated (current view) ──────────
+                with dl_col1:
+                    st.download_button(
+                        "📥 Download Parent-SKU Summary (CSV)",
+                        disp_ads.to_csv(index=False).encode("utf-8"),
+                        f"sku_ads_summary_{start_date}_{end_date}.csv",
+                        "text/csv", key="dl_sku_ads_summary",
+                        use_container_width=True,
+                    )
+
+                # ── Download 2: Full SKU-level daily data ─────────────────────
+                with dl_col2:
+                    # Build SKU-level export from the filtered raw data
+                    # Aggregate by SKU (not just Parent_SKU) to get one row per child SKU
+                    sku_level_cols = [c for c in
+                        ["Market", "Parent_SKU", "SKU", "ASIN",
+                         "Impressions", "Clicks", "Spend", "Ad_Sales", "Ad_Orders"]
+                        if c in ads_filtered.columns]
+
+                    sku_export = (
+                        ads_filtered[sku_level_cols]
+                        .groupby([c for c in sku_level_cols
+                                  if c not in ("Impressions","Clicks","Spend","Ad_Sales","Ad_Orders")],
+                                 as_index=False)
+                        .agg(
+                            Impressions=("Impressions", "sum"),
+                            Clicks=("Clicks",           "sum"),
+                            Spend=("Spend",             "sum"),
+                            Ad_Sales=("Ad_Sales",       "sum"),
+                            Ad_Orders=("Ad_Orders",     "sum"),
+                        )
+                    )
+                    sku_export["CTR"]  = (sku_export["Clicks"]   / sku_export["Impressions"].replace(0, float("nan"))) * 100
+                    sku_export["CPC"]  = (sku_export["Spend"]    / sku_export["Clicks"].replace(0,      float("nan")))
+                    sku_export["ACOS"] = (sku_export["Spend"]    / sku_export["Ad_Sales"].replace(0,    float("nan"))) * 100
+                    sku_export[["CTR","CPC","ACOS"]] = sku_export[["CTR","CPC","ACOS"]].fillna(0)
+                    sku_export = sku_export.sort_values(["Market","Spend"], ascending=[True, False]).reset_index(drop=True)
+
+                    st.download_button(
+                        "📥 Download Child-SKU Level Data (CSV)",
+                        sku_export.to_csv(index=False).encode("utf-8"),
+                        f"sku_ads_child_level_{start_date}_{end_date}.csv",
+                        "text/csv", key="dl_sku_ads_child",
+                        use_container_width=True,
+                    )
 
     st.markdown("---")
 
