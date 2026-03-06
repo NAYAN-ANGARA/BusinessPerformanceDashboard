@@ -5,8 +5,12 @@ on:
   schedule:
     - cron: '30 3 * * *'
   workflow_dispatch:
+    inputs:
+      start_date:
+        description: 'Override start date (YYYY-MM-DD). Leave blank for auto.'
+        required: false
+        default: ''
 
-# ── Give the bot write access to push the CSV back ────────────────────────────
 permissions:
   contents: write
 
@@ -14,13 +18,12 @@ permissions:
 jobs:
   fetch-and-commit:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30     # only fetching 1-2 days max now, 30 min is plenty
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          # persist-credentials lets the bot push without a PAT
           persist-credentials: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -32,24 +35,85 @@ jobs:
       - name: Install dependencies
         run: pip install requests pandas python-dotenv urllib3
 
-      - name: Fetch SKU ads data
+      - name: Fetch SKU ads data and append to CSV
         env:
           AMZN_CLIENT_ID:      ${{ secrets.AMZN_CLIENT_ID }}
           AMZN_CLIENT_SECRET:  ${{ secrets.AMZN_CLIENT_SECRET }}
           AMZN_REFRESH_TOKEN:  ${{ secrets.AMZN_REFRESH_TOKEN }}
           AMZN_PROFILE_ID_US:  ${{ secrets.AMZN_PROFILE_ID_US }}
           AMZN_PROFILE_ID_CA:  ${{ secrets.AMZN_PROFILE_ID_CA }}
+          INPUT_START_DATE:    ${{ github.event.inputs.start_date }}
         run: |
-          python sku_data.py \
-            --start-date 2026-01-01 \
-            --market BOTH \
-            --workers 3 \
-            --out sku_ads_cache.csv
+          python - << 'PYEOF'
+          import os
+          import pandas as pd
+          from datetime import date, timedelta
+          from sku_data import fetch_sku_ads_data
+
+          cache_path = "sku_ads_cache.csv"
+          yesterday  = date.today() - timedelta(days=1)
+
+          # ── Determine start date ──────────────────────────────────────────────
+          # Priority 1: manual override via workflow_dispatch input
+          # Priority 2: day after the last date already in the CSV (fills any gaps)
+          # Priority 3: March 1 2026 (hard floor — never re-fetch older data)
+
+          MARCH_FLOOR = date(2026, 3, 1)
+
+          manual = os.environ.get("INPUT_START_DATE", "").strip()
+          if manual:
+              start_date = date.fromisoformat(manual)
+              print(f"Manual override: fetching from {start_date}")
+          elif os.path.exists(cache_path):
+              existing = pd.read_csv(cache_path, parse_dates=["Date"])
+              last_date = existing["Date"].max().date()
+              start_date = max(last_date + timedelta(days=1), MARCH_FLOOR)
+              print(f"CSV last date: {last_date} → fetching from {start_date}")
+          else:
+              start_date = MARCH_FLOOR
+              print(f"No cache found → fetching from {start_date}")
+
+          end_date = yesterday
+
+          if start_date > end_date:
+              print(f"Already up to date ({start_date} > {end_date}) — nothing to fetch.")
+              exit(0)
+
+          print(f"Fetching: {start_date} → {end_date}")
+
+          # ── Fetch ─────────────────────────────────────────────────────────────
+          new_df = fetch_sku_ads_data(
+              start_date.strftime("%Y-%m-%d"),
+              end_date.strftime("%Y-%m-%d"),
+              market="BOTH",
+              max_workers=3,
+          )
+
+          if new_df.empty:
+              print("No data returned — nothing to write.")
+              exit(0)
+
+          print(f"Fetched {len(new_df):,} rows")
+
+          # ── Append (deduplicate on date so re-runs are safe) ──────────────────
+          if os.path.exists(cache_path):
+              existing = pd.read_csv(cache_path, parse_dates=["Date"])
+              fetched_dates = new_df["Date"].dt.date.unique()
+              existing = existing[~existing["Date"].dt.date.isin(fetched_dates)]
+              combined = pd.concat([existing, new_df], ignore_index=True)
+              print(f"Existing: {len(existing):,}  +  New: {len(new_df):,}  =  Total: {len(combined):,}")
+          else:
+              combined = new_df
+
+          combined = combined.sort_values(["Date", "Market", "Parent_SKU"]).reset_index(drop=True)
+          combined.to_csv(cache_path, index=False)
+          print(f"Saved → {cache_path}")
+          PYEOF
 
       - name: Commit updated cache
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add sku_ads_cache.csv
-          git diff --cached --quiet || git commit -m "chore: refresh SKU ads cache [$(date -u '+%Y-%m-%d %H:%M UTC')]"
+          git diff --cached --quiet || git commit -m "chore: append SKU ads data [$(date -u '+%Y-%m-%d %H:%M UTC')]"
           git push
