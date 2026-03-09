@@ -124,6 +124,14 @@ new_df = new_df.rename(columns={
     "Ad_Orders": "ad_orders", "CTR": "ctr", "CPC": "cpc", "ACOS": "acos",
 })
 
+# Compute CTR, CPC, ACOS if not already present
+if "ctr" not in new_df.columns:
+    new_df["ctr"] = new_df.apply(lambda r: r["impressions"] and r["clicks"] / r["impressions"] * 100 or 0, axis=1)
+if "cpc" not in new_df.columns:
+    new_df["cpc"] = new_df.apply(lambda r: r["clicks"] and r["spend"] / r["clicks"] or 0, axis=1)
+if "acos" not in new_df.columns:
+    new_df["acos"] = new_df.apply(lambda r: r["ad_sales"] and r["spend"] / r["ad_sales"] * 100 or 0, axis=1)
+
 keep = ["date", "market", "parent_sku", "sku", "asin",
         "impressions", "clicks", "spend", "ad_sales", "ad_orders",
         "ctr", "cpc", "acos"]
