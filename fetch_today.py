@@ -58,9 +58,10 @@ if manual:
     print(f"Manual override: fetching from {start_date}")
 else:
     try:
-        rows = sb_get('select="Date"&order=Date.desc&limit=1')
+        # Use lowercase column name — table columns are all lowercase
+        rows = sb_get("select=date&order=date.desc&limit=1")
         if rows:
-            last = date.fromisoformat(rows[0]["Date"])
+            last = date.fromisoformat(rows[0]["date"])
             start_date = last + timedelta(days=1)
             if start_date < MARCH_FLOOR:
                 start_date = MARCH_FLOOR
@@ -94,13 +95,20 @@ if new_df.empty:
 
 print(f"Fetched {len(new_df):,} rows from Amazon Ads")
 
-# ── Upsert into Supabase (column names match table exactly) ───────────────────
+# ── Rename to lowercase to match Supabase table columns ───────────────────────
 new_df = new_df.copy()
 new_df["Date"] = new_df["Date"].dt.strftime("%Y-%m-%d")
 
-keep = ["Date", "Market", "Parent_SKU", "SKU", "ASIN",
-        "Impressions", "Clicks", "Spend", "Ad_Sales", "Ad_Orders",
-        "CTR", "CPC", "ACOS"]
+new_df = new_df.rename(columns={
+    "Date": "date", "Market": "market", "Parent_SKU": "parent_sku",
+    "SKU": "sku", "ASIN": "asin", "Impressions": "impressions",
+    "Clicks": "clicks", "Spend": "spend", "Ad_Sales": "ad_sales",
+    "Ad_Orders": "ad_orders", "CTR": "ctr", "CPC": "cpc", "ACOS": "acos",
+})
+
+keep = ["date", "market", "parent_sku", "sku", "asin",
+        "impressions", "clicks", "spend", "ad_sales", "ad_orders",
+        "ctr", "cpc", "acos"]
 rows = new_df[[c for c in keep if c in new_df.columns]].to_dict(orient="records")
 
 print(f"Upserting {len(rows):,} rows into Supabase table '{TABLE}'...")
