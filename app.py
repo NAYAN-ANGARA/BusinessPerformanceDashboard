@@ -918,10 +918,6 @@ def _get_supabase_creds():
     return url, key
 
 
-# Read credentials once at module level — outside any cached function
-_SB_URL, _SB_KEY = _get_supabase_creds()
-
-@st.cache_data(show_spinner=False, ttl=3600)
 def _load_sku_ads_raw(start: str, end: str, _url: str = "", _key: str = "") -> pd.DataFrame:
     """Query Supabase for rows in the given date range."""
     sb_url = _url or _SB_URL
@@ -947,7 +943,6 @@ def _load_sku_ads_raw(start: str, end: str, _url: str = "", _key: str = "") -> p
         return pd.DataFrame({"_error": [str(exc)]})
 
 
-@st.cache_data(show_spinner=False, ttl=3600)
 def _get_supabase_date_range(_url: str = "", _key: str = "") -> tuple:
     """Returns (min_date_str, max_date_str) of all data in Supabase."""
     sb_url = _url or _SB_URL
@@ -986,6 +981,9 @@ def _aggregate_ads(df: pd.DataFrame) -> pd.DataFrame:
 
 with tabs[3]:
     st.markdown('<div class="section-header">🏷️ SKU Performance Analysis</div>', unsafe_allow_html=True)
+
+    # Read Supabase credentials at render time (secrets available here)
+    _SB_URL, _SB_KEY = _get_supabase_creds()
 
     # ══════════════════════════════════════════════════════════════════════════
     # SECTION 0  ──  Amazon Ads Summary  (queried from Supabase by date range)
