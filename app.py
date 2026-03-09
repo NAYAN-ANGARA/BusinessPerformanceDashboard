@@ -927,30 +927,16 @@ def _load_sku_ads_raw(start: str, end: str, _url: str = "", _key: str = "") -> p
             "apikey":        _key,
             "Authorization": f"Bearer {_key}",
         }
-        # Fetch one row first to detect actual column names in the table
-        r_test = _requests.get(f"{_url}/rest/v1/sku_ads_cache?select=*&limit=1", headers=headers, timeout=10)
-        if r_test.status_code != 200:
-            return pd.DataFrame({"_error": [f"Supabase error {r_test.status_code}: {r_test.text[:300]}"]})
-        test_data = r_test.json()
-        if not test_data:
-            return pd.DataFrame({"_error": ["Supabase table is empty — import your CSV first via Table Editor → Import data"]})
-        # Find the date column name (could be Date or date)
-        actual_cols = list(test_data[0].keys())
-        date_col = next((c for c in actual_cols if c.lower() == "date"), None)
-        if not date_col:
-            return pd.DataFrame({"_error": [f"No date column found. Columns in table: {actual_cols}"]})
-        # Fetch full date range — URL-encode column name if it has capitals
-        from urllib.parse import quote
-        dc = quote(date_col) if date_col != date_col.lower() else date_col
-        params = f"select=*&{dc}=gte.{start}&{dc}=lte.{end}&limit=100000"
+        # Always use lowercase column names — table must be created without quotes
+        params = f"select=*&date=gte.{start}&date=lte.{end}&limit=100000"
         r = _requests.get(f"{_url}/rest/v1/sku_ads_cache?{params}", headers=headers, timeout=30)
         if r.status_code != 200:
-            return pd.DataFrame({"_error": [f"Supabase error {r.status_code}: {r.text[:200]}"]})
+            return pd.DataFrame({"_error": [f"Supabase error {r.status_code}: {r.text[:300]}"]})
         data = r.json()
         if not data:
             return pd.DataFrame()
         df = pd.DataFrame(data)
-        # Normalize lowercase column names to match rest of app
+        # Rename lowercase DB columns → capitalized app columns
         df = df.rename(columns={
             "date": "Date", "market": "Market", "parent_sku": "Parent_SKU",
             "sku": "SKU", "asin": "ASIN", "impressions": "Impressions",
@@ -971,10 +957,10 @@ def _get_supabase_date_range(_url: str = "", _key: str = "") -> tuple:
         return ("", "")
     try:
         headers = {"apikey": _key, "Authorization": f"Bearer {_key}"}
-        r_min = _requests.get(f"{_url}/rest/v1/sku_ads_cache?select=Date&order=Date.asc&limit=1",  headers=headers, timeout=10)
-        r_max = _requests.get(f"{_url}/rest/v1/sku_ads_cache?select=Date&order=Date.desc&limit=1", headers=headers, timeout=10)
-        min_d = r_min.json()[0].get("Date") or r_min.json()[0].get("date","") if r_min.status_code == 200 and r_min.json() else ""
-        max_d = r_max.json()[0].get("Date") or r_max.json()[0].get("date","") if r_max.status_code == 200 and r_max.json() else ""
+        r_min = _requests.get(f"{_url}/rest/v1/sku_ads_cache?select=date&order=date.asc&limit=1",  headers=headers, timeout=10)
+        r_max = _requests.get(f"{_url}/rest/v1/sku_ads_cache?select=date&order=date.desc&limit=1", headers=headers, timeout=10)
+        min_d = r_min.json()[0].get("date","") if r_min.status_code == 200 and r_min.json() else ""
+        max_d = r_max.json()[0].get("date","") if r_max.status_code == 200 and r_max.json() else ""
         return (min_d, max_d)
     except Exception:
         return ("", "")
