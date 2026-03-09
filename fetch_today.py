@@ -9,6 +9,24 @@ import requests
 from datetime import date, timedelta
 from sku_data import fetch_sku_ads_data
 
+# ── Quick credential sanity check ─────────────────────────────────────────────
+print("Checking Amazon token...")
+try:
+    r = requests.post("https://api.amazon.com/auth/o2/token", data={
+        "grant_type":    "refresh_token",
+        "refresh_token": os.environ["AMZN_REFRESH_TOKEN"],
+        "client_id":     os.environ["AMZN_CLIENT_ID"],
+        "client_secret": os.environ["AMZN_CLIENT_SECRET"],
+    }, timeout=15)
+    if r.status_code == 200:
+        print("✅ Token OK")
+    else:
+        print(f"❌ Token FAILED {r.status_code}: {r.text[:300]}")
+        sys.exit(1)
+except Exception as e:
+    print(f"❌ Token request crashed: {e}")
+    sys.exit(1)
+
 # ── Supabase connection ────────────────────────────────────────────────────────
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
