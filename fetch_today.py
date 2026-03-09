@@ -130,5 +130,6 @@ keep = ["date", "Market", "Parent_SKU", "SKU", "ASIN",
 rows = new_df[[c for c in keep if c in new_df.columns]].to_dict(orient="records")
 
 print(f"Upserting {len(rows):,} rows into Supabase table '{TABLE}'...")
+print(f"Columns being sent: {list(rows[0].keys()) if rows else 'empty'}")
 sb_upsert(rows)
 print(f"Done ✅  {len(rows):,} rows saved to Supabase.")
