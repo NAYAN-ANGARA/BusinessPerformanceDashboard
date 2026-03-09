@@ -3680,31 +3680,40 @@ with tabs[9]:
         jtype_table["Ord_Share"] = jtype_table["Orders"]  / total_ord * 100 if total_ord > 0 else 0
 
         # ── Pull Ad Spend from Supabase and join via Parent_SKU → jewelry_type ─
-        _sb_url_m, _sb_key_m = _get_supabase_creds()
-        _ads_merch = _load_sku_ads_raw(
-            start_date.strftime("%Y-%m-%d"),
-            end_date.strftime("%Y-%m-%d"),
-            _url=_sb_url_m, _key=_sb_key_m,
-        )
-        if not _ads_merch.empty and "_error" not in _ads_merch.columns and "Parent_SKU" in _ads_merch.columns:
-            # Map Parent_SKU → jewelry_type using df_m
-            sku_to_jtype = df_m[["Parent","jewelry_type"]].drop_duplicates().rename(columns={"Parent":"Parent_SKU"})
-            _ads_merch = _ads_merch.merge(sku_to_jtype, on="Parent_SKU", how="left")
-            _ads_merch = _ads_merch[_ads_merch["jewelry_type"].notna()]
-            ads_by_jtype = (
-                _ads_merch.groupby("jewelry_type", as_index=False)
-                .agg(Ad_Spend=("Spend","sum"), Ad_Sales=("Ad_Sales","sum"), Ad_Orders=("Ad_Orders","sum"))
+        has_ads = False
+        try:
+            _sb_url_m, _sb_key_m = _get_supabase_creds()
+            _ads_merch = _load_sku_ads_raw(
+                start_date.strftime("%Y-%m-%d"),
+                end_date.strftime("%Y-%m-%d"),
+                _url=_sb_url_m, _key=_sb_key_m,
             )
-            jtype_table = jtype_table.merge(ads_by_jtype, on="jewelry_type", how="left")
-            jtype_table["Ad_Spend"]  = jtype_table["Ad_Spend"].fillna(0)
-            jtype_table["Ad_Sales"]  = jtype_table["Ad_Sales"].fillna(0)
-            jtype_table["Ad_Orders"] = jtype_table["Ad_Orders"].fillna(0)
-            jtype_table["ACOS"] = jtype_table.apply(
-                lambda r: r["Ad_Spend"] / r["Ad_Sales"] * 100 if r["Ad_Sales"] > 0 else 0, axis=1)
-            total_spend    = jtype_table["Ad_Spend"].sum()
-            total_ad_sales = jtype_table["Ad_Sales"].sum()
-            has_ads = True
-        else:
+            if (not _ads_merch.empty
+                    and "_error" not in _ads_merch.columns
+                    and "Parent_SKU" in _ads_merch.columns
+                    and "Spend" in _ads_merch.columns):
+                sku_to_jtype = (
+                    df_m[["Parent","jewelry_type"]]
+                    .drop_duplicates()
+                    .rename(columns={"Parent":"Parent_SKU"})
+                )
+                _ads_merch = _ads_merch.merge(sku_to_jtype, on="Parent_SKU", how="left")
+                _ads_merch = _ads_merch[_ads_merch["jewelry_type"].notna()]
+                if not _ads_merch.empty:
+                    ads_by_jtype = (
+                        _ads_merch.groupby("jewelry_type", as_index=False)
+                        .agg(Ad_Spend=("Spend","sum"), Ad_Sales=("Ad_Sales","sum"), Ad_Orders=("Ad_Orders","sum"))
+                    )
+                    jtype_table = jtype_table.merge(ads_by_jtype, on="jewelry_type", how="left")
+                    jtype_table["Ad_Spend"]  = jtype_table["Ad_Spend"].fillna(0)
+                    jtype_table["Ad_Sales"]  = jtype_table["Ad_Sales"].fillna(0)
+                    jtype_table["Ad_Orders"] = jtype_table["Ad_Orders"].fillna(0)
+                    jtype_table["ACOS"] = jtype_table.apply(
+                        lambda r: r["Ad_Spend"] / r["Ad_Sales"] * 100 if r["Ad_Sales"] > 0 else 0, axis=1)
+                    total_spend    = jtype_table["Ad_Spend"].sum()
+                    total_ad_sales = jtype_table["Ad_Sales"].sum()
+                    has_ads = True
+        except Exception:
             has_ads = False
 
         # Totals row
