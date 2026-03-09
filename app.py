@@ -891,24 +891,31 @@ import requests as _requests
 def _get_supabase_creds():
     """Get Supabase URL and key from env or Streamlit secrets."""
     def _get(key):
-        # 1. Try environment variable
+        # Try environment variable first
         val = os.environ.get(key, "").strip()
         if val:
             return val
-        # 2. Try Streamlit secrets — strip ALL whitespace/newlines
+        # Try Streamlit secrets
         try:
             import streamlit as _st
             if hasattr(_st, "secrets"):
                 try:
-                    val = _st.secrets[key]
-                    # Remove all whitespace including newlines from token
-                    return "".join(str(val).split())
+                    return "".join(str(_st.secrets[key]).split())
                 except KeyError:
                     pass
         except Exception:
             pass
         return ""
-    return _get("SUPABASE_URL"), _get("SUPABASE_SERVICE_KEY")
+
+    url = _get("SUPABASE_URL")
+
+    # Key can be stored whole as SUPABASE_SERVICE_KEY,
+    # OR split into SUPABASE_KEY_1 + SUPABASE_KEY_2 (workaround for editor line-wrap)
+    key = _get("SUPABASE_SERVICE_KEY")
+    if not key:
+        key = _get("SUPABASE_KEY_1") + _get("SUPABASE_KEY_2")
+
+    return url, key
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
