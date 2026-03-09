@@ -891,15 +891,19 @@ import requests as _requests
 def _get_supabase_creds():
     """Get Supabase URL and key from env or Streamlit secrets."""
     def _get(key):
+        # 1. Try environment variable
         val = os.environ.get(key, "").strip()
         if val:
             return val
+        # 2. Try Streamlit secrets (access like a dict to avoid exceptions)
         try:
             import streamlit as _st
-            return _st.secrets.get(key, "").strip()
+            if hasattr(_st, "secrets") and key in _st.secrets:
+                return str(_st.secrets[key]).strip()
         except Exception:
-            return ""
-    return _get("SUPABASE_URL"), _get("SUPABASE_SERVICE_KEY") or _get("SUPABASE_ANON_KEY")
+            pass
+        return ""
+    return _get("SUPABASE_URL"), _get("SUPABASE_SERVICE_KEY")
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
