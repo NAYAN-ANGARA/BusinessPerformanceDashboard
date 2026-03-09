@@ -121,20 +121,17 @@ new_df = new_df.rename(columns={
     "Date": "date", "Market": "market", "Parent_SKU": "parent_sku",
     "SKU": "sku", "ASIN": "asin", "Impressions": "impressions",
     "Clicks": "clicks", "Spend": "spend", "Ad_Sales": "ad_sales",
-    "Ad_Orders": "ad_orders", "CTR": "ctr", "CPC": "cpc", "ACOS": "acos",
+    "Ad_Orders": "ad_orders",
 })
 
-# Compute CTR, CPC, ACOS if not already present
-if "ctr" not in new_df.columns:
-    new_df["ctr"] = new_df.apply(lambda r: r["impressions"] and r["clicks"] / r["impressions"] * 100 or 0, axis=1)
-if "cpc" not in new_df.columns:
-    new_df["cpc"] = new_df.apply(lambda r: r["clicks"] and r["spend"] / r["clicks"] or 0, axis=1)
-if "acos" not in new_df.columns:
-    new_df["acos"] = new_df.apply(lambda r: r["ad_sales"] and r["spend"] / r["ad_sales"] * 100 or 0, axis=1)
+# Compute CTR, CPC, ACOS (uppercase to match table columns)
+new_df["CTR"]  = new_df.apply(lambda r: r["clicks"] / r["impressions"] * 100 if r["impressions"] else 0, axis=1)
+new_df["CPC"]  = new_df.apply(lambda r: r["spend"]  / r["clicks"]      if r["clicks"]      else 0, axis=1)
+new_df["ACOS"] = new_df.apply(lambda r: r["spend"]  / r["ad_sales"]    * 100 if r["ad_sales"]  else 0, axis=1)
 
 keep = ["date", "market", "parent_sku", "sku", "asin",
         "impressions", "clicks", "spend", "ad_sales", "ad_orders",
-        "ctr", "cpc", "acos"]
+        "CTR", "CPC", "ACOS"]
 rows = new_df[[c for c in keep if c in new_df.columns]].to_dict(orient="records")
 
 print(f"Upserting {len(rows):,} rows into Supabase table '{TABLE}'...")
