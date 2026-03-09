@@ -1527,10 +1527,7 @@ with tabs[3]:
                         valid_children,
                         column_config={
                             "SKU":     st.column_config.TextColumn("Child SKU", width="large"),
-                            "revenue": st.column_config.ProgressColumn(
-                                "Revenue", format="$%d",
-                                min_value=0, max_value=int(valid_children["revenue"].max())
-                            ),
+                            "revenue": st.column_config.NumberColumn("Revenue", format="$%d"),
                             "orders":  st.column_config.NumberColumn("Orders",  format="%d"),
                             "aov":     st.column_config.NumberColumn("AOV",     format="$%.2f"),
                             "share":   st.column_config.NumberColumn("Share %", format="%.1f%%"),
@@ -3211,7 +3208,7 @@ with tabs[8]:
         display_tbl,
         column_config={
             "channel": st.column_config.TextColumn("Marketplace", width="medium"),
-            "revenue": st.column_config.ProgressColumn("Revenue", format="$%d", min_value=0, max_value=int(display_tbl["revenue"].max()) if "revenue" in display_tbl.columns else 100),
+            "revenue": st.column_config.NumberColumn("Revenue", format="$%,.0f"),
             "orders": st.column_config.NumberColumn("Orders", format="%d"),
             "aov": st.column_config.NumberColumn("AOV", format="$%.2f"),
             "spend": st.column_config.NumberColumn("Ad Spend", format="$%d"),
@@ -3805,9 +3802,7 @@ with tabs[9]:
             "design_code":   st.column_config.TextColumn("Design Code",  width="medium"),
             "jewelry_type":  st.column_config.TextColumn("Jewelry Type", width="small"),
             "stone":         st.column_config.TextColumn("Stone",        width="medium"),
-            "revenue":       st.column_config.ProgressColumn(
-                                "Revenue ($)", format="$%d",
-                                min_value=0, max_value=int(parent_agg["revenue"].max())),
+            "revenue":       st.column_config.NumberColumn("Revenue ($)", format="$%,.0f"),
             "orders":        st.column_config.NumberColumn("Orders",      format="%d"),
             "aov":           st.column_config.NumberColumn("AOV ($)",     format="$%.2f"),
             "revenue_share": st.column_config.NumberColumn("Rev Share %", format="%.2f%%"),
@@ -3891,9 +3886,7 @@ with tabs[9]:
             "jewelry_type":  st.column_config.TextColumn("Jewelry Type",  width="small"),
             "stones":        st.column_config.TextColumn("Stones",        width="large"),
             "variants":      st.column_config.NumberColumn("# Variants",  format="%d"),
-            "revenue":       st.column_config.ProgressColumn(
-                                "Revenue ($)", format="$%d",
-                                min_value=0, max_value=int(design_agg["revenue"].max())),
+            "revenue":       st.column_config.NumberColumn("Revenue ($)", format="$%,.0f"),
             "orders":        st.column_config.NumberColumn("Orders",      format="%d"),
             "aov":           st.column_config.NumberColumn("AOV ($)",     format="$%.2f"),
             "revenue_share": st.column_config.NumberColumn("Rev Share %", format="%.2f%%"),
