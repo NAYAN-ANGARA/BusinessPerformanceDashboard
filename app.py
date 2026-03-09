@@ -920,17 +920,15 @@ def _get_supabase_creds():
 
 def _load_sku_ads_raw(start: str, end: str, _url: str = "", _key: str = "") -> pd.DataFrame:
     """Query Supabase for rows in the given date range."""
-    sb_url = _url or _SB_URL
-    sb_key = _key or _SB_KEY
-    if not sb_url or not sb_key:
+    if not _url or not _key:
         return pd.DataFrame({"_error": ["Supabase credentials not set. Add SUPABASE_URL and SUPABASE_SERVICE_KEY to Streamlit secrets."]})
     try:
         headers = {
-            "apikey":        sb_key,
-            "Authorization": f"Bearer {sb_key}",
+            "apikey":        _key,
+            "Authorization": f"Bearer {_key}",
         }
         params = f'select="Date","Market","Parent_SKU","SKU","ASIN","Impressions","Clicks","Spend","Ad_Sales","Ad_Orders"&Date=gte.{start}&Date=lte.{end}&limit=100000'
-        r = _requests.get(f"{sb_url}/rest/v1/sku_ads_cache?{params}", headers=headers, timeout=30)
+        r = _requests.get(f"{_url}/rest/v1/sku_ads_cache?{params}", headers=headers, timeout=30)
         if r.status_code != 200:
             return pd.DataFrame({"_error": [f"Supabase error {r.status_code}: {r.text[:200]}"]})
         data = r.json()
@@ -945,14 +943,12 @@ def _load_sku_ads_raw(start: str, end: str, _url: str = "", _key: str = "") -> p
 
 def _get_supabase_date_range(_url: str = "", _key: str = "") -> tuple:
     """Returns (min_date_str, max_date_str) of all data in Supabase."""
-    sb_url = _url or _SB_URL
-    sb_key = _key or _SB_KEY
-    if not sb_url or not sb_key:
+    if not _url or not _key:
         return ("", "")
     try:
-        headers = {"apikey": sb_key, "Authorization": f"Bearer {sb_key}"}
-        r_min = _requests.get(f'{sb_url}/rest/v1/sku_ads_cache?select="Date"&order=Date.asc&limit=1',  headers=headers, timeout=10)
-        r_max = _requests.get(f'{sb_url}/rest/v1/sku_ads_cache?select="Date"&order=Date.desc&limit=1', headers=headers, timeout=10)
+        headers = {"apikey": _key, "Authorization": f"Bearer {_key}"}
+        r_min = _requests.get(f'{_url}/rest/v1/sku_ads_cache?select="Date"&order=Date.asc&limit=1',  headers=headers, timeout=10)
+        r_max = _requests.get(f'{_url}/rest/v1/sku_ads_cache?select="Date"&order=Date.desc&limit=1', headers=headers, timeout=10)
         min_d = r_min.json()[0]["Date"] if r_min.status_code == 200 and r_min.json() else ""
         max_d = r_max.json()[0]["Date"] if r_max.status_code == 200 and r_max.json() else ""
         return (min_d, max_d)
