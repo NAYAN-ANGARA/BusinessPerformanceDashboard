@@ -151,7 +151,7 @@ JITTER_FRACTION      = 0.3  # +-30% random jitter on each backoff
 
 # ── poll settings ─────────────────────────────────────────────────────────────
 POLL_INTERVAL_SEC  = 5      # wait between polls for one report
-MAX_POLL_WAIT_SEC  = 900    # 15-min hard ceiling per report
+MAX_POLL_WAIT_SEC  = 1800   # 30-min hard ceiling per report
 
 # ── inter-submission pacing ───────────────────────────────────────────────────
 SUBMIT_BATCH_DELAY = 1.0    # seconds between consecutive submissions
@@ -586,6 +586,7 @@ def _build_payload(t: "_Task") -> dict:
             "adProduct":    product,
             "reportTypeId": report_type,
             "columns":      cols,
+            "groupBy":      ["advertiser"],
             "timeUnit":     "DAILY",
             "format":       "GZIP_JSON",
         },
