@@ -625,13 +625,19 @@ def _run_pipeline(
     log.info("Phase 1: submitting %d reports…", total)
 
     def _do_submit(t: _Task):
-        t.report_id = _submit_report(t.profile_id, _build_payload(t))
+        try:
+            t.report_id = _submit_report(t.profile_id, _build_payload(t))
+        except Exception as exc:
+            print(f"[FATAL] _do_submit crashed for {t.market}/{t.ad_type}/{t.date_str}: {exc}")
+            t.report_id = None
         _tick(f"SUBMIT  {t.market}/{t.ad_type}/{t.date_str}  →  {t.report_id or 'FAILED'}")
-        # Brief pause between consecutive submissions to stay gentle on the API
         time.sleep(SUBMIT_BATCH_DELAY + random.uniform(0, 0.5))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
-        list(pool.map(_do_submit, tasks))
+        futs = [pool.submit(_do_submit, t) for t in tasks]
+        for f in concurrent.futures.as_completed(futs):
+            if f.exception():
+                print(f"[FATAL] Thread exception: {f.exception()}")
 
     submitted = [t for t in tasks if t.report_id]
     log.info("Phase 1 complete: %d/%d submitted", len(submitted), total)
