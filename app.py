@@ -919,7 +919,7 @@ def _get_supabase_creds():
 
 
 def _load_sku_ads_raw(start: str, end: str, _url: str = "", _key: str = "") -> pd.DataFrame:
-    """Query Supabase for rows in the given date range."""
+    """Query Supabase for rows in the given date range — paginated to bypass 1000-row cap."""
     if not _url or not _key:
         return pd.DataFrame({"_error": ["Supabase credentials not set. Add SUPABASE_URL and SUPABASE_SERVICE_KEY to Streamlit secrets."]})
     try:
@@ -929,14 +929,24 @@ def _load_sku_ads_raw(start: str, end: str, _url: str = "", _key: str = "") -> p
             "Accept":        "application/json",
             "Prefer":        "count=none",
         }
-        params = f"select=*&date=gte.{start}&date=lte.{end}&limit=100000"
-        r = _requests.get(f"{_url}/rest/v1/sku_ads_cache?{params}", headers=headers, timeout=30)
-        if r.status_code != 200:
-            return pd.DataFrame({"_error": [f"Supabase error {r.status_code}: {r.text[:300]}"]})
-        data = r.json()
-        if not data:
+        all_data = []
+        page_size = 1000
+        offset = 0
+        while True:
+            params = f"select=*&date=gte.{start}&date=lte.{end}&limit={page_size}&offset={offset}"
+            r = _requests.get(f"{_url}/rest/v1/sku_ads_cache?{params}", headers=headers, timeout=30)
+            if r.status_code != 200:
+                return pd.DataFrame({"_error": [f"Supabase error {r.status_code}: {r.text[:300]}"]})
+            batch = r.json()
+            if not batch:
+                break
+            all_data.extend(batch)
+            if len(batch) < page_size:
+                break
+            offset += page_size
+        if not all_data:
             return pd.DataFrame()
-        df = pd.DataFrame(data)
+        df = pd.DataFrame(all_data)
         # Rename lowercase DB columns → capitalized app columns
         df = df.rename(columns={
             "date": "Date", "market": "Market", "parent_sku": "Parent_SKU",
@@ -945,9 +955,11 @@ def _load_sku_ads_raw(start: str, end: str, _url: str = "", _key: str = "") -> p
             "ad_orders": "Ad_Orders",
         })
         df["Date"] = pd.to_datetime(df["Date"])
+        # Drop rows with no SKU (blank/null rows at top of CSV import)
+        if "SKU" in df.columns:
+            df = df[df["SKU"].notna() & (df["SKU"].astype(str).str.strip() != "")]
         needed = ["Date","Market","Parent_SKU","SKU","ASIN","Impressions","Clicks","Spend","Ad_Sales","Ad_Orders"]
-        df = df[[c for c in needed if c in df.columns]]
-        return df
+        return df[[c for c in needed if c in df.columns]]
     except Exception as exc:
         return pd.DataFrame({"_error": [str(exc)]})
 
@@ -1005,16 +1017,6 @@ with tabs[3]:
             end_date.strftime("%Y-%m-%d"),
             _url=_SB_URL, _key=_SB_KEY,
         )
-
-        # ── TEMP DEBUG ────────────────────────────────────────────────────────
-        with st.expander("🔧 Debug", expanded=True):
-            st.write(f"Rows returned: {len(_ads_raw)}")
-            st.write(f"Columns: {list(_ads_raw.columns) if not _ads_raw.empty else 'empty'}")
-            if not _ads_raw.empty:
-                st.write("First row:", _ads_raw.iloc[0].to_dict())
-                st.write("Impressions dtype:", _ads_raw["Impressions"].dtype if "Impressions" in _ads_raw.columns else "missing")
-                st.write("Impressions sum:", _ads_raw["Impressions"].sum() if "Impressions" in _ads_raw.columns else "missing")
-        # ── END DEBUG ─────────────────────────────────────────────────────────
 
         if not _ads_raw.empty and "_error" in _ads_raw.columns:
             st.error(f"❌ {_ads_raw['_error'].iloc[0]}")
