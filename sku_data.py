@@ -403,6 +403,7 @@ def _submit_report(profile_id: str, payload: dict) -> Optional[str]:
 
         if code == 400:
             log.error("Bad request (400): %s", resp.text[:300])
+            print(f"[ERROR] 400 Bad Request for {payload}: {resp.text[:300]}")
             return None   # payload error — retrying won't help
 
         # 5xx or unexpected
