@@ -883,26 +883,69 @@ with tabs[2]:
     )
 
 # ==============================================================================
-# TAB 4: SKU Analysis  —  Ads data loaded from daily-refreshed CSV cache
+# TAB 4: SKU Analysis  —  Ads data loaded from Supabase
 # ==============================================================================
 
-# Load the raw CSV once — no aggregation yet so date filtering can happen later.
+import requests as _requests
+
+def _get_supabase_creds():
+    """Get Supabase URL and key from env or Streamlit secrets."""
+    def _get(key):
+        val = os.environ.get(key, "").strip()
+        if val:
+            return val
+        try:
+            import streamlit as _st
+            return _st.secrets.get(key, "").strip()
+        except Exception:
+            return ""
+    return _get("SUPABASE_URL"), _get("SUPABASE_SERVICE_KEY") or _get("SUPABASE_ANON_KEY")
+
+
 @st.cache_data(show_spinner=False, ttl=3600)
-def _load_sku_ads_raw() -> pd.DataFrame:
-    cache_path = "sku_ads_cache.csv"
-    if not os.path.exists(cache_path):
-        return pd.DataFrame()
+def _load_sku_ads_raw(start: str, end: str) -> pd.DataFrame:
+    """Query Supabase for rows in the given date range."""
+    sb_url, sb_key = _get_supabase_creds()
+    if not sb_url or not sb_key:
+        return pd.DataFrame({"_error": ["Supabase credentials not set. Add SUPABASE_URL and SUPABASE_SERVICE_KEY to Streamlit secrets."]})
     try:
-        df = pd.read_csv(cache_path, parse_dates=["Date"])
-        needed = ["Date", "Market", "Parent_SKU", "SKU", "ASIN",
-                  "Impressions", "Clicks", "Spend", "Ad_Sales", "Ad_Orders"]
-        return df[[c for c in needed if c in df.columns]]
+        headers = {
+            "apikey":        sb_key,
+            "Authorization": f"Bearer {sb_key}",
+        }
+        params = f'select="Date","Market","Parent_SKU","SKU","ASIN","Impressions","Clicks","Spend","Ad_Sales","Ad_Orders"&Date=gte.{start}&Date=lte.{end}&limit=100000'
+        r = _requests.get(f"{sb_url}/rest/v1/sku_ads_cache?{params}", headers=headers, timeout=30)
+        if r.status_code != 200:
+            return pd.DataFrame({"_error": [f"Supabase error {r.status_code}: {r.text[:200]}"]})
+        data = r.json()
+        if not data:
+            return pd.DataFrame()
+        df = pd.DataFrame(data)
+        df["Date"] = pd.to_datetime(df["Date"])
+        return df
     except Exception as exc:
         return pd.DataFrame({"_error": [str(exc)]})
 
 
+@st.cache_data(show_spinner=False, ttl=3600)
+def _get_supabase_date_range() -> tuple:
+    """Returns (min_date_str, max_date_str) of all data in Supabase."""
+    sb_url, sb_key = _get_supabase_creds()
+    if not sb_url or not sb_key:
+        return ("", "")
+    try:
+        headers = {"apikey": sb_key, "Authorization": f"Bearer {sb_key}"}
+        r_min = _requests.get(f'{sb_url}/rest/v1/sku_ads_cache?select="Date"&order=Date.asc&limit=1',  headers=headers, timeout=10)
+        r_max = _requests.get(f'{sb_url}/rest/v1/sku_ads_cache?select="Date"&order=Date.desc&limit=1', headers=headers, timeout=10)
+        min_d = r_min.json()[0]["Date"] if r_min.status_code == 200 and r_min.json() else ""
+        max_d = r_max.json()[0]["Date"] if r_max.status_code == 200 and r_max.json() else ""
+        return (min_d, max_d)
+    except Exception:
+        return ("", "")
+
+
 def _aggregate_ads(df: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate raw daily rows to one row per (Market, Parent_SKU)."""
+    """Aggregate daily rows to one row per (Market, Parent_SKU)."""
     agg = (
         df.groupby(["Market", "Parent_SKU"], as_index=False)
         .agg(
@@ -920,42 +963,47 @@ def _aggregate_ads(df: pd.DataFrame) -> pd.DataFrame:
     return agg.sort_values("Spend", ascending=False).reset_index(drop=True)
 
 
-# Load raw CSV once — sidebar filters will slice it inside the tab
-_ads_raw = _load_sku_ads_raw()
-
-
 with tabs[3]:
     st.markdown('<div class="section-header">🏷️ SKU Performance Analysis</div>', unsafe_allow_html=True)
 
     # ══════════════════════════════════════════════════════════════════════════
-    # SECTION 0  ──  Amazon Ads Summary  (filtered by sidebar date range)
+    # SECTION 0  ──  Amazon Ads Summary  (queried from Supabase by date range)
     # ══════════════════════════════════════════════════════════════════════════
     with st.expander("📡 Amazon Ads Data  —  Spend · Impressions · Clicks per SKU", expanded=True):
 
-        if _ads_raw.empty:
-            st.info("ℹ️ No ads cache found yet. The GitHub Action will generate `sku_ads_cache.csv` tonight at 9 AM IST and it will appear here automatically.")
+        # Query Supabase for exactly the selected date range
+        _ads_raw = _load_sku_ads_raw(
+            start_date.strftime("%Y-%m-%d"),
+            end_date.strftime("%Y-%m-%d"),
+        )
 
-        elif "_error" in _ads_raw.columns:
-            st.error(f"❌ Error reading cache: {_ads_raw['_error'].iloc[0]}")
+        if not _ads_raw.empty and "_error" in _ads_raw.columns:
+            st.error(f"❌ {_ads_raw['_error'].iloc[0]}")
+
+        elif _ads_raw.empty:
+            sb_min, sb_max = _get_supabase_date_range()
+            if sb_min and sb_max:
+                st.warning(
+                    f"No ads data for **{start_date}** → **{end_date}**. "
+                    f"Supabase has data from **{sb_min}** → **{sb_max}**. "
+                    f"Try adjusting the sidebar date filter."
+                )
+            else:
+                st.info("ℹ️ No ads data in Supabase yet. Run the GitHub Action to fetch and load data.")
 
         else:
-            # ── Apply sidebar date filter ─────────────────────────────────────
-            ads_filtered = _ads_raw[
-                (_ads_raw["Date"].dt.date >= start_date) &
-                (_ads_raw["Date"].dt.date <= end_date)
-            ]
+            ads_filtered = _ads_raw.copy()
 
             # ── Date range info ───────────────────────────────────────────────
-            cache_min = _ads_raw["Date"].min().strftime("%d %b %Y")
-            cache_max = _ads_raw["Date"].max().strftime("%d %b %Y")
+            sb_min, sb_max = _get_supabase_date_range()
             st.caption(
-                f"📅 Cache covers **{cache_min}** → **{cache_max}**  ·  "
+                f"📅 Supabase covers **{sb_min}** → **{sb_max}**  ·  "
                 f"Showing: **{start_date.strftime('%d %b %Y')}** → **{end_date.strftime('%d %b %Y')}**  ·  "
                 f"refreshed daily at 9 AM IST"
             )
 
             if ads_filtered.empty:
-                st.warning(f"No ads data found for the selected date range ({start_date} → {end_date}). Try adjusting the sidebar date filter.")
+                st.warning(f"No ads data found for the selected date range ({start_date} → {end_date}).")
             else:
                 # ── Market filter ─────────────────────────────────────────────
                 mkt_filter = st.radio(
@@ -1152,13 +1200,9 @@ with tabs[3]:
 
     st.markdown("---")
 
-    # ── Build date-filtered ads summary for SKU lookups (deep-dive + expanders)
+    # ── Build ads summary for SKU lookups (_ads_raw already date-filtered from Supabase)
     if not _ads_raw.empty and "_error" not in _ads_raw.columns:
-        _ads_filtered_tab = _ads_raw[
-            (_ads_raw["Date"].dt.date >= start_date) &
-            (_ads_raw["Date"].dt.date <= end_date)
-        ]
-        _ads_summary_tab = _aggregate_ads(_ads_filtered_tab) if not _ads_filtered_tab.empty else pd.DataFrame()
+        _ads_summary_tab = _aggregate_ads(_ads_raw)
     else:
         _ads_summary_tab = pd.DataFrame()
 
