@@ -3657,6 +3657,63 @@ with tabs[9]:
     st.markdown("---")
 
     # ════════════════════════════════════════════════════════════════════════════
+    # SECTION 1b ── Jewelry Type Summary Table
+    # ════════════════════════════════════════════════════════════════════════════
+    st.markdown("### 💍 Jewelry Type Performance")
+    st.caption("Revenue, orders, AOV and share broken down by jewelry type for the selected date range and filters.")
+
+    if not df_m.empty and "jewelry_type" in df_m.columns:
+        jtype_table = (
+            df_m.groupby("jewelry_type", as_index=False)
+            .agg(
+                Revenue  =("revenue",  "sum"),
+                Orders   =("orders",   "sum"),
+                SKUs     =("Parent",   "nunique"),
+            )
+            .sort_values("Revenue", ascending=False)
+        )
+        total_rev = jtype_table["Revenue"].sum()
+        total_ord = jtype_table["Orders"].sum()
+        jtype_table["AOV"]       = jtype_table.apply(
+            lambda r: r["Revenue"] / r["Orders"] if r["Orders"] > 0 else 0, axis=1)
+        jtype_table["Rev_Share"] = jtype_table["Revenue"] / total_rev * 100 if total_rev > 0 else 0
+        jtype_table["Ord_Share"] = jtype_table["Orders"]  / total_ord * 100 if total_ord > 0 else 0
+
+        # Totals row
+        totals = pd.DataFrame([{
+            "jewelry_type": "🔢 TOTAL",
+            "Revenue":   total_rev,
+            "Orders":    total_ord,
+            "SKUs":      df_m["Parent"].nunique(),
+            "AOV":       total_rev / total_ord if total_ord > 0 else 0,
+            "Rev_Share": 100.0,
+            "Ord_Share": 100.0,
+        }])
+        jtype_table = pd.concat([jtype_table, totals], ignore_index=True)
+
+        st.dataframe(
+            jtype_table,
+            column_config={
+                "jewelry_type": st.column_config.TextColumn("Jewelry Type", width="medium"),
+                "Revenue":      st.column_config.NumberColumn("Revenue ($)",  format="$%,.0f"),
+                "Orders":       st.column_config.NumberColumn("Orders",       format="%,.0f"),
+                "SKUs":         st.column_config.NumberColumn("Active SKUs",  format="%d"),
+                "AOV":          st.column_config.NumberColumn("AOV ($)",      format="$%.2f"),
+                "Rev_Share":    st.column_config.NumberColumn("Rev Share %",  format="%.1f%%"),
+                "Ord_Share":    st.column_config.NumberColumn("Ord Share %",  format="%.1f%%"),
+            },
+            hide_index=True, use_container_width=True,
+            height=min(400, (len(jtype_table) + 1) * 38 + 38),
+        )
+        st.download_button(
+            "📥 Download Jewelry Type Report (CSV)",
+            jtype_table.to_csv(index=False).encode("utf-8"),
+            "jewelry_type_performance.csv", "text/csv", key="dl_jtype_table"
+        )
+
+    st.markdown("---")
+
+    # ════════════════════════════════════════════════════════════════════════════
     # SECTION 2 ── Parent SKU Performance Table
     # ════════════════════════════════════════════════════════════════════════════
     st.markdown("### 🏷️ Parent SKU Performance")
