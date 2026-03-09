@@ -1155,6 +1155,7 @@ with tabs[3]:
                     disp_ads["Total_Orders"] = 0
 
                 st.markdown("**📋 Full SKU Ads Data**")
+                _max_spend = float(disp_ads["Spend"].max()) if not disp_ads.empty and disp_ads["Spend"].max() > 0 else 1.0
                 st.dataframe(
                     disp_ads,
                     column_config={
@@ -1162,9 +1163,7 @@ with tabs[3]:
                         "Parent_SKU":    st.column_config.TextColumn("Parent SKU",    width="medium"),
                         "Impressions":   st.column_config.NumberColumn("Impressions",  format="%d"),
                         "Clicks":        st.column_config.NumberColumn("Clicks",       format="%d"),
-                        "Spend":         st.column_config.ProgressColumn(
-                                             "Spend ($)", format="$%.2f",
-                                             min_value=0, max_value=float(disp_ads["Spend"].max())),
+                        "Spend":         st.column_config.NumberColumn("Spend ($)",    format="$%.2f"),
                         "Ad_Sales":      st.column_config.NumberColumn("Ad Sales ($)", format="$%.2f"),
                         "Ad_Orders":     st.column_config.NumberColumn("Ad Orders",    format="%d"),
                         "Total_Orders":  st.column_config.NumberColumn("Total Orders", format="%d"),
