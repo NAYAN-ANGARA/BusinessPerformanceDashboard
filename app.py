@@ -918,10 +918,14 @@ def _get_supabase_creds():
     return url, key
 
 
+# Read credentials once at module level — outside any cached function
+_SB_URL, _SB_KEY = _get_supabase_creds()
+
 @st.cache_data(show_spinner=False, ttl=3600)
-def _load_sku_ads_raw(start: str, end: str) -> pd.DataFrame:
+def _load_sku_ads_raw(start: str, end: str, _url: str = "", _key: str = "") -> pd.DataFrame:
     """Query Supabase for rows in the given date range."""
-    sb_url, sb_key = _get_supabase_creds()
+    sb_url = _url or _SB_URL
+    sb_key = _key or _SB_KEY
     if not sb_url or not sb_key:
         return pd.DataFrame({"_error": ["Supabase credentials not set. Add SUPABASE_URL and SUPABASE_SERVICE_KEY to Streamlit secrets."]})
     try:
@@ -944,9 +948,10 @@ def _load_sku_ads_raw(start: str, end: str) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def _get_supabase_date_range() -> tuple:
+def _get_supabase_date_range(_url: str = "", _key: str = "") -> tuple:
     """Returns (min_date_str, max_date_str) of all data in Supabase."""
-    sb_url, sb_key = _get_supabase_creds()
+    sb_url = _url or _SB_URL
+    sb_key = _key or _SB_KEY
     if not sb_url or not sb_key:
         return ("", "")
     try:
@@ -991,13 +996,14 @@ with tabs[3]:
         _ads_raw = _load_sku_ads_raw(
             start_date.strftime("%Y-%m-%d"),
             end_date.strftime("%Y-%m-%d"),
+            _url=_SB_URL, _key=_SB_KEY,
         )
 
         if not _ads_raw.empty and "_error" in _ads_raw.columns:
             st.error(f"❌ {_ads_raw['_error'].iloc[0]}")
 
         elif _ads_raw.empty:
-            sb_min, sb_max = _get_supabase_date_range()
+            sb_min, sb_max = _get_supabase_date_range(_url=_SB_URL, _key=_SB_KEY)
             if sb_min and sb_max:
                 st.warning(
                     f"No ads data for **{start_date}** → **{end_date}**. "
@@ -1011,7 +1017,7 @@ with tabs[3]:
             ads_filtered = _ads_raw.copy()
 
             # ── Date range info ───────────────────────────────────────────────
-            sb_min, sb_max = _get_supabase_date_range()
+            sb_min, sb_max = _get_supabase_date_range(_url=_SB_URL, _key=_SB_KEY)
             st.caption(
                 f"📅 Supabase covers **{sb_min}** → **{sb_max}**  ·  "
                 f"Showing: **{start_date.strftime('%d %b %Y')}** → **{end_date.strftime('%d %b %Y')}**  ·  "
