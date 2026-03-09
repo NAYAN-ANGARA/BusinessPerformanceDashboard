@@ -328,8 +328,13 @@ _tok = _TokenManager()
 
 
 def _headers(profile_id: str) -> dict:
+    try:
+        token = _tok.get()
+    except Exception as e:
+        print(f"[FATAL] Token refresh failed: {e}")
+        raise
     return {
-        "Authorization":                   f"Bearer {_tok.get()}",
+        "Authorization":                   f"Bearer {token}",
         "Amazon-Advertising-API-ClientId": _get_client_id(),
         "Amazon-Advertising-API-Scope":    profile_id,
         "Content-Type":                    "application/json",
@@ -385,6 +390,7 @@ def _submit_report(profile_id: str, payload: dict) -> Optional[str]:
         except Exception as exc:
             wait = _backoff(attempt)
             log.warning("Submit network error attempt %d: %s — retry in %.1f s", attempt + 1, exc, wait)
+            print(f"[ERROR] Submit attempt {attempt+1} exception: {exc}")
             time.sleep(wait)
             continue
 
