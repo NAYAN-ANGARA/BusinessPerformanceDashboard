@@ -115,22 +115,17 @@ print(f"Fetched {len(new_df):,} rows from Amazon Ads")
 
 # ── Rename to lowercase to match Supabase table columns ───────────────────────
 new_df = new_df.copy()
-new_df["Date"] = new_df["Date"].dt.strftime("%Y-%m-%d")
+new_df["date"] = new_df["Date"].dt.strftime("%Y-%m-%d")
 
-new_df = new_df.rename(columns={
-    "Date": "date", "Market": "market", "Parent_SKU": "parent_sku",
-    "SKU": "sku", "ASIN": "asin", "Impressions": "impressions",
-    "Clicks": "clicks", "Spend": "spend", "Ad_Sales": "ad_sales",
-    "Ad_Orders": "ad_orders",
-})
+# Compute CTR, CPC, ACOS before renaming
+new_df["CTR"]  = new_df.apply(lambda r: r["Clicks"] / r["Impressions"] * 100 if r["Impressions"] else 0, axis=1)
+new_df["CPC"]  = new_df.apply(lambda r: r["Spend"]  / r["Clicks"]      if r["Clicks"]      else 0, axis=1)
+new_df["ACOS"] = new_df.apply(lambda r: r["Spend"]  / r["Ad_Sales"]    * 100 if r["Ad_Sales"]  else 0, axis=1)
 
-# Compute CTR, CPC, ACOS (uppercase to match table columns)
-new_df["CTR"]  = new_df.apply(lambda r: r["clicks"] / r["impressions"] * 100 if r["impressions"] else 0, axis=1)
-new_df["CPC"]  = new_df.apply(lambda r: r["spend"]  / r["clicks"]      if r["clicks"]      else 0, axis=1)
-new_df["ACOS"] = new_df.apply(lambda r: r["spend"]  / r["ad_sales"]    * 100 if r["ad_sales"]  else 0, axis=1)
-
-keep = ["date", "market", "parent_sku", "sku", "asin",
-        "impressions", "clicks", "spend", "ad_sales", "ad_orders",
+# Keep only columns that exactly match Supabase table schema
+# Table columns: date, Market, Parent_SKU, SKU, ASIN, Impressions, Clicks, Spend, Ad_Sales, Ad_Orders, CTR, CPC, ACOS
+keep = ["date", "Market", "Parent_SKU", "SKU", "ASIN",
+        "Impressions", "Clicks", "Spend", "Ad_Sales", "Ad_Orders",
         "CTR", "CPC", "ACOS"]
 rows = new_df[[c for c in keep if c in new_df.columns]].to_dict(orient="records")
 
