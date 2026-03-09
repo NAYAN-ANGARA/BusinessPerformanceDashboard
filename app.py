@@ -927,7 +927,7 @@ def _load_sku_ads_raw(start: str, end: str, _url: str = "", _key: str = "") -> p
             "apikey":        _key,
             "Authorization": f"Bearer {_key}",
         }
-        params = f'select="Date","Market","Parent_SKU","SKU","ASIN","Impressions","Clicks","Spend","Ad_Sales","Ad_Orders"&Date=gte.{start}&Date=lte.{end}&limit=100000'
+        params = f'select=*&Date=gte.{start}&Date=lte.{end}&limit=100000'
         r = _requests.get(f"{_url}/rest/v1/sku_ads_cache?{params}", headers=headers, timeout=30)
         if r.status_code != 200:
             return pd.DataFrame({"_error": [f"Supabase error {r.status_code}: {r.text[:200]}"]})
@@ -936,6 +936,9 @@ def _load_sku_ads_raw(start: str, end: str, _url: str = "", _key: str = "") -> p
             return pd.DataFrame()
         df = pd.DataFrame(data)
         df["Date"] = pd.to_datetime(df["Date"])
+        # Keep only needed columns (select * may return extra)
+        needed = ["Date","Market","Parent_SKU","SKU","ASIN","Impressions","Clicks","Spend","Ad_Sales","Ad_Orders"]
+        df = df[[c for c in needed if c in df.columns]]
         return df
     except Exception as exc:
         return pd.DataFrame({"_error": [str(exc)]})
@@ -947,8 +950,8 @@ def _get_supabase_date_range(_url: str = "", _key: str = "") -> tuple:
         return ("", "")
     try:
         headers = {"apikey": _key, "Authorization": f"Bearer {_key}"}
-        r_min = _requests.get(f'{_url}/rest/v1/sku_ads_cache?select="Date"&order=Date.asc&limit=1',  headers=headers, timeout=10)
-        r_max = _requests.get(f'{_url}/rest/v1/sku_ads_cache?select="Date"&order=Date.desc&limit=1', headers=headers, timeout=10)
+        r_min = _requests.get(f"{_url}/rest/v1/sku_ads_cache?select=Date&order=Date.asc&limit=1",  headers=headers, timeout=10)
+        r_max = _requests.get(f"{_url}/rest/v1/sku_ads_cache?select=Date&order=Date.desc&limit=1", headers=headers, timeout=10)
         min_d = r_min.json()[0]["Date"] if r_min.status_code == 200 and r_min.json() else ""
         max_d = r_max.json()[0]["Date"] if r_max.status_code == 200 and r_max.json() else ""
         return (min_d, max_d)
@@ -981,16 +984,7 @@ with tabs[3]:
     # Read Supabase credentials at render time (secrets available here)
     _SB_URL, _SB_KEY = _get_supabase_creds()
 
-    # ── DEBUG: show what was read (remove after fixing) ──────────────────────
-    with st.expander("🔧 Supabase Debug (remove after fixing)", expanded=True):
-        st.write(f"SUPABASE_URL from secrets: `{_SB_URL[:40] if _SB_URL else 'EMPTY'}`")
-        st.write(f"SUPABASE_SERVICE_KEY from secrets: `{_SB_KEY[:20] if _SB_KEY else 'EMPTY'}`")
-        all_keys = []
-        try:
-            all_keys = list(st.secrets.keys())
-        except Exception as e:
-            all_keys = [f"ERROR reading secrets: {e}"]
-        st.write(f"All secret keys found: `{all_keys}`")
+
 
     # ══════════════════════════════════════════════════════════════════════════
     # SECTION 0  ──  Amazon Ads Summary  (queried from Supabase by date range)
