@@ -586,7 +586,6 @@ def _build_payload(t: "_Task") -> dict:
             "adProduct":    product,
             "reportTypeId": report_type,
             "columns":      cols,
-            "groupBy":      ["advertiser"],
             "timeUnit":     "DAILY",
             "format":       "GZIP_JSON",
         },
