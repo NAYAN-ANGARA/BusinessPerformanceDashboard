@@ -926,8 +926,9 @@ def _load_sku_ads_raw(start: str, end: str, _url: str = "", _key: str = "") -> p
         headers = {
             "apikey":        _key,
             "Authorization": f"Bearer {_key}",
+            "Accept":        "application/json",
+            "Prefer":        "count=none",
         }
-        # Always use lowercase column names — table must be created without quotes
         params = f"select=*&date=gte.{start}&date=lte.{end}&limit=100000"
         r = _requests.get(f"{_url}/rest/v1/sku_ads_cache?{params}", headers=headers, timeout=30)
         if r.status_code != 200:
