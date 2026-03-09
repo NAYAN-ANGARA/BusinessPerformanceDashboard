@@ -981,6 +981,17 @@ with tabs[3]:
     # Read Supabase credentials at render time (secrets available here)
     _SB_URL, _SB_KEY = _get_supabase_creds()
 
+    # ── DEBUG: show what was read (remove after fixing) ──────────────────────
+    with st.expander("🔧 Supabase Debug (remove after fixing)", expanded=True):
+        st.write(f"SUPABASE_URL from secrets: `{_SB_URL[:40] if _SB_URL else 'EMPTY'}`")
+        st.write(f"SUPABASE_SERVICE_KEY from secrets: `{_SB_KEY[:20] if _SB_KEY else 'EMPTY'}`")
+        all_keys = []
+        try:
+            all_keys = list(st.secrets.keys())
+        except Exception as e:
+            all_keys = [f"ERROR reading secrets: {e}"]
+        st.write(f"All secret keys found: `{all_keys}`")
+
     # ══════════════════════════════════════════════════════════════════════════
     # SECTION 0  ──  Amazon Ads Summary  (queried from Supabase by date range)
     # ══════════════════════════════════════════════════════════════════════════
