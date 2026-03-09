@@ -927,7 +927,20 @@ def _load_sku_ads_raw(start: str, end: str, _url: str = "", _key: str = "") -> p
             "apikey":        _key,
             "Authorization": f"Bearer {_key}",
         }
-        params = f'select=*&Date=gte.{start}&Date=lte.{end}&limit=100000'
+        # Fetch one row first to detect actual column names in the table
+        r_test = _requests.get(f"{_url}/rest/v1/sku_ads_cache?select=*&limit=1", headers=headers, timeout=10)
+        if r_test.status_code != 200:
+            return pd.DataFrame({"_error": [f"Supabase error {r_test.status_code}: {r_test.text[:300]}"]})
+        test_data = r_test.json()
+        if not test_data:
+            return pd.DataFrame({"_error": ["Supabase table is empty — import your CSV first via Table Editor → Import data"]})
+        # Find the date column name (could be Date or date)
+        actual_cols = list(test_data[0].keys())
+        date_col = next((c for c in actual_cols if c.lower() == "date"), None)
+        if not date_col:
+            return pd.DataFrame({"_error": [f"No date column found. Columns in table: {actual_cols}"]})
+        # Fetch full date range using detected column name
+        params = f"select=*&{date_col}=gte.{start}&{date_col}=lte.{end}&limit=100000"
         r = _requests.get(f"{_url}/rest/v1/sku_ads_cache?{params}", headers=headers, timeout=30)
         if r.status_code != 200:
             return pd.DataFrame({"_error": [f"Supabase error {r.status_code}: {r.text[:200]}"]})
@@ -935,8 +948,14 @@ def _load_sku_ads_raw(start: str, end: str, _url: str = "", _key: str = "") -> p
         if not data:
             return pd.DataFrame()
         df = pd.DataFrame(data)
+        # Normalize lowercase column names to match rest of app
+        df = df.rename(columns={
+            "date": "Date", "market": "Market", "parent_sku": "Parent_SKU",
+            "sku": "SKU", "asin": "ASIN", "impressions": "Impressions",
+            "clicks": "Clicks", "spend": "Spend", "ad_sales": "Ad_Sales",
+            "ad_orders": "Ad_Orders",
+        })
         df["Date"] = pd.to_datetime(df["Date"])
-        # Keep only needed columns (select * may return extra)
         needed = ["Date","Market","Parent_SKU","SKU","ASIN","Impressions","Clicks","Spend","Ad_Sales","Ad_Orders"]
         df = df[[c for c in needed if c in df.columns]]
         return df
