@@ -1006,6 +1006,16 @@ with tabs[3]:
             _url=_SB_URL, _key=_SB_KEY,
         )
 
+        # ── TEMP DEBUG ────────────────────────────────────────────────────────
+        with st.expander("🔧 Debug", expanded=True):
+            st.write(f"Rows returned: {len(_ads_raw)}")
+            st.write(f"Columns: {list(_ads_raw.columns) if not _ads_raw.empty else 'empty'}")
+            if not _ads_raw.empty:
+                st.write("First row:", _ads_raw.iloc[0].to_dict())
+                st.write("Impressions dtype:", _ads_raw["Impressions"].dtype if "Impressions" in _ads_raw.columns else "missing")
+                st.write("Impressions sum:", _ads_raw["Impressions"].sum() if "Impressions" in _ads_raw.columns else "missing")
+        # ── END DEBUG ─────────────────────────────────────────────────────────
+
         if not _ads_raw.empty and "_error" in _ads_raw.columns:
             st.error(f"❌ {_ads_raw['_error'].iloc[0]}")
 
