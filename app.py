@@ -895,11 +895,16 @@ def _get_supabase_creds():
         val = os.environ.get(key, "").strip()
         if val:
             return val
-        # 2. Try Streamlit secrets (access like a dict to avoid exceptions)
+        # 2. Try Streamlit secrets — strip ALL whitespace/newlines
         try:
             import streamlit as _st
-            if hasattr(_st, "secrets") and key in _st.secrets:
-                return str(_st.secrets[key]).strip()
+            if hasattr(_st, "secrets"):
+                try:
+                    val = _st.secrets[key]
+                    # Remove all whitespace including newlines from token
+                    return "".join(str(val).split())
+                except KeyError:
+                    pass
         except Exception:
             pass
         return ""
