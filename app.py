@@ -3283,6 +3283,19 @@ with tabs[9]:
         raw = raw.rename(columns={"Design Code": "design_code"})
         for col in ["Parent", "design_code", "jewelry_type", "stone"]:
             raw[col] = raw[col].astype(str).str.strip()
+
+        # ── Remap jewelry types at load time ─────────────────────────────────
+        # blank/nan → Rings;  Necklace/Necklaces → Pendants
+        def _remap_jtype(v):
+            v = str(v).strip()
+            if v in ("", "nan", "None", "NaN", "<NA>"):
+                return "Rings"
+            if v.lower().startswith("necklace"):
+                return "Pendants"
+            return v
+
+        raw["jewelry_type"] = raw["jewelry_type"].apply(_remap_jtype)
+
         lookup = raw.drop_duplicates(subset="Parent").reset_index(drop=True)
         return lookup, "OK"
 
@@ -3335,20 +3348,11 @@ with tabs[9]:
 
     # ── Enrich sales data with merch attributes ───────────────────────────────
     # ── Deduplicate merch_lookup to ONE row per Parent before merge ───────────
-    # merch_lookup has one row per child SKU; merging without dedup inflates revenue
-    # by the number of child SKUs under each parent. Keep first occurrence per Parent.
+    # merch_lookup already has jewelry_type remapped (blank→Rings, Necklace→Pendants)
     merch_lookup_dedup = (
         merch_lookup[["Parent","design_code","jewelry_type","stone"]]
         .drop_duplicates(subset="Parent", keep="first")
         .copy()
-    )
-
-    # ── Remap jewelry types ───────────────────────────────────────────────────
-    # Blank/null → Ring; Necklace → Pendant
-    merch_lookup_dedup["jewelry_type"] = (
-        merch_lookup_dedup["jewelry_type"]
-        .astype(str).str.strip()
-        .apply(lambda v: "Rings" if v in ("", "nan", "None", "NaN", "<NA>") else ("Pendants" if v.lower().startswith("necklace") else v))
     )
 
     df_enriched = df_s_merch.merge(
@@ -3386,14 +3390,6 @@ with tabs[9]:
     if drop_cols:
         df_enriched = df_enriched.drop(columns=drop_cols)
 
-    # ── Apply jewelry_type remapping to enriched sales data ──────────────────
-    if "jewelry_type" in df_enriched.columns:
-        df_enriched["jewelry_type"] = (
-            df_enriched["jewelry_type"]
-            .astype(str).str.strip()
-            .apply(lambda v: "Rings" if v in ("", "nan", "None", "NaN", "<NA>") else ("Pendants" if v.lower().startswith("necklace") else v))
-        )
-
     # ── Tab-level filters ─────────────────────────────────────────────────────
     st.markdown("### 🔧 Filters")
     fcol1, fcol2, fcol3 = st.columns([2, 2, 1])
@@ -3402,6 +3398,7 @@ with tabs[9]:
         v for v in merch_lookup_dedup["jewelry_type"].unique()
         if str(v).strip() not in ("", "nan", "None", "NaN", "<NA>")
     ])
+    st.caption(f"DEBUG jewelry_type unique values: {sorted(merch_lookup['jewelry_type'].unique().tolist())}")
     all_stones = sorted(merch_lookup["stone"].dropna().unique().tolist())
 
     with fcol1:
@@ -3441,7 +3438,7 @@ with tabs[9]:
 
     # A tiny signature so cache invalidates if underlying data changes (date range, file, etc.)
     # v2 = remap version bump to bust any stale cache
-    _data_sig = (int(_df_merch_base.shape[0]), float(_df_merch_base["revenue"].sum()), float(_df_merch_base["orders"].sum()), "remapv5")
+    _data_sig = (int(_df_merch_base.shape[0]), float(_df_merch_base["revenue"].sum()), float(_df_merch_base["orders"].sum()), "remapv6")
 
     @st.cache_data(show_spinner=False, ttl=900, max_entries=128)
     def _compute_merch_views(_data_sig_key: tuple, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple, _df: pd.DataFrame = None):
@@ -3449,17 +3446,9 @@ with tabs[9]:
         df = _df.copy() if _df is not None else _df_merch_base.copy()
 
         # Normalize columns to robust plain strings for reliable filtering
-        for _c in ["design_code", "stone"]:
+        for _c in ["design_code", "jewelry_type", "stone"]:
             if _c in df.columns:
                 df[_c] = df[_c].astype("string").fillna("").str.strip()
-
-        # jewelry_type: normalize then remap blank→Ring, Necklace→Pendant
-        if "jewelry_type" in df.columns:
-            df["jewelry_type"] = (
-                df["jewelry_type"]
-                .astype(str).str.strip()
-                .apply(lambda v: "Rings" if v in ("", "nan", "None", "NaN", "<NA>") else ("Pendants" if v.lower().startswith("necklace") else v))
-            )
 
         # Normalised helper cols (case-insensitive)
         df["_jewelry_type_norm"] = df.get("jewelry_type", "").astype("string").str.lower().str.strip()
