@@ -3348,11 +3348,8 @@ with tabs[9]:
     merch_lookup_dedup["jewelry_type"] = (
         merch_lookup_dedup["jewelry_type"]
         .astype(str).str.strip()
-        .replace({"": "Ring", "nan": "Ring", "None": "Ring", "Necklace": "Pendant"})
+        .apply(lambda v: "Ring" if v in ("", "nan", "None", "NaN", "<NA>") else ("Pendant" if v == "Necklace" else v))
     )
-    merch_lookup_dedup.loc[
-        merch_lookup_dedup["jewelry_type"].str.strip() == "", "jewelry_type"
-    ] = "Ring"
 
     df_enriched = df_s_merch.merge(
         merch_lookup_dedup,
@@ -3394,7 +3391,7 @@ with tabs[9]:
         df_enriched["jewelry_type"] = (
             df_enriched["jewelry_type"]
             .astype(str).str.strip()
-            .replace({"": "Ring", "nan": "Ring", "None": "Ring", "Necklace": "Pendant"})
+            .apply(lambda v: "Ring" if v in ("", "nan", "None", "NaN", "<NA>") else ("Pendant" if v == "Necklace" else v))
         )
 
     # ── Tab-level filters ─────────────────────────────────────────────────────
@@ -3448,7 +3445,7 @@ with tabs[9]:
 
     # A tiny signature so cache invalidates if underlying data changes (date range, file, etc.)
     # v2 = remap version bump to bust any stale cache
-    _data_sig = (int(_df_merch_base.shape[0]), float(_df_merch_base["revenue"].sum()), float(_df_merch_base["orders"].sum()), "remapv2")
+    _data_sig = (int(_df_merch_base.shape[0]), float(_df_merch_base["revenue"].sum()), float(_df_merch_base["orders"].sum()), "remapv3")
 
     @st.cache_data(show_spinner=False, ttl=900, max_entries=128)
     def _compute_merch_views(_data_sig_key: tuple, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple, _df: pd.DataFrame = None):
@@ -3456,14 +3453,16 @@ with tabs[9]:
         df = _df.copy() if _df is not None else _df_merch_base.copy()
 
         # Normalize columns to robust plain strings for reliable filtering
-        for _c in ["design_code", "jewelry_type", "stone"]:
+        for _c in ["design_code", "stone"]:
             if _c in df.columns:
                 df[_c] = df[_c].astype("string").fillna("").str.strip()
 
-        # Remap jewelry types: blank → Ring, Necklace → Pendant
+        # jewelry_type: normalize then remap blank→Ring, Necklace→Pendant
         if "jewelry_type" in df.columns:
-            df["jewelry_type"] = df["jewelry_type"].replace(
-                {"": "Ring", "nan": "Ring", "None": "Ring", "Necklace": "Pendant"}
+            df["jewelry_type"] = (
+                df["jewelry_type"]
+                .astype(str).str.strip()
+                .apply(lambda v: "Ring" if v in ("", "nan", "None", "NaN", "<NA>") else ("Pendant" if v == "Necklace" else v))
             )
 
         # Normalised helper cols (case-insensitive)
