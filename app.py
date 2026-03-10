@@ -3307,7 +3307,7 @@ with tabs[9]:
         lookup = raw.drop_duplicates(subset="Parent").reset_index(drop=True)
         return lookup, "OK"
 
-    merch_lookup, merch_status = _load_merch("v3")
+    merch_lookup, merch_status = _load_merch("v4")
 
     if merch_status == "OPENPYXL_MISSING":
         st.error(
@@ -3368,25 +3368,21 @@ with tabs[9]:
         on="Parent", how="left", suffixes=("_sales", "_merch")
     )
 
-    # --- Robust column normalisation (prevents KeyError on 'stone' / 'jewelry_type') ---
-    # If the sales dataset already contains columns named like the merch attributes,
-    # pandas will suffix them. We always want the merch values.
+    # --- Always use merch attributes; fall back to sales only if merch is missing ---
     def _coalesce_col(df, base):
         merch_col = f"{base}_merch"
         sales_col = f"{base}_sales"
-        if base in df.columns:
-            return base
+        # Prefer merch value
         if merch_col in df.columns:
             df[base] = df[merch_col]
             return base
+        # Fall back to sales value
         if sales_col in df.columns:
             df[base] = df[sales_col]
             return base
-        # last-resort: case-insensitive match
-        for c in df.columns:
-            if str(c).strip().lower() == base.lower():
-                df[base] = df[c]
-                return base
+        # Already exists with no suffix (no conflict during merge)
+        if base in df.columns:
+            return base
         df[base] = np.nan
         return base
 
@@ -3445,7 +3441,7 @@ with tabs[9]:
 
     # A tiny signature so cache invalidates if underlying data changes (date range, file, etc.)
     # v2 = remap version bump to bust any stale cache
-    _data_sig = (int(_df_merch_base.shape[0]), float(_df_merch_base["revenue"].sum()), float(_df_merch_base["orders"].sum()), "remapv6")
+    _data_sig = (int(_df_merch_base.shape[0]), float(_df_merch_base["revenue"].sum()), float(_df_merch_base["orders"].sum()), "remapv7")
 
     @st.cache_data(show_spinner=False, ttl=900, max_entries=128)
     def _compute_merch_views(_data_sig_key: tuple, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple, _df: pd.DataFrame = None):
