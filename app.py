@@ -3415,9 +3415,9 @@ with tabs[9]:
     _data_sig = (int(_df_merch_base.shape[0]), float(_df_merch_base["revenue"].sum()), float(_df_merch_base["orders"].sum()))
 
     @st.cache_data(show_spinner=False, ttl=900, max_entries=128)
-    def _compute_merch_views(_data_sig_key: tuple, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple):
-        # Use the outer-scope base df; cache key is driven by _data_sig_key + filters only.
-        df = _df_merch_base.copy()
+    def _compute_merch_views(_data_sig_key: tuple, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple, _df: pd.DataFrame = None):
+        # df passed explicitly to avoid stale closure over _df_merch_base
+        df = _df.copy() if _df is not None else _df_merch_base.copy()
 
         # Normalize columns to robust plain strings for reliable filtering
         for _c in ["design_code", "jewelry_type", "stone"]:
@@ -3559,7 +3559,7 @@ with tabs[9]:
     _sel_jtype_t = tuple(sel_jtype or [])
     _sel_stone_t = tuple(sel_stone or [])
 
-    _views = _compute_merch_views(_data_sig, matched_only, _sel_jtype_t, _sel_stone_t)
+    _views = _compute_merch_views(_data_sig, matched_only, _sel_jtype_t, _sel_stone_t, _df=_df_merch_base)
 
     df_m, _m_metrics, jtype_agg, stone_agg, parent_agg, design_agg, heat_raw, top15_stones = _views
     if df_m.empty:
