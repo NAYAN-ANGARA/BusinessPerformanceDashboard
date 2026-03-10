@@ -3271,26 +3271,85 @@ with tabs[8]:
         jt_tbl["Rev_Share"] = jt_tbl["Revenue"] / _total_rev * 100 if _total_rev > 0 else 0
         jt_tbl["Ord_Share"] = jt_tbl["Orders"]  / _total_ord * 100 if _total_ord > 0 else 0
 
+        # ── Ad Spend from Supabase ────────────────────────────────────────────
+        _has_ads_de = False
+        try:
+            _sb_url_de, _sb_key_de = _get_supabase_creds()
+            _ads_de = _load_sku_ads_raw(
+                start_date.strftime("%Y-%m-%d"),
+                end_date.strftime("%Y-%m-%d"),
+                _url=_sb_url_de, _key=_sb_key_de,
+            )
+            if (not _ads_de.empty
+                    and "_error" not in _ads_de.columns
+                    and "Parent_SKU" in _ads_de.columns
+                    and "Spend" in _ads_de.columns):
+                # Map Parent_SKU → jewelry_type via sales data type column
+                _sku_type = (
+                    _jt_src[["Parent","jewelry_type"]]
+                    .drop_duplicates(subset="Parent")
+                    .rename(columns={"Parent": "Parent_SKU"})
+                )
+                _ads_de = _ads_de.merge(_sku_type, on="Parent_SKU", how="left")
+                _ads_de["jewelry_type"] = _ads_de["jewelry_type"].apply(
+                    lambda v: _remap_jt(v) if pd.notna(v) else None
+                )
+                _ads_de = _ads_de[_ads_de["jewelry_type"].notna()]
+                _ads_by_jt = (
+                    _ads_de.groupby("jewelry_type", as_index=False)
+                    .agg(Ad_Spend=("Spend","sum"), Ad_Sales=("Ad_Sales","sum"), Ad_Orders=("Ad_Orders","sum"))
+                )
+                jt_tbl = jt_tbl.merge(_ads_by_jt, on="jewelry_type", how="left")
+                jt_tbl["Ad_Spend"]  = jt_tbl["Ad_Spend"].fillna(0)
+                jt_tbl["Ad_Sales"]  = jt_tbl["Ad_Sales"].fillna(0)
+                jt_tbl["Ad_Orders"] = jt_tbl["Ad_Orders"].fillna(0)
+                jt_tbl["ACOS"] = jt_tbl.apply(
+                    lambda r: r["Ad_Spend"] / r["Ad_Sales"] * 100 if r["Ad_Sales"] > 0 else 0, axis=1)
+                _total_spend    = jt_tbl["Ad_Spend"].sum()
+                _total_ad_sales = jt_tbl["Ad_Sales"].sum()
+                _has_ads_de = True
+        except Exception:
+            _has_ads_de = False
+
         # Totals row
-        jt_tbl = pd.concat([jt_tbl, pd.DataFrame([{
+        _totals = {
             "jewelry_type": "🔢 TOTAL",
             "Revenue":   _total_rev,
             "Orders":    _total_ord,
             "AOV":       _total_rev / _total_ord if _total_ord > 0 else 0,
             "Rev_Share": 100.0,
             "Ord_Share": 100.0,
-        }])], ignore_index=True)
+        }
+        if _has_ads_de:
+            _totals.update({
+                "Ad_Spend":  _total_spend,
+                "Ad_Sales":  _total_ad_sales,
+                "Ad_Orders": jt_tbl["Ad_Orders"].sum(),
+                "ACOS":      _total_spend / _total_ad_sales * 100 if _total_ad_sales > 0 else 0,
+            })
+        jt_tbl = pd.concat([jt_tbl, pd.DataFrame([_totals])], ignore_index=True)
+
+        _disp_cols = ["jewelry_type","Revenue","Orders","AOV","Rev_Share","Ord_Share"]
+        _col_cfg = {
+            "jewelry_type": st.column_config.TextColumn("Jewelry Type", width="medium"),
+            "Revenue":      st.column_config.NumberColumn("Revenue ($)",  format="$%,.0f"),
+            "Orders":       st.column_config.NumberColumn("Orders",       format="%,.0f"),
+            "AOV":          st.column_config.NumberColumn("AOV ($)",      format="$%.2f"),
+            "Rev_Share":    st.column_config.NumberColumn("Rev Share %",  format="%.1f%%"),
+            "Ord_Share":    st.column_config.NumberColumn("Ord Share %",  format="%.1f%%"),
+        }
+        if _has_ads_de:
+            _disp_cols += ["Ad_Spend","Ad_Sales","Ad_Orders","ACOS"]
+            _col_cfg.update({
+                "Ad_Spend":  st.column_config.NumberColumn("Ad Spend ($)", format="$%,.0f"),
+                "Ad_Sales":  st.column_config.NumberColumn("Ad Sales ($)", format="$%,.0f"),
+                "Ad_Orders": st.column_config.NumberColumn("Ad Orders",    format="%,.0f"),
+                "ACOS":      st.column_config.NumberColumn("ACOS %",       format="%.1f%%"),
+            })
 
         st.dataframe(
-            jt_tbl,
-            column_config={
-                "jewelry_type": st.column_config.TextColumn("Jewelry Type", width="medium"),
-                "Revenue":      st.column_config.NumberColumn("Revenue ($)",  format="$%,.0f"),
-                "Orders":       st.column_config.NumberColumn("Orders",       format="%,.0f"),
-                "AOV":          st.column_config.NumberColumn("AOV ($)",      format="$%.2f"),
-                "Rev_Share":    st.column_config.NumberColumn("Rev Share %",  format="%.1f%%"),
-                "Ord_Share":    st.column_config.NumberColumn("Ord Share %",  format="%.1f%%"),
-            },
+            jt_tbl[_disp_cols],
+            column_config=_col_cfg,
             hide_index=True, use_container_width=True,
             height=min(500, (len(jt_tbl) + 1) * 38 + 38),
         )
