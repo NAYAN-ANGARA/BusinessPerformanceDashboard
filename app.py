@@ -3661,8 +3661,12 @@ with tabs[9]:
 
     if not df_m.empty and "jewelry_type" in df_m.columns:
         # Use jtype_agg which is already correctly computed with dropna=False
-        jtype_table = jtype_agg.reset_index().copy()
-        jtype_table.columns = ["jewelry_type", "Revenue", "Orders", "AOV"]
+        jtype_table = jtype_agg.copy().rename(columns={
+            "jewelry_type": "jewelry_type",
+            "revenue": "Revenue",
+            "orders":  "Orders",
+            "aov":     "AOV",
+        })
         jtype_table["jewelry_type"] = jtype_table["jewelry_type"].fillna("—").astype(str)
         jtype_table = jtype_table.sort_values("Revenue", ascending=False)
 
