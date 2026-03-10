@@ -3660,19 +3660,24 @@ with tabs[9]:
     st.caption("Revenue, orders, AOV and share broken down by jewelry type — sourced from Google Sheets sales data.")
 
     if not df_m.empty and "jewelry_type" in df_m.columns:
-        jtype_table = (
-            df_m.groupby("jewelry_type", as_index=False)
-            .agg(
-                Revenue  =("revenue",  "sum"),
-                Orders   =("orders",   "sum"),
-                SKUs     =("Parent",   "nunique"),
-            )
-            .sort_values("Revenue", ascending=False)
+        # Use jtype_agg which is already correctly computed with dropna=False
+        jtype_table = jtype_agg.reset_index().copy()
+        jtype_table.columns = ["jewelry_type", "Revenue", "Orders", "AOV"]
+        jtype_table["jewelry_type"] = jtype_table["jewelry_type"].fillna("—").astype(str)
+        jtype_table = jtype_table.sort_values("Revenue", ascending=False)
+
+        # Add SKU count per type
+        sku_counts = (
+            df_m.groupby("jewelry_type", dropna=False)["Parent"]
+            .nunique()
+            .reset_index()
+            .rename(columns={"Parent": "SKUs"})
         )
+        sku_counts["jewelry_type"] = sku_counts["jewelry_type"].fillna("—").astype(str)
+        jtype_table = jtype_table.merge(sku_counts, on="jewelry_type", how="left")
+
         total_rev = jtype_table["Revenue"].sum()
         total_ord = jtype_table["Orders"].sum()
-        jtype_table["AOV"]       = jtype_table.apply(
-            lambda r: r["Revenue"] / r["Orders"] if r["Orders"] > 0 else 0, axis=1)
         jtype_table["Rev_Share"] = jtype_table["Revenue"] / total_rev * 100 if total_rev > 0 else 0
         jtype_table["Ord_Share"] = jtype_table["Orders"]  / total_ord * 100 if total_ord > 0 else 0
 
@@ -3681,8 +3686,8 @@ with tabs[9]:
             "jewelry_type": "🔢 TOTAL",
             "Revenue":   total_rev,
             "Orders":    total_ord,
-            "SKUs":      df_m["Parent"].nunique(),
             "AOV":       total_rev / total_ord if total_ord > 0 else 0,
+            "SKUs":      df_m["Parent"].nunique(),
             "Rev_Share": 100.0,
             "Ord_Share": 100.0,
         }
