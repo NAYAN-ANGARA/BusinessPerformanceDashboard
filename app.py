@@ -3285,21 +3285,29 @@ with tabs[9]:
             raw[col] = raw[col].astype(str).str.strip()
 
         # ── Remap jewelry types at load time ─────────────────────────────────
-        # blank/nan → Rings;  Necklace/Necklaces → Pendants
+        # Normalize to canonical plural names; blank/nan → Rings; Necklace → Pendants
+        _JTYPE_MAP = {
+            "ring": "Rings", "rings": "Rings",
+            "pendant": "Pendants", "pendants": "Pendants",
+            "necklace": "Pendants", "necklaces": "Pendants",
+            "earring": "Earrings", "earrings": "Earrings",
+            "bracelet": "Bracelets", "bracelets": "Bracelets",
+            "band": "Band", "bands": "Band",
+            "bangle": "Bangles", "bangles": "Bangles",
+        }
+
         def _remap_jtype(v):
             v = str(v).strip()
             if v in ("", "nan", "None", "NaN", "<NA>"):
                 return "Rings"
-            if v.lower().startswith("necklace"):
-                return "Pendants"
-            return v
+            return _JTYPE_MAP.get(v.lower(), v)
 
         raw["jewelry_type"] = raw["jewelry_type"].apply(_remap_jtype)
 
         lookup = raw.drop_duplicates(subset="Parent").reset_index(drop=True)
         return lookup, "OK"
 
-    merch_lookup, merch_status = _load_merch("v2")
+    merch_lookup, merch_status = _load_merch("v3")
 
     if merch_status == "OPENPYXL_MISSING":
         st.error(
