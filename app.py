@@ -3399,11 +3399,8 @@ with tabs[9]:
     fcol1, fcol2, fcol3 = st.columns([2, 2, 1])
 
     all_jtypes = sorted([
-        v for v in merch_lookup_dedup["jewelry_type"]
-        .apply(lambda v: "Rings" if str(v).strip() in ("", "nan", "None", "NaN", "<NA>")
-               else ("Pendants" if str(v).strip().lower().startswith("necklace") else str(v).strip()))
-        .unique()
-        if v not in ("", "nan", "None", "NaN", "<NA>")
+        v for v in merch_lookup_dedup["jewelry_type"].unique()
+        if str(v).strip() not in ("", "nan", "None", "NaN", "<NA>")
     ])
     all_stones = sorted(merch_lookup["stone"].dropna().unique().tolist())
 
@@ -3444,7 +3441,7 @@ with tabs[9]:
 
     # A tiny signature so cache invalidates if underlying data changes (date range, file, etc.)
     # v2 = remap version bump to bust any stale cache
-    _data_sig = (int(_df_merch_base.shape[0]), float(_df_merch_base["revenue"].sum()), float(_df_merch_base["orders"].sum()), "remapv4")
+    _data_sig = (int(_df_merch_base.shape[0]), float(_df_merch_base["revenue"].sum()), float(_df_merch_base["orders"].sum()), "remapv5")
 
     @st.cache_data(show_spinner=False, ttl=900, max_entries=128)
     def _compute_merch_views(_data_sig_key: tuple, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple, _df: pd.DataFrame = None):
