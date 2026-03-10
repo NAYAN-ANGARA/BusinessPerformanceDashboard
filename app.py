@@ -3657,7 +3657,7 @@ with tabs[9]:
     # SECTION 1b ── Jewelry Type Summary Table
     # ════════════════════════════════════════════════════════════════════════════
     st.markdown("### 💍 Jewelry Type Performance")
-    st.caption("Revenue, orders, AOV and share broken down by jewelry type for the selected date range and filters.")
+    st.caption("Revenue, orders, AOV and share broken down by jewelry type — sourced from Google Sheets sales data.")
 
     if not df_m.empty and "jewelry_type" in df_m.columns:
         jtype_table = (
@@ -3676,43 +3676,6 @@ with tabs[9]:
         jtype_table["Rev_Share"] = jtype_table["Revenue"] / total_rev * 100 if total_rev > 0 else 0
         jtype_table["Ord_Share"] = jtype_table["Orders"]  / total_ord * 100 if total_ord > 0 else 0
 
-        # ── Pull Ad Spend from Supabase and join via Parent_SKU → jewelry_type ─
-        has_ads = False
-        try:
-            _sb_url_m, _sb_key_m = _get_supabase_creds()
-            _ads_merch = _load_sku_ads_raw(
-                start_date.strftime("%Y-%m-%d"),
-                end_date.strftime("%Y-%m-%d"),
-                _url=_sb_url_m, _key=_sb_key_m,
-            )
-            if (not _ads_merch.empty
-                    and "_error" not in _ads_merch.columns
-                    and "Parent_SKU" in _ads_merch.columns
-                    and "Spend" in _ads_merch.columns):
-                sku_to_jtype = (
-                    df_m[["Parent","jewelry_type"]]
-                    .drop_duplicates()
-                    .rename(columns={"Parent":"Parent_SKU"})
-                )
-                _ads_merch = _ads_merch.merge(sku_to_jtype, on="Parent_SKU", how="left")
-                _ads_merch = _ads_merch[_ads_merch["jewelry_type"].notna()]
-                if not _ads_merch.empty:
-                    ads_by_jtype = (
-                        _ads_merch.groupby("jewelry_type", as_index=False)
-                        .agg(Ad_Spend=("Spend","sum"), Ad_Sales=("Ad_Sales","sum"), Ad_Orders=("Ad_Orders","sum"))
-                    )
-                    jtype_table = jtype_table.merge(ads_by_jtype, on="jewelry_type", how="left")
-                    jtype_table["Ad_Spend"]  = jtype_table["Ad_Spend"].fillna(0)
-                    jtype_table["Ad_Sales"]  = jtype_table["Ad_Sales"].fillna(0)
-                    jtype_table["Ad_Orders"] = jtype_table["Ad_Orders"].fillna(0)
-                    jtype_table["ACOS"] = jtype_table.apply(
-                        lambda r: r["Ad_Spend"] / r["Ad_Sales"] * 100 if r["Ad_Sales"] > 0 else 0, axis=1)
-                    total_spend    = jtype_table["Ad_Spend"].sum()
-                    total_ad_sales = jtype_table["Ad_Sales"].sum()
-                    has_ads = True
-        except Exception:
-            has_ads = False
-
         # Totals row
         totals_dict = {
             "jewelry_type": "🔢 TOTAL",
@@ -3723,37 +3686,19 @@ with tabs[9]:
             "Rev_Share": 100.0,
             "Ord_Share": 100.0,
         }
-        if has_ads:
-            totals_dict.update({
-                "Ad_Spend":  total_spend,
-                "Ad_Sales":  total_ad_sales,
-                "Ad_Orders": jtype_table["Ad_Orders"].sum(),
-                "ACOS":      total_spend / total_ad_sales * 100 if total_ad_sales > 0 else 0,
-            })
         jtype_table = pd.concat([jtype_table, pd.DataFrame([totals_dict])], ignore_index=True)
 
-        col_config = {
-            "jewelry_type": st.column_config.TextColumn("Jewelry Type", width="medium"),
-            "Revenue":      st.column_config.NumberColumn("Revenue ($)",  format="$%,.0f"),
-            "Orders":       st.column_config.NumberColumn("Orders",       format="%,.0f"),
-            "SKUs":         st.column_config.NumberColumn("Active SKUs",  format="%d"),
-            "AOV":          st.column_config.NumberColumn("AOV ($)",      format="$%.2f"),
-            "Rev_Share":    st.column_config.NumberColumn("Rev Share %",  format="%.1f%%"),
-            "Ord_Share":    st.column_config.NumberColumn("Ord Share %",  format="%.1f%%"),
-        }
-        display_cols = ["jewelry_type","Revenue","Orders","SKUs","AOV","Rev_Share","Ord_Share"]
-        if has_ads:
-            col_config.update({
-                "Ad_Spend":  st.column_config.NumberColumn("Ad Spend ($)", format="$%,.0f"),
-                "Ad_Sales":  st.column_config.NumberColumn("Ad Sales ($)", format="$%,.0f"),
-                "Ad_Orders": st.column_config.NumberColumn("Ad Orders",    format="%,.0f"),
-                "ACOS":      st.column_config.NumberColumn("ACOS %",       format="%.1f%%"),
-            })
-            display_cols += ["Ad_Spend","Ad_Sales","Ad_Orders","ACOS"]
-
         st.dataframe(
-            jtype_table[display_cols],
-            column_config=col_config,
+            jtype_table[["jewelry_type","Revenue","Orders","SKUs","AOV","Rev_Share","Ord_Share"]],
+            column_config={
+                "jewelry_type": st.column_config.TextColumn("Jewelry Type", width="medium"),
+                "Revenue":      st.column_config.NumberColumn("Revenue ($)",  format="$%,.0f"),
+                "Orders":       st.column_config.NumberColumn("Orders",       format="%,.0f"),
+                "SKUs":         st.column_config.NumberColumn("Active SKUs",  format="%d"),
+                "AOV":          st.column_config.NumberColumn("AOV ($)",      format="$%.2f"),
+                "Rev_Share":    st.column_config.NumberColumn("Rev Share %",  format="%.1f%%"),
+                "Ord_Share":    st.column_config.NumberColumn("Ord Share %",  format="%.1f%%"),
+            },
             hide_index=True, use_container_width=True,
             height=min(400, (len(jtype_table) + 1) * 38 + 38),
         )
