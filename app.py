@@ -3688,31 +3688,50 @@ with tabs[9]:
     st.markdown("### 💍 Jewelry Type Performance")
     st.caption("Revenue, orders, AOV and share broken down by jewelry type — sourced from Google Sheets sales data.")
 
-    if not df_m.empty and "jewelry_type" in df_m.columns:
-        # Use jtype_agg which is already correctly computed with dropna=False
-        jtype_table = jtype_agg.copy().rename(columns={
-            "jewelry_type": "jewelry_type",
-            "revenue": "Revenue",
-            "orders":  "Orders",
-            "aov":     "AOV",
-        })
+    if not df_enriched.empty:
+        # Build from ALL enriched sales (not filtered by matched_only)
+        # so Ring revenue isn't lost when some SKUs are unmatched
+        _jt_df = df_enriched.copy()
+
+        # Use merch jewelry_type where available, fall back to sales 'type' column
+        if "jewelry_type" not in _jt_df.columns:
+            _jt_df["jewelry_type"] = np.nan
+        # Fill unmatched rows using sales 'type' column
+        if "type" in _jt_df.columns:
+            _jt_df["jewelry_type"] = _jt_df["jewelry_type"].where(
+                _jt_df["jewelry_type"].notna() & (_jt_df["jewelry_type"].astype(str).str.strip() != ""),
+                _jt_df["type"]
+            )
+
+        # Apply remap to fallback values too
+        def _remap(v):
+            v = str(v).strip()
+            if v in ("", "nan", "None", "NaN", "<NA>"):
+                return "Rings"
+            _m = {"ring":"Rings","rings":"Rings","pendant":"Pendants","pendants":"Pendants",
+                  "necklace":"Pendants","necklaces":"Pendants","earring":"Earrings",
+                  "earrings":"Earrings","bracelet":"Bracelets","bracelets":"Bracelets"}
+            return _m.get(v.lower(), v)
+        _jt_df["jewelry_type"] = _jt_df["jewelry_type"].apply(_remap)
+
+        jtype_table = (
+            _jt_df.groupby("jewelry_type", dropna=False)
+            .agg(Revenue=("revenue","sum"), Orders=("orders","sum"))
+            .reset_index()
+        )
         jtype_table["jewelry_type"] = jtype_table["jewelry_type"].fillna("—").astype(str)
+        jtype_table = jtype_table[jtype_table["jewelry_type"] != "—"]  # drop truly unclassifiable
+        jtype_table["AOV"] = jtype_table.apply(
+            lambda r: r["Revenue"] / r["Orders"] if r["Orders"] > 0 else 0, axis=1)
         jtype_table = jtype_table.sort_values("Revenue", ascending=False)
 
         # Add SKU count per type
         sku_counts = (
-            df_m.groupby("jewelry_type", dropna=False)["Parent"]
-            .nunique()
-            .reset_index()
-            .rename(columns={"Parent": "SKUs"})
+            _jt_df.groupby("jewelry_type", dropna=False)["Parent"]
+            .nunique().reset_index().rename(columns={"Parent": "SKUs"})
         )
         sku_counts["jewelry_type"] = sku_counts["jewelry_type"].fillna("—").astype(str)
         jtype_table = jtype_table.merge(sku_counts, on="jewelry_type", how="left")
-
-        total_rev = jtype_table["Revenue"].sum()
-        total_ord = jtype_table["Orders"].sum()
-        jtype_table["Rev_Share"] = jtype_table["Revenue"] / total_rev * 100 if total_rev > 0 else 0
-        jtype_table["Ord_Share"] = jtype_table["Orders"]  / total_ord * 100 if total_ord > 0 else 0
 
         # ── Pull Ad Spend from Supabase ───────────────────────────────────────
         has_ads = False
@@ -3727,7 +3746,6 @@ with tabs[9]:
                     and "_error" not in _ads_raw.columns
                     and "Parent_SKU" in _ads_raw.columns
                     and "Spend" in _ads_raw.columns):
-                # Map Parent_SKU → jewelry_type using deduplicated merch_lookup
                 _sku_jtype = (
                     merch_lookup_dedup[["Parent","jewelry_type"]]
                     .rename(columns={"Parent": "Parent_SKU"})
@@ -3738,11 +3756,7 @@ with tabs[9]:
                 _ads_raw["jewelry_type"] = _ads_raw["jewelry_type"].fillna("—").astype(str)
                 ads_by_jtype = (
                     _ads_raw.groupby("jewelry_type", as_index=False)
-                    .agg(
-                        Ad_Spend  =("Spend",     "sum"),
-                        Ad_Sales  =("Ad_Sales",  "sum"),
-                        Ad_Orders =("Ad_Orders", "sum"),
-                    )
+                    .agg(Ad_Spend=("Spend","sum"), Ad_Sales=("Ad_Sales","sum"), Ad_Orders=("Ad_Orders","sum"))
                 )
                 jtype_table = jtype_table.merge(ads_by_jtype, on="jewelry_type", how="left")
                 jtype_table["Ad_Spend"]  = jtype_table["Ad_Spend"].fillna(0)
@@ -3762,7 +3776,7 @@ with tabs[9]:
             "Revenue":   total_rev,
             "Orders":    total_ord,
             "AOV":       total_rev / total_ord if total_ord > 0 else 0,
-            "SKUs":      df_m["Parent"].nunique(),
+            "SKUs":      _jt_df["Parent"].nunique(),
             "Rev_Share": 100.0,
             "Ord_Share": 100.0,
         }
