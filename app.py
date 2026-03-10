@@ -3248,7 +3248,7 @@ with tabs[9]:
 
     # ── Load & deduplicate merchandising reference data ───────────────────────
     @st.cache_data(show_spinner=False, ttl=3600)
-    def _load_merch():
+    def _load_merch(_version="v2"):  # bump version to bust stale cache
         import os
         # Streamlit Cloud mounts the repo at /mount/src/<repo-name>/
         # We also try the cwd and the directory of app.py
@@ -3299,7 +3299,7 @@ with tabs[9]:
         lookup = raw.drop_duplicates(subset="Parent").reset_index(drop=True)
         return lookup, "OK"
 
-    merch_lookup, merch_status = _load_merch()
+    merch_lookup, merch_status = _load_merch("v2")
 
     if merch_status == "OPENPYXL_MISSING":
         st.error(
@@ -3398,7 +3398,6 @@ with tabs[9]:
         v for v in merch_lookup_dedup["jewelry_type"].unique()
         if str(v).strip() not in ("", "nan", "None", "NaN", "<NA>")
     ])
-    st.caption(f"DEBUG jewelry_type unique values: {sorted(merch_lookup['jewelry_type'].unique().tolist())}")
     all_stones = sorted(merch_lookup["stone"].dropna().unique().tolist())
 
     with fcol1:
