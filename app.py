@@ -3340,7 +3340,19 @@ with tabs[9]:
     merch_lookup_dedup = (
         merch_lookup[["Parent","design_code","jewelry_type","stone"]]
         .drop_duplicates(subset="Parent", keep="first")
+        .copy()
     )
+
+    # ── Remap jewelry types ───────────────────────────────────────────────────
+    # Blank/null → Ring; Necklace → Pendant
+    merch_lookup_dedup["jewelry_type"] = (
+        merch_lookup_dedup["jewelry_type"]
+        .astype(str).str.strip()
+        .replace({"": "Ring", "nan": "Ring", "None": "Ring", "Necklace": "Pendant"})
+    )
+    merch_lookup_dedup.loc[
+        merch_lookup_dedup["jewelry_type"].str.strip() == "", "jewelry_type"
+    ] = "Ring"
 
     df_enriched = df_s_merch.merge(
         merch_lookup_dedup,
@@ -3377,11 +3389,26 @@ with tabs[9]:
     if drop_cols:
         df_enriched = df_enriched.drop(columns=drop_cols)
 
+    # ── Apply jewelry_type remapping to enriched sales data ──────────────────
+    if "jewelry_type" in df_enriched.columns:
+        df_enriched["jewelry_type"] = (
+            df_enriched["jewelry_type"]
+            .astype(str).str.strip()
+            .replace({"": "Ring", "nan": "Ring", "None": "Ring", "Necklace": "Pendant"})
+        )
+
     # ── Tab-level filters ─────────────────────────────────────────────────────
     st.markdown("### 🔧 Filters")
     fcol1, fcol2, fcol3 = st.columns([2, 2, 1])
 
-    all_jtypes = sorted(merch_lookup["jewelry_type"].dropna().unique().tolist())
+    all_jtypes = sorted(
+        merch_lookup_dedup["jewelry_type"]
+        .dropna()
+        .replace({"": None, "nan": None, "None": None})
+        .dropna()
+        .unique()
+        .tolist()
+    )
     all_stones = sorted(merch_lookup["stone"].dropna().unique().tolist())
 
     with fcol1:
