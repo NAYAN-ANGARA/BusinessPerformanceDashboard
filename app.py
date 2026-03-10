@@ -3447,7 +3447,8 @@ with tabs[9]:
     _df_merch_base = df_enriched[FILTER_COLS].copy()
 
     # A tiny signature so cache invalidates if underlying data changes (date range, file, etc.)
-    _data_sig = (int(_df_merch_base.shape[0]), float(_df_merch_base["revenue"].sum()), float(_df_merch_base["orders"].sum()))
+    # v2 = remap version bump to bust any stale cache
+    _data_sig = (int(_df_merch_base.shape[0]), float(_df_merch_base["revenue"].sum()), float(_df_merch_base["orders"].sum()), "remapv2")
 
     @st.cache_data(show_spinner=False, ttl=900, max_entries=128)
     def _compute_merch_views(_data_sig_key: tuple, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple, _df: pd.DataFrame = None):
@@ -3458,6 +3459,12 @@ with tabs[9]:
         for _c in ["design_code", "jewelry_type", "stone"]:
             if _c in df.columns:
                 df[_c] = df[_c].astype("string").fillna("").str.strip()
+
+        # Remap jewelry types: blank → Ring, Necklace → Pendant
+        if "jewelry_type" in df.columns:
+            df["jewelry_type"] = df["jewelry_type"].replace(
+                {"": "Ring", "nan": "Ring", "None": "Ring", "Necklace": "Pendant"}
+            )
 
         # Normalised helper cols (case-insensitive)
         df["_jewelry_type_norm"] = df.get("jewelry_type", "").astype("string").str.lower().str.strip()
