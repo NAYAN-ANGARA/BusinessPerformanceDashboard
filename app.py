@@ -388,9 +388,34 @@ with col2:
 selected_channels = multiselect_with_all("📺 Marketplaces", sales_df["channel"].unique())
 
 if "type" in sales_df.columns:
-    selected_types = multiselect_with_all("🏷️ Product Types", sales_df["type"].unique())
+    # Remap type values to canonical names before showing in sidebar
+    def _sidebar_remap(v):
+        v = str(v).strip()
+        if v in ("", "nan", "None", "NaN", "<NA>", "Unknown"):
+            return "Rings"
+        _m = {
+            "ring":"Rings","rings":"Rings",
+            "pendant":"Pendants","pendants":"Pendants",
+            "necklace":"Pendants","necklaces":"Pendants",
+            "earring":"Earrings","earrings":"Earrings",
+            "bracelet":"Bracelets","bracelets":"Bracelets",
+            "band":"Band","bands":"Band",
+            "bangle":"Bangles","bangles":"Bangles",
+            "lapel pin":"Lapel Pin","misc":"MISC",
+            "men's band":"Men's Band","mens band":"Men's Band",
+        }
+        return _m.get(v.lower(), v)
+
+    _type_display_series = sales_df["type"].apply(_sidebar_remap)
+    _type_options = sorted(_type_display_series.unique().tolist())
+    selected_types_display = multiselect_with_all("🏷️ Product Types", _type_options)
+    # Map display selection back to all raw values that map to it
+    selected_types = sales_df.loc[
+        _type_display_series.isin(selected_types_display), "type"
+    ].unique().tolist()
 else:
     selected_types = []
+    selected_types_display = []
 
 # Comparison Period
 st.sidebar.markdown("---")
@@ -3249,11 +3274,19 @@ with tabs[8]:
     # Apply remap: blank→Rings, Necklace→Pendants etc.
     def _remap_jt(v):
         v = str(v).strip()
-        if v in ("", "nan", "None", "NaN", "<NA>"):
+        if v in ("", "nan", "None", "NaN", "<NA>", "Unknown"):
             return None
-        _m = {"ring":"Rings","rings":"Rings","pendant":"Pendants","pendants":"Pendants",
-              "necklace":"Pendants","necklaces":"Pendants","earring":"Earrings",
-              "earrings":"Earrings","bracelet":"Bracelets","bracelets":"Bracelets"}
+        _m = {
+            "ring":"Rings","rings":"Rings",
+            "pendant":"Pendants","pendants":"Pendants",
+            "necklace":"Pendants","necklaces":"Pendants",
+            "earring":"Earrings","earrings":"Earrings",
+            "bracelet":"Bracelets","bracelets":"Bracelets",
+            "band":"Band","bands":"Band",
+            "bangle":"Bangles","bangles":"Bangles",
+            "lapel pin":"Lapel Pin","misc":"MISC",
+            "men's band":"Men's Band","mens band":"Men's Band",
+        }
         return _m.get(v.lower(), v)
 
     if "type" in _jt_src.columns:
