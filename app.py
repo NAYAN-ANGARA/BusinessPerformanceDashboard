@@ -302,17 +302,25 @@ def load_and_process_data():
     
     # Ensure all required lowercase columns exist
     sales.columns = [c if c in ['Parent', 'SKU'] else c.lower() for c in sales.columns]
-    
-    # Convert Money & Numbers
+
+    # Convert Money & Numbers — force back to string first to undo any partial numeric conversion
+    # from gsheets loader, then strip currency symbols and parse cleanly
     for col in ["discounted_price", "selling_commission"]:
         if col in sales.columns:
             sales[col] = pd.to_numeric(
-                sales[col].astype(str).str.replace(r'[$,]', '', regex=True), 
+                sales[col].astype(str)
+                    .str.strip()
+                    .str.replace(r'[$,\s]', '', regex=True)
+                    .str.replace(r'[^\d.\-]', '', regex=True),
                 errors='coerce'
             ).fillna(0)
-    
-    sales["revenue"] = sales.get("discounted_price", 0)
-    sales["orders"] = pd.to_numeric(sales.get("no_of_orders", 0), errors='coerce').fillna(0)
+
+    sales["revenue"] = sales["discounted_price"] if "discounted_price" in sales.columns else 0
+    sales["orders"] = pd.to_numeric(
+        sales["no_of_orders"].astype(str).str.replace(r'[^\d.]', '', regex=True)
+        if "no_of_orders" in sales.columns else pd.Series(0, index=sales.index),
+        errors='coerce'
+    ).fillna(0)
     sales["date"] = pd.to_datetime(sales["purchased_on"], errors="coerce")
     sales["channel"] = sales.get("channel", "Unknown").astype(str).str.strip()
     sales["type"] = sales.get("type", "Unknown").astype(str).str.strip()
