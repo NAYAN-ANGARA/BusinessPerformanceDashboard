@@ -3207,16 +3207,16 @@ Same period last year: **{report['yoy_period']}**
 
         # ── Build PDF HTML ─────────────────────────────────────────────────────
         def _build_pdf_html(report, m, ym, has_yoy, ch_report, recommendations_list):
-            def kpi_row(label, val, prev=None, inverse=False):
-                if prev and prev != 0:
-                    pct = (val - prev) / abs(prev) * 100
+            def kpi_row(label, display_val, raw_val, prev=None, inverse=False):
+                if prev is not None and prev != 0:
+                    pct = (raw_val - prev) / abs(prev) * 100
                     good = (pct > 0) if not inverse else (pct < 0)
                     color = "#16a34a" if good else "#dc2626"
                     arrow = "▲" if pct > 0 else "▼"
                     delta_html = f'<span style="color:{color};font-size:12px">{arrow} {abs(pct):.1f}%</span>'
                 else:
                     delta_html = ""
-                return f"<tr><td>{label}</td><td><strong>{val}</strong></td><td>{delta_html}</td></tr>"
+                return f"<tr><td>{label}</td><td><strong>{display_val}</strong></td><td>{delta_html}</td></tr>"
 
             mp_scope = report.get('marketplace_label', 'All Marketplaces')
 
@@ -3224,14 +3224,14 @@ Same period last year: **{report['yoy_period']}**
             kpi_html = ""
             if report['sections']['kpis']:
                 kpi_rows = [
-                    kpi_row("💰 Revenue",     f"${m['Revenue']:,.0f}",  ym['Revenue']  if has_yoy else None),
-                    kpi_row("🛒 Orders",      f"{m['Orders']:,.0f}",    ym['Orders']   if has_yoy else None),
-                    kpi_row("📊 AOV",         f"${m['AOV']:.2f}",       ym['AOV']      if has_yoy else None),
-                    kpi_row("💹 Net Profit",  f"${m['Net']:,.0f}",      ym['Net']      if has_yoy else None),
-                    kpi_row("📢 Ad Spend",    f"${m['Spend']:,.0f}",    ym['Spend']    if has_yoy else None, inverse=True),
-                    kpi_row("💳 Commission",  f"${m['Commission']:,.0f}",ym['Commission'] if has_yoy else None, inverse=True),
-                    kpi_row("🎯 ROAS",        f"{m['ROAS']:.2f}x",      ym['ROAS']     if has_yoy else None),
-                    kpi_row("📈 ACOS",        f"{m['ACOS']:.1f}%",      ym['ACOS']     if has_yoy else None, inverse=True),
+                    kpi_row("💰 Revenue",     f"${m['Revenue']:,.0f}",   m['Revenue'],    ym['Revenue']   if has_yoy else None),
+                    kpi_row("🛒 Orders",      f"{m['Orders']:,.0f}",     m['Orders'],     ym['Orders']    if has_yoy else None),
+                    kpi_row("📊 AOV",         f"${m['AOV']:.2f}",        m['AOV'],        ym['AOV']       if has_yoy else None),
+                    kpi_row("💹 Net Profit",  f"${m['Net']:,.0f}",       m['Net'],        ym['Net']       if has_yoy else None),
+                    kpi_row("📢 Ad Spend",    f"${m['Spend']:,.0f}",     m['Spend'],      ym['Spend']     if has_yoy else None, inverse=True),
+                    kpi_row("💳 Commission",  f"${m['Commission']:,.0f}",m['Commission'], ym['Commission'] if has_yoy else None, inverse=True),
+                    kpi_row("🎯 ROAS",        f"{m['ROAS']:.2f}x",       m['ROAS'],       ym['ROAS']      if has_yoy else None),
+                    kpi_row("📈 ACOS",        f"{m['ACOS']:.1f}%",       m['ACOS'],       ym['ACOS']      if has_yoy else None, inverse=True),
                 ]
                 kpi_html = f"""
                 <h2>💎 Key Performance Indicators</h2>
