@@ -111,8 +111,18 @@ def load_all_sheets(service_account_file: str, spreadsheet_name: str):
             st.error(f"❌ Spreadsheet '{spreadsheet_name}' not found. Please check the name and sharing permissions.")
             st.stop()
         except Exception as e:
-            st.error(f"❌ Error opening spreadsheet: {str(e)}")
-            st.stop()
+            # Retry once on transient 500 errors from Google API
+            import time
+            if "500" in str(e) or "Internal error" in str(e):
+                time.sleep(3)
+                try:
+                    spreadsheet = client.open(spreadsheet_name)
+                except Exception as e2:
+                    st.error(f"❌ Error opening spreadsheet after retry: {str(e2)}")
+                    st.stop()
+            else:
+                st.error(f"❌ Error opening spreadsheet: {str(e)}")
+                st.stop()
 
         # Load all worksheets
         data = {}
@@ -127,6 +137,18 @@ def load_all_sheets(service_account_file: str, spreadsheet_name: str):
         for ws in worksheets:
             try:
                 values = ws.get_all_values()
+            except Exception as e:
+                # Retry once on transient errors
+                import time
+                time.sleep(2)
+                try:
+                    values = ws.get_all_values()
+                except Exception as e2:
+                    st.warning(f"⚠️ Error loading sheet '{ws.title}': {str(e2)}")
+                    failed_sheets.append(ws.title)
+                    data[ws.title] = pd.DataFrame()
+                    continue
+            try:
                 
                 # Handle empty sheets
                 if not values or len(values) < 1:
