@@ -3325,14 +3325,14 @@ Same period last year: **{report['yoy_period']}**
                 import io
                 buf = io.BytesIO()
                 HTML(string=html_content).write_pdf(buf)
-                return buf.getvalue()
-            except ImportError:
-                return None
-            except Exception:
-                return None
+                return buf.getvalue(), None
+            except ImportError as e:
+                return None, f"ImportError: {e}"
+            except Exception as e:
+                return None, f"Error: {e}"
 
         pdf_html = _build_pdf_html(report, m, ym, has_yoy, ch_report, recommendations_list)
-        pdf_bytes = _generate_pdf(pdf_html)
+        pdf_bytes, pdf_error = _generate_pdf(pdf_html)
 
         ex1, ex2, ex3 = st.columns(3)
         with ex1:
@@ -3353,7 +3353,7 @@ Same period last year: **{report['yoy_period']}**
                     key="download_pdf"
                 )
             else:
-                st.info("📄 PDF: Add `weasyprint` to requirements.txt to enable")
+                st.warning(f"📄 PDF unavailable: {pdf_error}")
         with ex3:
             if st.button("📋 Show Copyable Text", key="show_copy"):
                 st.text_area("Select all & copy:", markdown_report, height=200)
