@@ -143,8 +143,15 @@ def load_all_sheets(service_account_file: str, spreadsheet_name: str):
                 headers = _clean_headers(values[0])
                 df = pd.DataFrame(values[1:], columns=headers)
                 
-                # Try to convert numeric columns
-                df = df.apply(pd.to_numeric, errors="ignore")
+                # Try to convert numeric columns (pandas 2.0+ compatible)
+                for col in df.columns:
+                    try:
+                        converted = pd.to_numeric(df[col], errors="coerce")
+                        # Only use numeric conversion if most values are numeric
+                        if converted.notna().sum() > df[col].notna().sum() * 0.5:
+                            df[col] = converted
+                    except Exception:
+                        pass
                 
                 data[ws.title] = df
                 
