@@ -3319,20 +3319,155 @@ Same period last year: **{report['yoy_period']}**
 </body>
 </html>"""
 
-        def _generate_pdf(html_content):
+        def _generate_pdf(report, m, ym, has_yoy, ch_report, recommendations_list):
             try:
-                from weasyprint import HTML
+                from fpdf import FPDF
+            except ImportError:
+                return None, "Add `fpdf2` to requirements.txt"
+
+            try:
+                pdf = FPDF()
+                pdf.set_auto_page_break(auto=True, margin=15)
+                pdf.add_page()
+                pdf.set_margins(15, 15, 15)
+
+                mp_scope = report.get('marketplace_label', 'All Marketplaces')
+
+                # ── Header ───────────────────────────────────────────────────
+                pdf.set_font("Helvetica", "B", 18)
+                pdf.set_text_color(30, 64, 175)
+                pdf.cell(0, 10, "Performance Report", ln=True)
+                pdf.set_font("Helvetica", "", 10)
+                pdf.set_text_color(107, 114, 128)
+                pdf.cell(0, 6, f"Period: {report['period']}  |  Last Year: {report['yoy_period']}  |  {mp_scope}", ln=True)
+                pdf.ln(4)
+                pdf.set_draw_color(30, 64, 175)
+                pdf.set_line_width(0.8)
+                pdf.line(15, pdf.get_y(), 195, pdf.get_y())
+                pdf.ln(6)
+
+                def section_title(title):
+                    pdf.set_font("Helvetica", "B", 13)
+                    pdf.set_text_color(30, 58, 138)
+                    pdf.cell(0, 8, title, ln=True)
+                    pdf.set_draw_color(229, 231, 235)
+                    pdf.set_line_width(0.3)
+                    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
+                    pdf.ln(3)
+
+                def table_header(cols, widths):
+                    pdf.set_font("Helvetica", "B", 9)
+                    pdf.set_fill_color(30, 64, 175)
+                    pdf.set_text_color(255, 255, 255)
+                    for col, w in zip(cols, widths):
+                        pdf.cell(w, 7, col, border=0, fill=True)
+                    pdf.ln()
+
+                def table_row(vals, widths, fill=False):
+                    pdf.set_font("Helvetica", "", 9)
+                    pdf.set_text_color(31, 41, 55)
+                    pdf.set_fill_color(248, 250, 252)
+                    for val, w in zip(vals, widths):
+                        pdf.cell(w, 6, str(val), border=0, fill=fill)
+                    pdf.ln()
+
+                # ── KPIs ─────────────────────────────────────────────────────
+                if report['sections']['kpis']:
+                    section_title("Key Performance Indicators")
+                    table_header(["Metric", "This Period", "vs Last Year"], [70, 60, 50])
+                    kpis = [
+                        ("Revenue",     f"${m['Revenue']:,.0f}",    m['Revenue'],    ym['Revenue']    if has_yoy else None, False),
+                        ("Orders",      f"{m['Orders']:,.0f}",      m['Orders'],     ym['Orders']     if has_yoy else None, False),
+                        ("AOV",         f"${m['AOV']:.2f}",         m['AOV'],        ym['AOV']        if has_yoy else None, False),
+                        ("Net Profit",  f"${m['Net']:,.0f}",        m['Net'],        ym['Net']        if has_yoy else None, False),
+                        ("Ad Spend",    f"${m['Spend']:,.0f}",      m['Spend'],      ym['Spend']      if has_yoy else None, True),
+                        ("Commission",  f"${m['Commission']:,.0f}", m['Commission'], ym['Commission'] if has_yoy else None, True),
+                        ("ROAS",        f"{m['ROAS']:.2f}x",        m['ROAS'],       ym['ROAS']       if has_yoy else None, False),
+                        ("ACOS",        f"{m['ACOS']:.1f}%",        m['ACOS'],       ym['ACOS']       if has_yoy else None, True),
+                    ]
+                    for i, (label, disp, raw, prev, inv) in enumerate(kpis):
+                        if prev is not None and prev != 0:
+                            pct = (raw - prev) / abs(prev) * 100
+                            good = (pct > 0) if not inv else (pct < 0)
+                            arrow = "+" if pct > 0 else ""
+                            delta_str = f"{arrow}{pct:.1f}%"
+                        else:
+                            delta_str = "-"
+                        table_row([label, disp, delta_str], [70, 60, 50], fill=(i % 2 == 0))
+                    pdf.ln(4)
+
+                # ── YoY ──────────────────────────────────────────────────────
+                if has_yoy and report['sections']['yoy']:
+                    section_title("Year-over-Year Comparison")
+                    pdf.set_font("Helvetica", "", 9)
+                    pdf.set_text_color(107, 114, 128)
+                    pdf.cell(0, 5, f"Same period last year: {report['yoy_period']}", ln=True)
+                    pdf.ln(2)
+                    table_header(["Metric", "This Period", "Last Year", "Change"], [50, 45, 45, 40])
+                    yoy_data = [
+                        ("Revenue",    f"${m['Revenue']:,.0f}",  f"${ym['Revenue']:,.0f}",  m['Revenue'],  ym['Revenue']),
+                        ("Orders",     f"{m['Orders']:,.0f}",    f"{ym['Orders']:,.0f}",    m['Orders'],   ym['Orders']),
+                        ("Ad Spend",   f"${m['Spend']:,.0f}",    f"${ym['Spend']:,.0f}",    m['Spend'],    ym['Spend']),
+                        ("Net Profit", f"${m['Net']:,.0f}",      f"${ym['Net']:,.0f}",      m['Net'],      ym['Net']),
+                        ("ROAS",       f"{m['ROAS']:.2f}x",      f"{ym['ROAS']:.2f}x",      m['ROAS'],     ym['ROAS']),
+                        ("ACOS",       f"{m['ACOS']:.1f}%",      f"{ym['ACOS']:.1f}%",      m['ACOS'],     ym['ACOS']),
+                    ]
+                    for i, (label, curr_s, prev_s, curr_v, prev_v) in enumerate(yoy_data):
+                        pct = ((curr_v - prev_v) / abs(prev_v) * 100) if prev_v != 0 else 0
+                        arrow = "+" if pct > 0 else ""
+                        table_row([label, curr_s, prev_s, f"{arrow}{pct:.1f}%"], [50, 45, 45, 40], fill=(i % 2 == 0))
+                    pdf.ln(4)
+
+                # ── Marketplace ───────────────────────────────────────────────
+                if report['sections']['marketplaces'] and len(ch_report) > 0:
+                    section_title("Marketplace Performance")
+                    has_yoy_col = 'yoy_revenue' in ch_report.columns
+                    if has_yoy_col:
+                        table_header(["Marketplace", "Revenue", "Orders", "Ad Spend", "ROAS", "ACOS", "Last Yr Rev"], [38, 28, 20, 28, 22, 22, 32])
+                    else:
+                        table_header(["Marketplace", "Revenue", "Orders", "Ad Spend", "ROAS", "ACOS"], [45, 32, 24, 32, 28, 29])
+                    for i, (_, row) in enumerate(ch_report.head(10).iterrows()):
+                        vals = [
+                            row['channel'][:18],
+                            f"${row['revenue']:,.0f}",
+                            f"{row['orders']:,.0f}",
+                            f"${row['spend']:,.0f}",
+                            f"{row['roas']:.2f}x",
+                            f"{row['acos']:.1f}%",
+                        ]
+                        widths = [38, 28, 20, 28, 22, 22, 32] if has_yoy_col else [45, 32, 24, 32, 28, 29]
+                        if has_yoy_col:
+                            vals.append(f"${row.get('yoy_revenue', 0):,.0f}")
+                        table_row(vals, widths, fill=(i % 2 == 0))
+                    pdf.ln(4)
+
+                # ── Recommendations ───────────────────────────────────────────
+                if recommendations_list and report['sections']['recommendations']:
+                    section_title("Strategic Recommendations")
+                    for rec in recommendations_list[:5]:
+                        pdf.set_font("Helvetica", "B", 9)
+                        pdf.set_text_color(31, 41, 55)
+                        pdf.cell(0, 6, rec['title'][:80], ln=True)
+                        pdf.set_font("Helvetica", "", 9)
+                        pdf.set_text_color(75, 85, 99)
+                        pdf.multi_cell(0, 5, rec['msg'][:200])
+                        pdf.ln(2)
+
+                # ── Footer ────────────────────────────────────────────────────
+                pdf.set_y(-20)
+                pdf.set_font("Helvetica", "", 8)
+                pdf.set_text_color(156, 163, 175)
+                pdf.cell(0, 5, f"Generated by Marketplace Business Insights  |  {report['period']}", align="C")
+
                 import io
                 buf = io.BytesIO()
-                HTML(string=html_content).write_pdf(buf)
+                pdf.output(buf)
                 return buf.getvalue(), None
-            except ImportError as e:
-                return None, f"ImportError: {e}"
+
             except Exception as e:
                 return None, f"Error: {e}"
 
-        pdf_html = _build_pdf_html(report, m, ym, has_yoy, ch_report, recommendations_list)
-        pdf_bytes, pdf_error = _generate_pdf(pdf_html)
+        pdf_bytes, pdf_error = _generate_pdf(report, m, ym, has_yoy, ch_report, recommendations_list)
 
         ex1, ex2, ex3 = st.columns(3)
         with ex1:
