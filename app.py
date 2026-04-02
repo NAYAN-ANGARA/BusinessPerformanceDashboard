@@ -3326,74 +3326,146 @@ Same period last year: **{report['yoy_period']}**
                 return None, "Add `fpdf2` to requirements.txt"
 
             try:
+                import io, tempfile, os
+                import plotly.graph_objects as go
+
+                # ── Emoji → text map ─────────────────────────────────────────
+                EMOJI_MAP = {
+                    "💰":"[Rev]","🛒":"[Orders]","📊":"[AOV]","💹":"[Net]",
+                    "📢":"[Spend]","💳":"[Comm]","🎯":"[ROAS]","📈":"[ACOS]",
+                    "📅":"[YoY]","🏷":"[SKU]","🚀":"[Rec]","✅":"[OK]",
+                    "⚠️":"[!]","🚨":"[!!]","💡":"[Tip]","📉":"[Down]",
+                    "📦":"[Bundle]","🎉":"[Great]","🏆":"[Top]","🔮":"[Fcst]",
+                    "💎":"[KPI]","🛒":"[MP]","📌":"[Pin]","🌟":"[Star]",
+                }
                 def _safe(text):
-                    """Replace non-latin1 chars with ASCII equivalents."""
-                    return (str(text)
+                    t = str(text)
+                    for emoji, repl in EMOJI_MAP.items():
+                        t = t.replace(emoji, repl)
+                    return (t
                         .replace("\u2013", "-").replace("\u2014", "-")
                         .replace("\u2019", "'").replace("\u2018", "'")
                         .replace("\u201c", '"').replace("\u201d", '"')
-                        .replace("\u2192", "->").replace("\u2190", "<-")
                         .encode("latin-1", errors="replace").decode("latin-1")
                     )
 
+                # ── Generate chart PNGs ──────────────────────────────────────
+                chart_files = []
+                def _save_chart(fig, name):
+                    try:
+                        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                        fig.write_image(tmp.name, width=700, height=280, scale=2)
+                        chart_files.append(tmp.name)
+                        return tmp.name
+                    except Exception:
+                        return None
+
+                trend_img = yoy_img = None
+
+                if report['sections']['trends']:
+                    daily_r = report['sales_data'].groupby(
+                        pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
+                    fig_t = go.Figure()
+                    fig_t.add_trace(go.Scatter(
+                        x=daily_r["date"], y=daily_r["revenue"],
+                        fill="tozeroy", line=dict(color="#3b82f6", width=2),
+                        name="Revenue"
+                    ))
+                    fig_t.update_layout(
+                        template="plotly_white", height=280,
+                        margin=dict(l=40,r=20,t=30,b=40),
+                        title="Revenue Trend",
+                        yaxis_title="Revenue ($)", xaxis_title="Date"
+                    )
+                    trend_img = _save_chart(fig_t, "trend")
+
+                if has_yoy and report['sections']['yoy']:
+                    daily_c = report['sales_data'].groupby(
+                        pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
+                    daily_y = report['yoy_sales'].groupby(
+                        pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
+                    daily_c["day"] = range(len(daily_c))
+                    daily_y["day"] = range(len(daily_y))
+                    fig_y = go.Figure()
+                    fig_y.add_trace(go.Scatter(
+                        x=daily_c["day"], y=daily_c["revenue"],
+                        name="This Period", line=dict(color="#3b82f6", width=2),
+                        fill="tozeroy", fillcolor="rgba(59,130,246,0.15)"
+                    ))
+                    fig_y.add_trace(go.Scatter(
+                        x=daily_y["day"], y=daily_y["revenue"],
+                        name="Last Year", line=dict(color="#f59e0b", width=2, dash="dot")
+                    ))
+                    fig_y.update_layout(
+                        template="plotly_white", height=280,
+                        margin=dict(l=40,r=20,t=30,b=40),
+                        title="This Period vs Last Year",
+                        yaxis_title="Revenue ($)", xaxis_title="Day of Period"
+                    )
+                    yoy_img = _save_chart(fig_y, "yoy")
+
+                # ── PDF setup ────────────────────────────────────────────────
                 pdf = FPDF()
-                pdf.set_auto_page_break(auto=True, margin=15)
+                pdf.set_auto_page_break(auto=True, margin=20)
                 pdf.add_page()
                 pdf.set_margins(15, 15, 15)
 
-                mp_scope = _safe(report.get('marketplace_label', 'All Marketplaces'))
-
-                # ── Header ───────────────────────────────────────────────────
-                pdf.set_font("Helvetica", "B", 18)
-                pdf.set_text_color(30, 64, 175)
-                pdf.cell(0, 10, "Performance Report", ln=True)
-                pdf.set_font("Helvetica", "", 10)
-                pdf.set_text_color(107, 114, 128)
-                pdf.cell(0, 6, _safe(f"Period: {report['period']}  |  Last Year: {report['yoy_period']}  |  {mp_scope}"), ln=True)
-                pdf.ln(4)
-                pdf.set_draw_color(30, 64, 175)
-                pdf.set_line_width(0.8)
-                pdf.line(15, pdf.get_y(), 195, pdf.get_y())
-                pdf.ln(6)
+                mp_scope  = _safe(report.get('marketplace_label', 'All Marketplaces'))
+                period    = _safe(report['period'])
+                yoy_per   = _safe(report['yoy_period'])
 
                 def section_title(title):
-                    pdf.set_font("Helvetica", "B", 13)
+                    pdf.set_font("Helvetica", "B", 12)
                     pdf.set_text_color(30, 58, 138)
                     pdf.cell(0, 8, _safe(title), ln=True)
-                    pdf.set_draw_color(229, 231, 235)
-                    pdf.set_line_width(0.3)
+                    pdf.set_draw_color(59, 130, 246)
+                    pdf.set_line_width(0.4)
                     pdf.line(15, pdf.get_y(), 195, pdf.get_y())
                     pdf.ln(3)
 
-                def table_header(cols, widths):
-                    pdf.set_font("Helvetica", "B", 9)
+                def th(cols, widths):
+                    pdf.set_font("Helvetica", "B", 8)
                     pdf.set_fill_color(30, 64, 175)
                     pdf.set_text_color(255, 255, 255)
-                    for col, w in zip(cols, widths):
-                        pdf.cell(w, 7, _safe(col), border=0, fill=True)
+                    for c, w in zip(cols, widths):
+                        pdf.cell(w, 6, _safe(c), border=0, fill=True)
                     pdf.ln()
 
-                def table_row(vals, widths, fill=False):
-                    pdf.set_font("Helvetica", "", 9)
+                def tr(vals, widths, even=False):
+                    pdf.set_font("Helvetica", "", 8)
                     pdf.set_text_color(31, 41, 55)
-                    pdf.set_fill_color(248, 250, 252)
-                    for val, w in zip(vals, widths):
-                        pdf.cell(w, 6, _safe(val), border=0, fill=fill)
+                    pdf.set_fill_color(245, 247, 255) if even else pdf.set_fill_color(255, 255, 255)
+                    for v, w in zip(vals, widths):
+                        pdf.cell(w, 6, _safe(v), border=0, fill=True)
                     pdf.ln()
+
+                # ── HEADER ───────────────────────────────────────────────────
+                pdf.set_font("Helvetica", "B", 20)
+                pdf.set_text_color(30, 64, 175)
+                pdf.cell(0, 12, "Performance Report", ln=True)
+                pdf.set_font("Helvetica", "", 9)
+                pdf.set_text_color(100, 100, 100)
+                pdf.cell(0, 5, f"Period: {period}", ln=True)
+                pdf.cell(0, 5, f"Last Year Same Period: {yoy_per}", ln=True)
+                pdf.cell(0, 5, f"Marketplace: {mp_scope}", ln=True)
+                pdf.set_draw_color(30, 64, 175)
+                pdf.set_line_width(1)
+                pdf.line(15, pdf.get_y()+2, 195, pdf.get_y()+2)
+                pdf.ln(6)
 
                 # ── KPIs ─────────────────────────────────────────────────────
                 if report['sections']['kpis']:
                     section_title("Key Performance Indicators")
-                    table_header(["Metric", "This Period", "vs Last Year"], [70, 60, 50])
+                    th(["Metric", "This Period", "vs Last Year", "Status"], [60, 50, 40, 30])
                     kpis = [
-                        ("Revenue",     f"${m['Revenue']:,.0f}",    m['Revenue'],    ym['Revenue']    if has_yoy else None, False),
-                        ("Orders",      f"{m['Orders']:,.0f}",      m['Orders'],     ym['Orders']     if has_yoy else None, False),
-                        ("AOV",         f"${m['AOV']:.2f}",         m['AOV'],        ym['AOV']        if has_yoy else None, False),
-                        ("Net Profit",  f"${m['Net']:,.0f}",        m['Net'],        ym['Net']        if has_yoy else None, False),
-                        ("Ad Spend",    f"${m['Spend']:,.0f}",      m['Spend'],      ym['Spend']      if has_yoy else None, True),
-                        ("Commission",  f"${m['Commission']:,.0f}", m['Commission'], ym['Commission'] if has_yoy else None, True),
-                        ("ROAS",        f"{m['ROAS']:.2f}x",        m['ROAS'],       ym['ROAS']       if has_yoy else None, False),
-                        ("ACOS",        f"{m['ACOS']:.1f}%",        m['ACOS'],       ym['ACOS']       if has_yoy else None, True),
+                        ("Revenue",    f"${m['Revenue']:,.0f}",    m['Revenue'],    ym['Revenue']    if has_yoy else None, False),
+                        ("Orders",     f"{m['Orders']:,.0f}",      m['Orders'],     ym['Orders']     if has_yoy else None, False),
+                        ("AOV",        f"${m['AOV']:.2f}",         m['AOV'],        ym['AOV']        if has_yoy else None, False),
+                        ("Net Profit", f"${m['Net']:,.0f}",        m['Net'],        ym['Net']        if has_yoy else None, False),
+                        ("Ad Spend",   f"${m['Spend']:,.0f}",      m['Spend'],      ym['Spend']      if has_yoy else None, True),
+                        ("Commission", f"${m['Commission']:,.0f}", m['Commission'], ym['Commission'] if has_yoy else None, True),
+                        ("ROAS",       f"{m['ROAS']:.2f}x",        m['ROAS'],       ym['ROAS']       if has_yoy else None, False),
+                        ("ACOS",       f"{m['ACOS']:.1f}%",        m['ACOS'],       ym['ACOS']       if has_yoy else None, True),
                     ]
                     for i, (label, disp, raw, prev, inv) in enumerate(kpis):
                         if prev is not None and prev != 0:
@@ -3401,19 +3473,27 @@ Same period last year: **{report['yoy_period']}**
                             good = (pct > 0) if not inv else (pct < 0)
                             arrow = "+" if pct > 0 else ""
                             delta_str = f"{arrow}{pct:.1f}%"
+                            status = "Good" if good else "Watch"
                         else:
                             delta_str = "-"
-                        table_row([label, disp, delta_str], [70, 60, 50], fill=(i % 2 == 0))
+                            status = "-"
+                        tr([label, disp, delta_str, status], [60, 50, 40, 30], even=(i%2==0))
+                    pdf.ln(5)
+
+                # ── TREND CHART ───────────────────────────────────────────────
+                if report['sections']['trends'] and trend_img:
+                    section_title("Revenue Trend")
+                    pdf.image(trend_img, x=15, w=175)
                     pdf.ln(4)
 
-                # ── YoY ──────────────────────────────────────────────────────
+                # ── YoY TABLE + CHART ─────────────────────────────────────────
                 if has_yoy and report['sections']['yoy']:
                     section_title("Year-over-Year Comparison")
-                    pdf.set_font("Helvetica", "", 9)
-                    pdf.set_text_color(107, 114, 128)
-                    pdf.cell(0, 5, _safe(f"Same period last year: {report['yoy_period']}"), ln=True)
+                    pdf.set_font("Helvetica", "", 8)
+                    pdf.set_text_color(100,100,100)
+                    pdf.cell(0, 5, f"Comparing {period} vs {yoy_per}", ln=True)
                     pdf.ln(2)
-                    table_header(["Metric", "This Period", "Last Year", "Change"], [50, 45, 45, 40])
+                    th(["Metric", "This Period", "Last Year", "Change", "Trend"], [44, 36, 36, 32, 32])
                     yoy_data = [
                         ("Revenue",    f"${m['Revenue']:,.0f}",  f"${ym['Revenue']:,.0f}",  m['Revenue'],  ym['Revenue']),
                         ("Orders",     f"{m['Orders']:,.0f}",    f"{ym['Orders']:,.0f}",    m['Orders'],   ym['Orders']),
@@ -3421,61 +3501,113 @@ Same period last year: **{report['yoy_period']}**
                         ("Net Profit", f"${m['Net']:,.0f}",      f"${ym['Net']:,.0f}",      m['Net'],      ym['Net']),
                         ("ROAS",       f"{m['ROAS']:.2f}x",      f"{ym['ROAS']:.2f}x",      m['ROAS'],     ym['ROAS']),
                         ("ACOS",       f"{m['ACOS']:.1f}%",      f"{ym['ACOS']:.1f}%",      m['ACOS'],     ym['ACOS']),
+                        ("AOV",        f"${m['AOV']:.2f}",       f"${ym['AOV']:.2f}",       m['AOV'],      ym['AOV']),
+                        ("Commission", f"${m['Commission']:,.0f}",f"${ym['Commission']:,.0f}",m['Commission'],ym['Commission']),
                     ]
                     for i, (label, curr_s, prev_s, curr_v, prev_v) in enumerate(yoy_data):
                         pct = ((curr_v - prev_v) / abs(prev_v) * 100) if prev_v != 0 else 0
                         arrow = "+" if pct > 0 else ""
-                        table_row([label, curr_s, prev_s, f"{arrow}{pct:.1f}%"], [50, 45, 45, 40], fill=(i % 2 == 0))
+                        trend_txt = "Up" if pct > 0 else ("Down" if pct < 0 else "Flat")
+                        tr([label, curr_s, prev_s, f"{arrow}{pct:.1f}%", trend_txt], [44,36,36,32,32], even=(i%2==0))
                     pdf.ln(4)
+                    if yoy_img:
+                        pdf.image(yoy_img, x=15, w=175)
+                        pdf.ln(4)
 
-                # ── Marketplace ───────────────────────────────────────────────
+                # ── MARKETPLACE ───────────────────────────────────────────────
                 if report['sections']['marketplaces'] and len(ch_report) > 0:
                     section_title("Marketplace Performance")
                     has_yoy_col = 'yoy_revenue' in ch_report.columns
                     if has_yoy_col:
-                        table_header(["Marketplace", "Revenue", "Orders", "Ad Spend", "ROAS", "ACOS", "Last Yr Rev"], [38, 28, 20, 28, 22, 22, 32])
+                        th(["Marketplace","Revenue","Orders","Ad Spend","ROAS","ACOS","Last Yr","Growth"],[35,25,18,25,20,20,25,12])
                     else:
-                        table_header(["Marketplace", "Revenue", "Orders", "Ad Spend", "ROAS", "ACOS"], [45, 32, 24, 32, 28, 29])
-                    for i, (_, row) in enumerate(ch_report.head(10).iterrows()):
+                        th(["Marketplace","Revenue","Orders","Ad Spend","ROAS","ACOS"],[40,30,22,30,24,24])
+                    for i, (_, row) in enumerate(ch_report.iterrows()):
                         vals = [
-                            row['channel'][:18],
+                            str(row['channel'])[:16],
                             f"${row['revenue']:,.0f}",
                             f"{row['orders']:,.0f}",
                             f"${row['spend']:,.0f}",
                             f"{row['roas']:.2f}x",
                             f"{row['acos']:.1f}%",
                         ]
-                        widths = [38, 28, 20, 28, 22, 22, 32] if has_yoy_col else [45, 32, 24, 32, 28, 29]
                         if has_yoy_col:
-                            vals.append(f"${row.get('yoy_revenue', 0):,.0f}")
-                        table_row(vals, widths, fill=(i % 2 == 0))
-                    pdf.ln(4)
+                            g = row.get('yoy_growth', float('nan'))
+                            vals += [f"${row.get('yoy_revenue',0):,.0f}", f"{g:+.1f}%" if g==g else "-"]
+                            tr(vals, [35,25,18,25,20,20,25,12], even=(i%2==0))
+                        else:
+                            tr(vals, [40,30,22,30,24,24], even=(i%2==0))
+                    pdf.ln(5)
 
-                # ── Recommendations ───────────────────────────────────────────
+                # ── TOP SKUs ──────────────────────────────────────────────────
+                if report['sections']['skus'] and "Parent" in report['sales_data'].columns:
+                    section_title("Top SKU Performance")
+                    sku_now = (report['sales_data']
+                        .groupby("Parent").agg({"revenue":"sum","orders":"sum"}).reset_index())
+                    sku_now["aov"] = sku_now["revenue"] / sku_now["orders"].replace(0, np.nan)
+                    sku_now = sku_now.sort_values("revenue", ascending=False).head(20)
+
+                    has_sku_yoy = has_yoy and "Parent" in report['yoy_sales'].columns
+                    if has_sku_yoy:
+                        sku_yoy = (report['yoy_sales'].groupby("Parent")["revenue"]
+                            .sum().reset_index().rename(columns={"revenue":"yoy_rev"}))
+                        sku_now = sku_now.merge(sku_yoy, on="Parent", how="left").fillna(0)
+                        sku_now["growth"] = sku_now.apply(
+                            lambda r: (r["revenue"]-r["yoy_rev"])/r["yoy_rev"]*100 if r["yoy_rev"]>0 else float("nan"), axis=1)
+                        th(["SKU","Revenue","Orders","AOV","Last Yr Rev","Growth"],[55,28,20,24,30,23])
+                        for i, (_, r) in enumerate(sku_now.iterrows()):
+                            g = r.get("growth", float("nan"))
+                            tr([str(r["Parent"])[:22], f"${r['revenue']:,.0f}",
+                                f"{r['orders']:,.0f}", f"${r['aov']:.2f}",
+                                f"${r['yoy_rev']:,.0f}", f"{g:+.1f}%" if g==g else "-"],
+                               [55,28,20,24,30,23], even=(i%2==0))
+                    else:
+                        th(["SKU","Revenue","Orders","AOV"],[70,40,30,30])
+                        for i, (_, r) in enumerate(sku_now.iterrows()):
+                            tr([str(r["Parent"])[:28], f"${r['revenue']:,.0f}",
+                                f"{r['orders']:,.0f}", f"${r['aov']:.2f}"],
+                               [70,40,30,30], even=(i%2==0))
+                    pdf.ln(5)
+
+                # ── RECOMMENDATIONS ───────────────────────────────────────────
                 if recommendations_list and report['sections']['recommendations']:
                     section_title("Strategic Recommendations")
-                    for rec in recommendations_list[:5]:
+                    type_labels = {"scale":"SCALE","warn":"WATCH","crit":"URGENT","info":"INFO"}
+                    for i, rec in enumerate(recommendations_list):  # all recs, no limit
+                        lbl = type_labels.get(rec['type'], "INFO")
                         pdf.set_font("Helvetica", "B", 9)
                         pdf.set_text_color(31, 41, 55)
-                        pdf.cell(0, 6, _safe(rec['title'])[:80], ln=True)
-                        pdf.set_font("Helvetica", "", 9)
+                        pdf.cell(18, 6, f"[{lbl}]", ln=False)
+                        pdf.set_font("Helvetica", "B", 9)
+                        pdf.cell(0, 6, _safe(rec['title']), ln=True)
+                        pdf.set_font("Helvetica", "", 8)
                         pdf.set_text_color(75, 85, 99)
-                        pdf.multi_cell(0, 5, _safe(rec['msg'])[:200])
+                        pdf.multi_cell(0, 5, _safe(rec['msg']))
+                        if i < len(recommendations_list) - 1:
+                            pdf.set_draw_color(229, 231, 235)
+                            pdf.set_line_width(0.2)
+                            pdf.line(15, pdf.get_y(), 195, pdf.get_y())
                         pdf.ln(2)
 
-                # ── Footer ────────────────────────────────────────────────────
-                pdf.set_y(-20)
-                pdf.set_font("Helvetica", "", 8)
+                # ── FOOTER on each page ───────────────────────────────────────
+                pdf.set_y(-15)
+                pdf.set_font("Helvetica", "", 7)
                 pdf.set_text_color(156, 163, 175)
-                pdf.cell(0, 5, _safe(f"Generated by Marketplace Business Insights  |  {report['period']}"), align="C")
+                pdf.cell(0, 5, _safe(f"Marketplace Business Insights  |  {period}  |  Page {pdf.page_no()}"), align="C")
 
-                import io
                 buf = io.BytesIO()
                 pdf.output(buf)
+
+                # Clean up temp chart files
+                for f in chart_files:
+                    try: os.unlink(f)
+                    except: pass
+
                 return buf.getvalue(), None
 
             except Exception as e:
-                return None, f"Error: {e}"
+                import traceback
+                return None, f"Error: {e} | {traceback.format_exc()[-300:]}"
 
         pdf_bytes, pdf_error = _generate_pdf(report, m, ym, has_yoy, ch_report, recommendations_list)
 
@@ -4321,3 +4453,4 @@ with tabs[9]:
         st.markdown(f"<div style='text-align: center; color: #6b7280; font-size: 12px;'>⚙️ Safe Margin: {SAFE_MARGIN*100:.0f}%</div>", unsafe_allow_html=True)
     with col3:
         st.markdown(f"<div style='text-align: right; color: #6b7280; font-size: 12px;'>📊 Data Points: {len(df_s):,}</div>", unsafe_allow_html=True)
+        
