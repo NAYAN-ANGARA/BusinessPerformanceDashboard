@@ -3326,289 +3326,536 @@ Same period last year: **{report['yoy_period']}**
                 return None, "Add `fpdf2` to requirements.txt"
 
             try:
-                import io, tempfile, os
-                import plotly.graph_objects as go
+                import io, tempfile, os, math
+                import matplotlib
+                matplotlib.use("Agg")
+                import matplotlib.pyplot as plt
+                import matplotlib.patches as mpatches
+                import numpy as _np_pdf
 
-                # ── Emoji → text map ─────────────────────────────────────────
-                EMOJI_MAP = {
-                    "💰":"[Rev]","🛒":"[Orders]","📊":"[AOV]","💹":"[Net]",
-                    "📢":"[Spend]","💳":"[Comm]","🎯":"[ROAS]","📈":"[ACOS]",
-                    "📅":"[YoY]","🏷":"[SKU]","🚀":"[Rec]","✅":"[OK]",
-                    "⚠️":"[!]","🚨":"[!!]","💡":"[Tip]","📉":"[Down]",
-                    "📦":"[Bundle]","🎉":"[Great]","🏆":"[Top]","🔮":"[Fcst]",
-                    "💎":"[KPI]","🛒":"[MP]","📌":"[Pin]","🌟":"[Star]",
-                }
+                # ── Colors & helpers ─────────────────────────────────────────
+                BG       = (13/255, 17/255, 23/255)
+                BG2      = (22/255, 27/255, 34/255)
+                BLUE     = (59/255,130/255,246/255)
+                GOLD     = (245/255,158/255, 11/255)
+                GREEN    = (16/255,185/255,129/255)
+                RED      = (239/255, 68/255, 68/255)
+                GRAY     = (75/255, 85/255, 99/255)
+                WHITE    = (1, 1, 1)
+                TXT_GRAY = (156/255,163/255,175/255)
+
+                tmp_files = []
+                def _tmp_png():
+                    f = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                    tmp_files.append(f.name)
+                    return f.name
+
                 def _safe(text):
                     t = str(text)
-                    for emoji, repl in EMOJI_MAP.items():
-                        t = t.replace(emoji, repl)
-                    return (t
-                        .replace("\u2013", "-").replace("\u2014", "-")
-                        .replace("\u2019", "'").replace("\u2018", "'")
-                        .replace("\u201c", '"').replace("\u201d", '"')
-                        .encode("latin-1", errors="replace").decode("latin-1")
-                    )
+                    for e,r in [("\u2013","-"),("\u2014","-"),("\u2019","'"),("\u201c",'"'),("\u201d",'"'),
+                                ("\u2018","'"),("\u2192","->")]:
+                        t = t.replace(e, r)
+                    # strip emojis
+                    import re
+                    t = re.sub(r'[^\x00-\xFF]', '', t)
+                    return t.encode("latin-1", errors="replace").decode("latin-1")
 
-                # ── Generate chart PNGs ──────────────────────────────────────
-                chart_files = []
-                def _save_chart(fig, name):
-                    try:
-                        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-                        fig.write_image(tmp.name, width=700, height=280, scale=2)
-                        chart_files.append(tmp.name)
-                        return tmp.name
-                    except Exception:
-                        return None
+                def _fmt_k(v):
+                    if abs(v) >= 1_000_000: return f"${v/1_000_000:.1f}M"
+                    if abs(v) >= 1_000:     return f"${v/1_000:.0f}k"
+                    return f"${v:.0f}"
 
-                trend_img = yoy_img = None
+                period   = _safe(report["period"])
+                yoy_per  = _safe(report["yoy_period"])
+                mp_scope = _safe(report.get("marketplace_label","All Marketplaces"))
 
-                if report['sections']['trends']:
-                    daily_r = report['sales_data'].groupby(
-                        pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
-                    fig_t = go.Figure()
-                    fig_t.add_trace(go.Scatter(
-                        x=daily_r["date"], y=daily_r["revenue"],
-                        fill="tozeroy", line=dict(color="#3b82f6", width=2),
-                        name="Revenue"
-                    ))
-                    fig_t.update_layout(
-                        template="plotly_white", height=280,
-                        margin=dict(l=40,r=20,t=30,b=40),
-                        title="Revenue Trend",
-                        yaxis_title="Revenue ($)", xaxis_title="Date"
-                    )
-                    trend_img = _save_chart(fig_t, "trend")
+                # ════════════════════════════════════════════════════════════
+                # CHART 1 — KPI Summary bars (Now vs LY) ──────────────────
+                # ════════════════════════════════════════════════════════════
+                chart1_path = None
+                if has_yoy:
+                    fig, axes = plt.subplots(1, 4, figsize=(12, 3), facecolor=BG)
+                    kpi_bars = [
+                        ("Revenue",    m["Revenue"],  ym["Revenue"],  BLUE,   _fmt_k(m["Revenue"])),
+                        ("Net Profit", m["Net"],      ym["Net"],      GREEN,  _fmt_k(m["Net"])),
+                        ("Ad Spend",   m["Spend"],    ym["Spend"],    GOLD,   _fmt_k(m["Spend"])),
+                        ("Orders",     m["Orders"],   ym["Orders"],   (139/255,92/255,246/255), f'{m["Orders"]:,.0f}'),
+                    ]
+                    for ax, (label, now, ly, col, lbl) in zip(axes, kpi_bars):
+                        ax.set_facecolor(BG2)
+                        bars = ax.bar(["Now","LY"], [now, ly], color=[col, GRAY], width=0.5)
+                        ax.set_title(label, color=WHITE, fontsize=10, fontweight="bold", pad=6)
+                        ax.tick_params(colors=TXT_GRAY, labelsize=8)
+                        for spine in ax.spines.values(): spine.set_visible(False)
+                        ax.yaxis.set_visible(False)
+                        ax.set_ylim(0, max(now, ly) * 1.25 if max(now,ly)>0 else 1)
+                        for bar, val in zip(bars, [lbl, _fmt_k(ly) if "$" in lbl else f'{ly:,.0f}']):
+                            ax.text(bar.get_x()+bar.get_width()/2, bar.get_height()+max(now,ly)*0.02,
+                                    val, ha="center", va="bottom", color=WHITE, fontsize=7, fontweight="bold")
+                    plt.tight_layout(pad=0.5)
+                    p = _tmp_png(); fig.savefig(p, dpi=150, facecolor=BG, bbox_inches="tight"); plt.close(fig)
+                    chart1_path = p
 
-                if has_yoy and report['sections']['yoy']:
-                    daily_c = report['sales_data'].groupby(
-                        pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
-                    daily_y = report['yoy_sales'].groupby(
-                        pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
-                    daily_c["day"] = range(len(daily_c))
-                    daily_y["day"] = range(len(daily_y))
-                    fig_y = go.Figure()
-                    fig_y.add_trace(go.Scatter(
-                        x=daily_c["day"], y=daily_c["revenue"],
-                        name="This Period", line=dict(color="#3b82f6", width=2),
-                        fill="tozeroy", fillcolor="rgba(59,130,246,0.15)"
-                    ))
-                    fig_y.add_trace(go.Scatter(
-                        x=daily_y["day"], y=daily_y["revenue"],
-                        name="Last Year", line=dict(color="#f59e0b", width=2, dash="dot")
-                    ))
-                    fig_y.update_layout(
-                        template="plotly_white", height=280,
-                        margin=dict(l=40,r=20,t=30,b=40),
-                        title="This Period vs Last Year",
-                        yaxis_title="Revenue ($)", xaxis_title="Day of Period"
-                    )
-                    yoy_img = _save_chart(fig_y, "yoy")
+                # ════════════════════════════════════════════════════════════
+                # CHART 2 — Daily Revenue trend ────────────────────────────
+                # ════════════════════════════════════════════════════════════
+                chart2_path = None
+                if report["sections"]["trends"]:
+                    daily_r = report["sales_data"].groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
+                    daily_r["day"] = range(len(daily_r))
+                    daily_r["ma7"] = daily_r["revenue"].rolling(7, min_periods=1).mean()
+                    fig, ax = plt.subplots(figsize=(12, 3.5), facecolor=BG)
+                    ax.set_facecolor(BG)
+                    ax.plot(daily_r["day"], daily_r["revenue"], color=BLUE, linewidth=2, label=f"This Period ({period[:6]})")
+                    ax.plot(daily_r["day"], daily_r["ma7"], color=WHITE, linewidth=1, linestyle="--", label="7-day avg")
+                    if has_yoy:
+                        daily_y = report["yoy_sales"].groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
+                        daily_y["day"] = range(len(daily_y))
+                        ax.plot(daily_y["day"], daily_y["revenue"], color=GOLD, linewidth=1.5, linestyle="--", label=f"Last Year ({yoy_per[:6]})")
+                    ax.fill_between(daily_r["day"], daily_r["revenue"], alpha=0.15, color=BLUE)
+                    ax.set_xlabel("Day of Period", color=TXT_GRAY, fontsize=9)
+                    ax.set_ylabel("Daily Revenue", color=TXT_GRAY, fontsize=9)
+                    ax.tick_params(colors=TXT_GRAY, labelsize=8)
+                    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x,_: _fmt_k(x)))
+                    for spine in ax.spines.values(): spine.set_color(GRAY)
+                    ax.legend(facecolor=BG2, edgecolor=GRAY, labelcolor=WHITE, fontsize=8)
+                    ax.set_facecolor(BG)
+                    plt.tight_layout()
+                    p = _tmp_png(); fig.savefig(p, dpi=150, facecolor=BG, bbox_inches="tight"); plt.close(fig)
+                    chart2_path = p
 
-                # ── PDF setup ────────────────────────────────────────────────
+                # ════════════════════════════════════════════════════════════
+                # CHART 3 — Revenue by Marketplace (horizontal bar) ────────
+                # ════════════════════════════════════════════════════════════
+                chart3_path = chart4_path = chart5_path = chart6_path = None
+                if report["sections"]["marketplaces"] and len(ch_report) > 0:
+                    ch = ch_report.copy().sort_values("revenue")
+                    total_rev = ch["revenue"].sum()
+                    pcts = (ch["revenue"] / total_rev * 100).round(1)
+                    labels = [f'{r["channel"]} ${r["revenue"]:,.0f} ({p:.0f}%)' for (_,r),p in zip(ch.iterrows(), pcts)]
+                    colors_mp = [BLUE, GOLD, GREEN, RED, (139/255,92/255,246/255), (6/255,182/255,212/255), (249/255,115/255,22/255)]
+
+                    fig, ax = plt.subplots(figsize=(12, max(3, len(ch)*0.55)), facecolor=BG)
+                    ax.set_facecolor(BG)
+                    bars = ax.barh(range(len(ch)), ch["revenue"].values,
+                                   color=[colors_mp[i % len(colors_mp)] for i in range(len(ch))], height=0.6)
+                    ax.set_yticks(range(len(ch)))
+                    ax.set_yticklabels(labels, color=WHITE, fontsize=8)
+                    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x,_: _fmt_k(x)))
+                    ax.tick_params(colors=TXT_GRAY, labelsize=8)
+                    ax.set_xlabel("Revenue", color=TXT_GRAY, fontsize=9)
+                    for spine in ax.spines.values(): spine.set_visible(False)
+                    plt.tight_layout()
+                    p = _tmp_png(); fig.savefig(p, dpi=150, facecolor=BG, bbox_inches="tight"); plt.close(fig)
+                    chart3_path = p
+
+                    # ROAS & ACOS side by side
+                    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 3.5), facecolor=BG)
+                    chs = ch_report.sort_values("revenue", ascending=False)
+                    names = [r["channel"][:10] for _,r in chs.iterrows()]
+                    roas_vals = [r["roas"] for _,r in chs.iterrows()]
+                    acos_vals = [r["acos"] for _,r in chs.iterrows()]
+
+                    for ax, vals, label, target, target_lbl, good_thresh, col_good, col_bad in [
+                        (ax1, roas_vals, "ROAS", 2.0, "Target 2x", 2.0, GREEN, RED),
+                        (ax2, acos_vals, "ACOS %", 20.0, "Good (<20%)", 20.0, GREEN, RED),
+                    ]:
+                        ax.set_facecolor(BG)
+                        bar_colors = [col_good if (v >= good_thresh if label=="ROAS" else v <= good_thresh) else col_bad for v in vals]
+                        ax.bar(range(len(names)), vals, color=bar_colors, width=0.6)
+                        ax.axhline(target, color=GOLD, linewidth=1, linestyle="--", label=target_lbl)
+                        ax.set_xticks(range(len(names)))
+                        ax.set_xticklabels(names, color=TXT_GRAY, fontsize=7, rotation=20, ha="right")
+                        ax.tick_params(colors=TXT_GRAY, labelsize=8)
+                        ax.set_title(f"{label} by Marketplace", color=WHITE, fontsize=10, fontweight="bold")
+                        for spine in ax.spines.values(): spine.set_color(GRAY)
+                        ax.legend(facecolor=BG2, edgecolor=GRAY, labelcolor=WHITE, fontsize=7)
+                        for i, v in enumerate(vals):
+                            ax.text(i, v + max(vals)*0.02, f"{v:.1f}{'x' if label=='ROAS' else '%'}",
+                                    ha="center", color=WHITE, fontsize=7)
+                    plt.tight_layout()
+                    p = _tmp_png(); fig.savefig(p, dpi=150, facecolor=BG, bbox_inches="tight"); plt.close(fig)
+                    chart4_path = p
+
+                    # Bubble / scatter (Spend vs Revenue, size=ROAS)
+                    fig, ax = plt.subplots(figsize=(12, 4), facecolor=BG)
+                    ax.set_facecolor(BG)
+                    max_rev = ch_report["revenue"].max() or 1
+                    max_sp  = ch_report["spend"].max() or 1
+                    for i, (_, r) in enumerate(ch_report.iterrows()):
+                        size = max(50, min(800, r["roas"] * 100))
+                        ax.scatter(r["spend"], r["revenue"], s=size,
+                                   color=colors_mp[i%len(colors_mp)], alpha=0.8, zorder=3)
+                        ax.annotate(r["channel"][:10], (r["spend"], r["revenue"]),
+                                    fontsize=7, color=WHITE, textcoords="offset points", xytext=(5,5))
+                    xs = _np_pdf.linspace(0, max_sp*1.1, 100)
+                    ax.plot(xs, xs,   color=RED,  linestyle="--", linewidth=1, label="Break-even (ROAS=1x)")
+                    ax.plot(xs, xs*2, color=GOLD, linestyle="--", linewidth=1, label="Target (ROAS=2x)")
+                    ax.set_xlabel("Ad Spend", color=TXT_GRAY, fontsize=9)
+                    ax.set_ylabel("Revenue",  color=TXT_GRAY, fontsize=9)
+                    ax.set_title("Spend vs Revenue (bubble size = ROAS)", color=WHITE, fontsize=10, fontweight="bold")
+                    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x,_: _fmt_k(x)))
+                    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x,_: _fmt_k(x)))
+                    ax.tick_params(colors=TXT_GRAY)
+                    for spine in ax.spines.values(): spine.set_color(GRAY)
+                    ax.legend(facecolor=BG2, edgecolor=GRAY, labelcolor=WHITE, fontsize=8)
+                    plt.tight_layout()
+                    p = _tmp_png(); fig.savefig(p, dpi=150, facecolor=BG, bbox_inches="tight"); plt.close(fig)
+                    chart5_path = p
+
+                # ════════════════════════════════════════════════════════════
+                # CHART 6 — Top SKUs horizontal bar ───────────────────────
+                # ════════════════════════════════════════════════════════════
+                chart6_path = None
+                if report["sections"]["skus"] and "Parent" in report["sales_data"].columns:
+                    sku_now = (report["sales_data"].groupby("Parent")
+                               .agg({"revenue":"sum","orders":"sum"}).reset_index()
+                               .sort_values("revenue", ascending=False).head(10))
+                    fig, ax = plt.subplots(figsize=(12, max(3, len(sku_now)*0.6)), facecolor=BG)
+                    ax.set_facecolor(BG)
+                    sku_names = [str(r["Parent"])[:20] for _,r in sku_now.iterrows()]
+                    sku_revs  = [r["revenue"] for _,r in sku_now.iterrows()]
+                    bar_colors2 = [BLUE if i==0 else (139/255,92/255,246/255) if i%2==0 else BLUE for i in range(len(sku_names))]
+                    ax.barh(range(len(sku_names)), sku_revs[::-1], color=bar_colors2[::-1], height=0.6)
+                    ax.set_yticks(range(len(sku_names)))
+                    ax.set_yticklabels([f"{n}  {_fmt_k(v)}" for n,v in zip(sku_names[::-1], sku_revs[::-1])],
+                                       color=WHITE, fontsize=8)
+                    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x,_: _fmt_k(x)))
+                    ax.tick_params(colors=TXT_GRAY, labelsize=8)
+                    for spine in ax.spines.values(): spine.set_visible(False)
+                    plt.tight_layout()
+                    p = _tmp_png(); fig.savefig(p, dpi=150, facecolor=BG, bbox_inches="tight"); plt.close(fig)
+                    chart6_path = p
+
+                # ════════════════════════════════════════════════════════════
+                # BUILD PDF ────────────────────────────────────────────────
+                # ════════════════════════════════════════════════════════════
+                BG_R,BG_G,BG_B       = 13,17,23
+                BG2_R,BG2_G,BG2_B    = 22,27,34
+                BLUE_R,BLUE_G,BLUE_B = 30,64,175
+                WHITE_R=WHITE_G=WHITE_B=255
+                GRAY_R,GRAY_G,GRAY_B = 75,85,99
+
                 pdf = FPDF()
-                pdf.set_auto_page_break(auto=True, margin=20)
-                pdf.add_page()
-                pdf.set_margins(15, 15, 15)
+                pdf.set_auto_page_break(auto=True, margin=15)
 
-                mp_scope  = _safe(report.get('marketplace_label', 'All Marketplaces'))
-                period    = _safe(report['period'])
-                yoy_per   = _safe(report['yoy_period'])
+                def _page_bg():
+                    pdf.set_fill_color(BG_R,BG_G,BG_B)
+                    pdf.rect(0, 0, 210, 297, "F")
 
-                def section_title(title):
-                    pdf.set_font("Helvetica", "B", 12)
-                    pdf.set_text_color(30, 58, 138)
+                def _section_bar(title):
+                    pdf.set_fill_color(BLUE_R,BLUE_G,BLUE_B)
+                    pdf.rect(15, pdf.get_y(), 3, 8, "F")
+                    pdf.set_xy(20, pdf.get_y())
+                    pdf.set_font("Helvetica","B",12)
+                    pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
                     pdf.cell(0, 8, _safe(title), ln=True)
-                    pdf.set_draw_color(59, 130, 246)
-                    pdf.set_line_width(0.4)
-                    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
+                    pdf.ln(2)
+
+                def _subsection(title):
+                    pdf.set_font("Helvetica","B",9)
+                    pdf.set_text_color(59,130,246)
+                    pdf.cell(0, 6, _safe(title), ln=True)
+                    pdf.ln(1)
+
+                def _th(cols, widths):
+                    pdf.set_font("Helvetica","B",8)
+                    pdf.set_fill_color(BLUE_R,BLUE_G,BLUE_B)
+                    pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
+                    for c,w in zip(cols, widths):
+                        pdf.cell(w, 7, _safe(c), border=0, fill=True, align="C")
+                    pdf.ln()
+
+                def _tr(vals, widths, even=False):
+                    pdf.set_font("Helvetica","",8)
+                    pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
+                    pdf.set_fill_color(BG2_R,BG2_G,BG2_B) if even else pdf.set_fill_color(BG_R+10,BG_G+10,BG_B+10)
+                    for v,w in zip(vals, widths):
+                        pdf.cell(w, 6, _safe(str(v)), border=0, fill=True, align="C")
+                    pdf.ln()
+
+                def _footer():
+                    pdf.set_y(-12)
+                    pdf.set_font("Helvetica","",7)
+                    pdf.set_text_color(GRAY_R,GRAY_G,GRAY_B)
+                    pdf.cell(90,5,_safe("Marketplace Business Insights Dashboard | Safe Margin 62% | Confidential"),align="L")
+                    pdf.cell(0,5,f"Page {pdf.page_no()}",align="R")
+
+                # ──────────────────────────────────────────────────────────
+                # PAGE 1 — Header + KPIs + summary chart ──────────────────
+                # ──────────────────────────────────────────────────────────
+                pdf.add_page()
+                _page_bg()
+
+                # Top accent bar
+                pdf.set_fill_color(BLUE_R,BLUE_G,BLUE_B)
+                pdf.rect(0,0,210,2,"F")
+                pdf.set_fill_color(59,130,246)
+                pdf.rect(0,2,70,1,"F")
+                pdf.set_fill_color(245,158,11)
+                pdf.rect(70,2,70,1,"F")
+                pdf.set_fill_color(16,185,129)
+                pdf.rect(140,2,70,1,"F")
+
+                # Title
+                pdf.set_xy(15,12)
+                pdf.set_font("Helvetica","B",24)
+                pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
+                pdf.cell(0,12,"PERFORMANCE REPORT",ln=True)
+
+                # Meta info box
+                pdf.set_fill_color(BG2_R,BG2_G,BG2_B)
+                pdf.rect(15,28,180,28,"F")
+                meta = [("Period",period),("YoY Baseline",yoy_per),
+                        ("Marketplace",mp_scope),
+                        ("Generated",pd.Timestamp.now().strftime("%B %d, %Y %H:%M"))]
+                pdf.set_y(31)
+                for lbl, val in meta:
+                    pdf.set_x(22)
+                    pdf.set_font("Helvetica","B",8); pdf.set_text_color(GRAY_R,GRAY_G,GRAY_B)
+                    pdf.cell(35,5,_safe(lbl)); 
+                    pdf.set_font("Helvetica","",8); pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
+                    pdf.cell(0,5,_safe(val),ln=True)
+
+                # KPI cards — row 1
+                pdf.set_y(62)
+                kpi_defs = [
+                    ("REVENUE",    f"${m['Revenue']:,.0f}", m['Revenue'], ym['Revenue'] if has_yoy else None, False, (59,130,246)),
+                    ("ORDERS",     f"{m['Orders']:,.0f}",   m['Orders'],  ym['Orders']  if has_yoy else None, False, (6,182,212)),
+                    ("ROAS",       f"{m['ROAS']:.2f}x",     m['ROAS'],    ym['ROAS']    if has_yoy else None, False, (234,179,8)),
+                    ("NET PROFIT", f"${m['Net']:,.0f}",     m['Net'],     ym['Net']     if has_yoy else None, False, (16,185,129)),
+                    ("AD SPEND",   f"${m['Spend']:,.0f}",   m['Spend'],   ym['Spend']   if has_yoy else None, True,  (249,115,22)),
+                    ("COMMISSION", f"${m['Commission']:,.0f}",m['Commission'],ym['Commission'] if has_yoy else None, True, (236,72,153)),
+                    ("ACOS",       f"{m['ACOS']:.1f}%",     m['ACOS'],    ym['ACOS']    if has_yoy else None, True,  (239,68,68)),
+                    ("AOV",        f"${m['AOV']:.2f}",      m['AOV'],     ym['AOV']     if has_yoy else None, False, (139,92,246)),
+                ]
+                card_w, card_h = 43, 28
+                card_gap = 2.5
+                start_x = 15
+                for i, (lbl, val, raw, prev, inv, (cr,cg,cb)) in enumerate(kpi_defs):
+                    col = i % 4
+                    row = i // 4
+                    x = start_x + col*(card_w+card_gap)
+                    y = 62 + row*(card_h+card_gap)
+                    # Card bg
+                    pdf.set_fill_color(BG2_R,BG2_G,BG2_B)
+                    pdf.rect(x, y, card_w, card_h, "F")
+                    # Color top bar
+                    pdf.set_fill_color(cr,cg,cb)
+                    pdf.rect(x, y, card_w, 1.5, "F")
+                    # Value
+                    pdf.set_xy(x+2, y+4)
+                    pdf.set_font("Helvetica","B",13)
+                    pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
+                    pdf.cell(card_w-4, 8, _safe(val), align="C")
+                    # Label
+                    pdf.set_xy(x+2, y+13)
+                    pdf.set_font("Helvetica","",6)
+                    pdf.set_text_color(GRAY_R,GRAY_G,GRAY_B)
+                    pdf.cell(card_w-4, 4, lbl, align="C")
+                    # Delta
+                    if prev is not None and prev != 0:
+                        pct = (raw-prev)/abs(prev)*100
+                        good = (pct>0) if not inv else (pct<0)
+                        arrow = "▲" if pct>0 else "▼"
+                        col2 = (16,185,129) if good else (239,68,68)
+                        pdf.set_xy(x+2, y+18)
+                        pdf.set_font("Helvetica","B",7)
+                        pdf.set_text_color(*col2)
+                        pdf.cell(card_w-4, 5, _safe(f"{arrow} {abs(pct):.1f}% vs LY"), align="C")
+
+                pdf.set_y(130)
+
+                # Summary chart
+                if chart1_path:
+                    _subsection("Revenue, Profit & Spend at a Glance")
+                    pdf.image(chart1_path, x=15, w=180)
                     pdf.ln(3)
 
-                def th(cols, widths):
-                    pdf.set_font("Helvetica", "B", 8)
-                    pdf.set_fill_color(30, 64, 175)
-                    pdf.set_text_color(255, 255, 255)
-                    for c, w in zip(cols, widths):
-                        pdf.cell(w, 6, _safe(c), border=0, fill=True)
-                    pdf.ln()
+                _footer()
 
-                def tr(vals, widths, even=False):
-                    pdf.set_font("Helvetica", "", 8)
-                    pdf.set_text_color(31, 41, 55)
-                    pdf.set_fill_color(245, 247, 255) if even else pdf.set_fill_color(255, 255, 255)
-                    for v, w in zip(vals, widths):
-                        pdf.cell(w, 6, _safe(v), border=0, fill=True)
-                    pdf.ln()
+                # ──────────────────────────────────────────────────────────
+                # PAGE 2 — Revenue Trends + YoY ───────────────────────────
+                # ──────────────────────────────────────────────────────────
+                pdf.add_page()
+                _page_bg()
+                _section_bar("Revenue Trends")
 
-                # ── HEADER ───────────────────────────────────────────────────
-                pdf.set_font("Helvetica", "B", 20)
-                pdf.set_text_color(30, 64, 175)
-                pdf.cell(0, 12, "Performance Report", ln=True)
-                pdf.set_font("Helvetica", "", 9)
-                pdf.set_text_color(100, 100, 100)
-                pdf.cell(0, 5, f"Period: {period}", ln=True)
-                pdf.cell(0, 5, f"Last Year Same Period: {yoy_per}", ln=True)
-                pdf.cell(0, 5, f"Marketplace: {mp_scope}", ln=True)
-                pdf.set_draw_color(30, 64, 175)
-                pdf.set_line_width(1)
-                pdf.line(15, pdf.get_y()+2, 195, pdf.get_y()+2)
-                pdf.ln(6)
-
-                # ── KPIs ─────────────────────────────────────────────────────
-                if report['sections']['kpis']:
-                    section_title("Key Performance Indicators")
-                    th(["Metric", "This Period", "vs Last Year", "Status"], [60, 50, 40, 30])
-                    kpis = [
-                        ("Revenue",    f"${m['Revenue']:,.0f}",    m['Revenue'],    ym['Revenue']    if has_yoy else None, False),
-                        ("Orders",     f"{m['Orders']:,.0f}",      m['Orders'],     ym['Orders']     if has_yoy else None, False),
-                        ("AOV",        f"${m['AOV']:.2f}",         m['AOV'],        ym['AOV']        if has_yoy else None, False),
-                        ("Net Profit", f"${m['Net']:,.0f}",        m['Net'],        ym['Net']        if has_yoy else None, False),
-                        ("Ad Spend",   f"${m['Spend']:,.0f}",      m['Spend'],      ym['Spend']      if has_yoy else None, True),
-                        ("Commission", f"${m['Commission']:,.0f}", m['Commission'], ym['Commission'] if has_yoy else None, True),
-                        ("ROAS",       f"{m['ROAS']:.2f}x",        m['ROAS'],       ym['ROAS']       if has_yoy else None, False),
-                        ("ACOS",       f"{m['ACOS']:.1f}%",        m['ACOS'],       ym['ACOS']       if has_yoy else None, True),
-                    ]
-                    for i, (label, disp, raw, prev, inv) in enumerate(kpis):
-                        if prev is not None and prev != 0:
-                            pct = (raw - prev) / abs(prev) * 100
-                            good = (pct > 0) if not inv else (pct < 0)
-                            arrow = "+" if pct > 0 else ""
-                            delta_str = f"{arrow}{pct:.1f}%"
-                            status = "Good" if good else "Watch"
-                        else:
-                            delta_str = "-"
-                            status = "-"
-                        tr([label, disp, delta_str, status], [60, 50, 40, 30], even=(i%2==0))
-                    pdf.ln(5)
-
-                # ── TREND CHART ───────────────────────────────────────────────
-                if report['sections']['trends'] and trend_img:
-                    section_title("Revenue Trend")
-                    pdf.image(trend_img, x=15, w=175)
+                if chart2_path:
+                    _subsection("Daily Revenue — This Period vs Last Year")
+                    pdf.image(chart2_path, x=15, w=180)
                     pdf.ln(4)
 
-                # ── YoY TABLE + CHART ─────────────────────────────────────────
-                if has_yoy and report['sections']['yoy']:
-                    section_title("Year-over-Year Comparison")
-                    pdf.set_font("Helvetica", "", 8)
-                    pdf.set_text_color(100,100,100)
-                    pdf.cell(0, 5, f"Comparing {period} vs {yoy_per}", ln=True)
-                    pdf.ln(2)
-                    th(["Metric", "This Period", "Last Year", "Change", "Trend"], [44, 36, 36, 32, 32])
-                    yoy_data = [
-                        ("Revenue",    f"${m['Revenue']:,.0f}",  f"${ym['Revenue']:,.0f}",  m['Revenue'],  ym['Revenue']),
-                        ("Orders",     f"{m['Orders']:,.0f}",    f"{ym['Orders']:,.0f}",    m['Orders'],   ym['Orders']),
-                        ("Ad Spend",   f"${m['Spend']:,.0f}",    f"${ym['Spend']:,.0f}",    m['Spend'],    ym['Spend']),
-                        ("Net Profit", f"${m['Net']:,.0f}",      f"${ym['Net']:,.0f}",      m['Net'],      ym['Net']),
-                        ("ROAS",       f"{m['ROAS']:.2f}x",      f"{ym['ROAS']:.2f}x",      m['ROAS'],     ym['ROAS']),
-                        ("ACOS",       f"{m['ACOS']:.1f}%",      f"{ym['ACOS']:.1f}%",      m['ACOS'],     ym['ACOS']),
-                        ("AOV",        f"${m['AOV']:.2f}",       f"${ym['AOV']:.2f}",       m['AOV'],      ym['AOV']),
-                        ("Commission", f"${m['Commission']:,.0f}",f"${ym['Commission']:,.0f}",m['Commission'],ym['Commission']),
+                # Period Insights
+                if not report["sales_data"].empty:
+                    daily_r2 = report["sales_data"].groupby(pd.Grouper(key="date",freq="D"))["revenue"].sum()
+                    peak_day = daily_r2.idxmax()
+                    _subsection("Period Insights")
+                    insights_data = [
+                        ("Peak Day", peak_day.strftime("%b %d") if hasattr(peak_day,"strftime") else str(peak_day)),
+                        ("Peak Revenue", f"${daily_r2.max():,.0f}"),
+                        ("Avg Daily Rev", f"${daily_r2.mean():,.0f}"),
+                        ("Active Days", str((daily_r2>0).sum())),
                     ]
-                    for i, (label, curr_s, prev_s, curr_v, prev_v) in enumerate(yoy_data):
-                        pct = ((curr_v - prev_v) / abs(prev_v) * 100) if prev_v != 0 else 0
-                        arrow = "+" if pct > 0 else ""
-                        trend_txt = "Up" if pct > 0 else ("Down" if pct < 0 else "Flat")
-                        tr([label, curr_s, prev_s, f"{arrow}{pct:.1f}%", trend_txt], [44,36,36,32,32], even=(i%2==0))
+                    pdf.set_fill_color(BG2_R,BG2_G,BG2_B)
+                    for lbl, val in insights_data:
+                        pdf.set_fill_color(BG2_R,BG2_G,BG2_B)
+                        pdf.set_x(15)
+                        pdf.set_font("Helvetica","",8); pdf.set_text_color(GRAY_R,GRAY_G,GRAY_B)
+                        pdf.cell(80,7,_safe(lbl),fill=True)
+                        pdf.set_font("Helvetica","B",8); pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
+                        pdf.cell(100,7,_safe(val),fill=True,ln=True)
                     pdf.ln(4)
-                    if yoy_img:
-                        pdf.image(yoy_img, x=15, w=175)
-                        pdf.ln(4)
 
-                # ── MARKETPLACE ───────────────────────────────────────────────
-                if report['sections']['marketplaces'] and len(ch_report) > 0:
-                    section_title("Marketplace Performance")
-                    has_yoy_col = 'yoy_revenue' in ch_report.columns
-                    if has_yoy_col:
-                        th(["Marketplace","Revenue","Orders","Ad Spend","ROAS","ACOS","Last Yr","Growth"],[35,25,18,25,20,20,25,12])
+                # YoY comparison table
+                if has_yoy and report["sections"]["yoy"]:
+                    _subsection("Year-over-Year Comparison")
+                    _th(["METRIC","THIS PERIOD","LAST YEAR","CHANGE","STATUS"],[40,35,35,30,30])
+                    yoy_rows = [
+                        ("REVENUE",    f"${m['Revenue']:,.0f}", f"${ym['Revenue']:,.0f}", m['Revenue'], ym['Revenue'], False),
+                        ("ORDERS",     f"{m['Orders']:,.0f}",   f"{ym['Orders']:,.0f}",   m['Orders'],  ym['Orders'],  False),
+                        ("ROAS",       f"{m['ROAS']:.2f}x",     f"{ym['ROAS']:.2f}x",     m['ROAS'],    ym['ROAS'],    False),
+                        ("NET PROFIT", f"${m['Net']:,.0f}",     f"${ym['Net']:,.0f}",     m['Net'],     ym['Net'],     False),
+                        ("AD SPEND",   f"${m['Spend']:,.0f}",   f"${ym['Spend']:,.0f}",   m['Spend'],   ym['Spend'],   True),
+                        ("ACOS",       f"{m['ACOS']:.1f}%",     f"{ym['ACOS']:.1f}%",     m['ACOS'],    ym['ACOS'],    True),
+                        ("AOV",        f"${m['AOV']:.2f}",      f"${ym['AOV']:.2f}",      m['AOV'],     ym['AOV'],     False),
+                    ]
+                    for i,(lbl,cs,ps,cv,pv,inv) in enumerate(yoy_rows):
+                        pct = ((cv-pv)/abs(pv)*100) if pv!=0 else 0
+                        good = (pct>0) if not inv else (pct<0)
+                        arrow = "▲" if pct>0 else "▼"
+                        status = "BETTER" if good else "WORSE"
+                        _tr([lbl, cs, ps, _safe(f"{arrow} {abs(pct):.1f}%"), status], [40,35,35,30,30], even=(i%2==0))
+
+                _footer()
+
+                # ──────────────────────────────────────────────────────────
+                # PAGE 3 — Marketplace ─────────────────────────────────────
+                # ──────────────────────────────────────────────────────────
+                if report["sections"]["marketplaces"] and len(ch_report)>0:
+                    pdf.add_page()
+                    _page_bg()
+                    _section_bar("Marketplace Breakdown")
+
+                    if chart3_path:
+                        _subsection("Revenue by Marketplace")
+                        pdf.image(chart3_path, x=15, w=180)
+                        pdf.ln(3)
+
+                    if chart4_path:
+                        _subsection("ROAS & ACOS by Marketplace")
+                        pdf.image(chart4_path, x=15, w=180)
+                        pdf.ln(3)
+
+                    if chart5_path:
+                        _subsection("Ad Spend Efficiency Analysis")
+                        pdf.image(chart5_path, x=15, w=180)
+                        pdf.ln(3)
+
+                    _footer()
+
+                    # Marketplace table on next page
+                    pdf.add_page()
+                    _page_bg()
+                    _subsection("Marketplace Detail Table")
+                    has_yoy_mp = "yoy_revenue" in ch_report.columns
+                    if has_yoy_mp:
+                        _th(["MARKETPLACE","REVENUE","ORDERS","AD SPEND","ROAS","ACOS","LY REV","YOY"],[32,25,18,25,18,18,25,19])
                     else:
-                        th(["Marketplace","Revenue","Orders","Ad Spend","ROAS","ACOS"],[40,30,22,30,24,24])
-                    for i, (_, row) in enumerate(ch_report.iterrows()):
-                        vals = [
-                            str(row['channel'])[:16],
-                            f"${row['revenue']:,.0f}",
-                            f"{row['orders']:,.0f}",
-                            f"${row['spend']:,.0f}",
-                            f"{row['roas']:.2f}x",
-                            f"{row['acos']:.1f}%",
-                        ]
-                        if has_yoy_col:
-                            g = row.get('yoy_growth', float('nan'))
-                            vals += [f"${row.get('yoy_revenue',0):,.0f}", f"{g:+.1f}%" if g==g else "-"]
-                            tr(vals, [35,25,18,25,20,20,25,12], even=(i%2==0))
+                        _th(["MARKETPLACE","REVENUE","ORDERS","AD SPEND","ROAS","ACOS"],[42,30,22,32,24,30])
+                    for i,(_,r) in enumerate(ch_report.iterrows()):
+                        g = r.get("yoy_growth",float("nan"))
+                        yoy_str = (_safe(f"▲{abs(g):.1f}%") if g>0 else _safe(f"▼{abs(g):.1f}%")) if g==g else "-"
+                        if has_yoy_mp:
+                            _tr([str(r["channel"])[:14],f"${r['revenue']:,.0f}",f"{r['orders']:,.0f}",
+                                 f"${r['spend']:,.0f}",f"{r['roas']:.2f}x",f"{r['acos']:.1f}%",
+                                 f"${r.get('yoy_revenue',0):,.0f}",yoy_str],[32,25,18,25,18,18,25,19],even=(i%2==0))
                         else:
-                            tr(vals, [40,30,22,30,24,24], even=(i%2==0))
-                    pdf.ln(5)
+                            _tr([str(r["channel"])[:16],f"${r['revenue']:,.0f}",f"{r['orders']:,.0f}",
+                                 f"${r['spend']:,.0f}",f"{r['roas']:.2f}x",f"{r['acos']:.1f}%"],[42,30,22,32,24,30],even=(i%2==0))
+                    _footer()
 
-                # ── TOP SKUs ──────────────────────────────────────────────────
-                if report['sections']['skus'] and "Parent" in report['sales_data'].columns:
-                    section_title("Top SKU Performance")
-                    sku_now = (report['sales_data']
-                        .groupby("Parent").agg({"revenue":"sum","orders":"sum"}).reset_index())
-                    sku_now["aov"] = sku_now["revenue"] / sku_now["orders"].replace(0, np.nan)
-                    sku_now = sku_now.sort_values("revenue", ascending=False).head(20)
+                # ──────────────────────────────────────────────────────────
+                # PAGE — Top SKUs ──────────────────────────────────────────
+                # ──────────────────────────────────────────────────────────
+                if report["sections"]["skus"] and "Parent" in report["sales_data"].columns:
+                    pdf.add_page()
+                    _page_bg()
+                    _section_bar("Top SKU Performance")
 
-                    has_sku_yoy = has_yoy and "Parent" in report['yoy_sales'].columns
+                    if chart6_path:
+                        _subsection("Top SKUs by Revenue")
+                        pdf.image(chart6_path, x=15, w=180)
+                        pdf.ln(3)
+
+                    sku_now = (report["sales_data"].groupby("Parent")
+                               .agg({"revenue":"sum","orders":"sum"}).reset_index())
+                    sku_now["aov"] = sku_now["revenue"]/sku_now["orders"].replace(0,pd.NA)
+                    sku_now = sku_now.sort_values("revenue",ascending=False).head(20)
+                    has_sku_yoy = has_yoy and "Parent" in report["yoy_sales"].columns
                     if has_sku_yoy:
-                        sku_yoy = (report['yoy_sales'].groupby("Parent")["revenue"]
-                            .sum().reset_index().rename(columns={"revenue":"yoy_rev"}))
-                        sku_now = sku_now.merge(sku_yoy, on="Parent", how="left").fillna(0)
-                        sku_now["growth"] = sku_now.apply(
-                            lambda r: (r["revenue"]-r["yoy_rev"])/r["yoy_rev"]*100 if r["yoy_rev"]>0 else float("nan"), axis=1)
-                        th(["SKU","Revenue","Orders","AOV","Last Yr Rev","Growth"],[55,28,20,24,30,23])
-                        for i, (_, r) in enumerate(sku_now.iterrows()):
-                            g = r.get("growth", float("nan"))
-                            tr([str(r["Parent"])[:22], f"${r['revenue']:,.0f}",
-                                f"{r['orders']:,.0f}", f"${r['aov']:.2f}",
-                                f"${r['yoy_rev']:,.0f}", f"{g:+.1f}%" if g==g else "-"],
-                               [55,28,20,24,30,23], even=(i%2==0))
+                        sy = report["yoy_sales"].groupby("Parent")["revenue"].sum().reset_index().rename(columns={"revenue":"yr"})
+                        sku_now = sku_now.merge(sy,on="Parent",how="left").fillna(0)
+                        _th(["SKU / PARENT","REVENUE","ORDERS","AOV","LY REV","YOY DELTA"],[55,28,20,24,28,15])
+                        for i,(_,r) in enumerate(sku_now.iterrows()):
+                            g = ((r["revenue"]-r["yr"])/r["yr"]*100) if r["yr"]>0 else float("nan")
+                            gstr = (_safe(f"▲{abs(g):.1f}%") if g>0 else _safe(f"▼{abs(g):.1f}%")) if g==g else "-"
+                            _tr([str(r["Parent"])[:22],f"${r['revenue']:,.0f}",f"{r['orders']:,.0f}",
+                                 f"${r['aov']:.2f}",f"${r['yr']:,.0f}",gstr],[55,28,20,24,28,15],even=(i%2==0))
                     else:
-                        th(["SKU","Revenue","Orders","AOV"],[70,40,30,30])
-                        for i, (_, r) in enumerate(sku_now.iterrows()):
-                            tr([str(r["Parent"])[:28], f"${r['revenue']:,.0f}",
-                                f"{r['orders']:,.0f}", f"${r['aov']:.2f}"],
-                               [70,40,30,30], even=(i%2==0))
-                    pdf.ln(5)
+                        _th(["SKU / PARENT","REVENUE","ORDERS","AOV"],[75,40,30,30])
+                        for i,(_,r) in enumerate(sku_now.iterrows()):
+                            _tr([str(r["Parent"])[:30],f"${r['revenue']:,.0f}",f"{r['orders']:,.0f}",
+                                 f"${r['aov']:.2f}"],[75,40,30,30],even=(i%2==0))
+                    _footer()
 
-                # ── RECOMMENDATIONS ───────────────────────────────────────────
-                if recommendations_list and report['sections']['recommendations']:
-                    section_title("Strategic Recommendations")
-                    type_labels = {"scale":"SCALE","warn":"WATCH","crit":"URGENT","info":"INFO"}
-                    for i, rec in enumerate(recommendations_list):  # all recs, no limit
-                        lbl = type_labels.get(rec['type'], "INFO")
-                        pdf.set_font("Helvetica", "B", 9)
-                        pdf.set_text_color(31, 41, 55)
-                        pdf.cell(18, 6, f"[{lbl}]", ln=False)
-                        pdf.set_font("Helvetica", "B", 9)
-                        pdf.cell(0, 6, _safe(rec['title']), ln=True)
-                        pdf.set_font("Helvetica", "", 8)
-                        pdf.set_text_color(75, 85, 99)
-                        pdf.multi_cell(0, 5, _safe(rec['msg']))
-                        if i < len(recommendations_list) - 1:
-                            pdf.set_draw_color(229, 231, 235)
-                            pdf.set_line_width(0.2)
-                            pdf.line(15, pdf.get_y(), 195, pdf.get_y())
-                        pdf.ln(2)
-
-                # ── FOOTER on each page ───────────────────────────────────────
-                pdf.set_y(-15)
-                pdf.set_font("Helvetica", "", 7)
-                pdf.set_text_color(156, 163, 175)
-                pdf.cell(0, 5, _safe(f"Marketplace Business Insights  |  {period}  |  Page {pdf.page_no()}"), align="C")
+                # ──────────────────────────────────────────────────────────
+                # PAGE — Strategic Recommendations ────────────────────────
+                # ──────────────────────────────────────────────────────────
+                if recommendations_list and report["sections"]["recommendations"]:
+                    pdf.add_page()
+                    _page_bg()
+                    _section_bar("Strategic Recommendations")
+                    type_cfg = {
+                        "scale": ("SCALE UP",  (16,185,129)),
+                        "warn":  ("WARNING",   (245,158,11)),
+                        "crit":  ("CRITICAL",  (239,68,68)),
+                        "info":  ("INFO",      (59,130,246)),
+                    }
+                    for rec in recommendations_list:
+                        lbl, (lr,lg,lb) = type_cfg.get(rec["type"], ("INFO",(59,130,246)))
+                        # Badge
+                        pdf.set_fill_color(lr,lg,lb)
+                        pdf.set_x(15)
+                        pdf.set_font("Helvetica","B",7)
+                        pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
+                        pdf.cell(20,6,lbl,fill=True,align="C")
+                        # Title
+                        pdf.set_font("Helvetica","B",9)
+                        pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
+                        pdf.cell(0,6,_safe(f"  {rec['title']}"),ln=True)
+                        # Body
+                        pdf.set_x(15)
+                        pdf.set_font("Helvetica","",8)
+                        pdf.set_text_color(GRAY_R+30,GRAY_G+30,GRAY_B+30)
+                        pdf.multi_cell(180,5,_safe(rec["msg"]))
+                        # Divider
+                        pdf.set_draw_color(GRAY_R,GRAY_G,GRAY_B)
+                        pdf.set_line_width(0.2)
+                        pdf.line(15,pdf.get_y(),195,pdf.get_y())
+                        pdf.ln(3)
+                    _footer()
 
                 buf = io.BytesIO()
                 pdf.output(buf)
-
-                # Clean up temp chart files
-                for f in chart_files:
+                for f in tmp_files:
                     try: os.unlink(f)
                     except: pass
-
                 return buf.getvalue(), None
 
             except Exception as e:
                 import traceback
-                return None, f"Error: {e} | {traceback.format_exc()[-300:]}"
-
+                return None, f"{e} | {traceback.format_exc()[-400:]}"
         pdf_bytes, pdf_error = _generate_pdf(report, m, ym, has_yoy, ch_report, recommendations_list)
 
         ex1, ex2, ex3 = st.columns(3)
@@ -4453,3 +4700,4 @@ with tabs[9]:
         st.markdown(f"<div style='text-align: center; color: #6b7280; font-size: 12px;'>⚙️ Safe Margin: {SAFE_MARGIN*100:.0f}%</div>", unsafe_allow_html=True)
     with col3:
         st.markdown(f"<div style='text-align: right; color: #6b7280; font-size: 12px;'>📊 Data Points: {len(df_s):,}</div>", unsafe_allow_html=True)
+        
