@@ -250,6 +250,7 @@ def multiselect_with_all(label, options):
 # ---------------- DATA LOADER ----------------
 @st.cache_data(show_spinner=True, ttl=600)
 def load_and_process_data():
+
     import tempfile
     import json as _json
     import os as _os
@@ -262,6 +263,7 @@ def load_and_process_data():
             suffix=".json",
             delete=False
         ) as tmp:
+
             _json.dump(creds_dict, tmp)
             creds = tmp.name
 
@@ -269,8 +271,8 @@ def load_and_process_data():
         return None, None, f"Credentials error: {e}"
 
     try:
-        # Load new consolidated workbook
-        all_dfs = load_all_sheets(
+
+        workbook = load_all_sheets(
             creds,
             "New BI Dashboard"
         )
@@ -281,191 +283,144 @@ def load_and_process_data():
     finally:
         try:
             _os.unlink(creds)
-        except Exception:
+        except:
             pass
 
-    if not all_dfs:
-        return None, None, "No data found in 'New BI Dashboard'."
+    if not workbook:
+        return None, None, "No sheets found."
 
-    # --------------------------------------------------
-    # SALES DATA
-    # --------------------------------------------------
-    sales_list = []
+    sales_df = None
+    spend_df = None
 
-    for name, df in all_dfs.items():
+    for sheet_name, df in workbook.items():
 
-        if "sales" in name.lower() and not df.empty:
+        cols = [str(c).strip().lower() for c in df.columns]
 
-            df = df.copy()
+        # SALES TAB
+        if (
+            "purchased on" in cols
+            and "discounted price" in cols
+            and "no of orders" in cols
+        ):
+            sales_df = df.copy()
 
-            col_map = {}
+        # SPEND TAB
+        elif (
+            "date" in cols
+            and "channel" in cols
+            and "spend" in cols
+        ):
+            spend_df = df.copy()
 
-            for col in df.columns:
+    if sales_df is None:
+        return None, None, "Sales sheet not found."
 
-                clean_col = (
-                    col.strip()
-                    .lower()
-                    .replace(" ", "_")
-                    .replace("-", "_")
-                )
+    if spend_df is None:
+        spend_df = pd.DataFrame(
+            columns=["date", "channel", "spend"]
+        )
 
-                col_map[col] = clean_col
+    # =====================================================
+    # SALES PROCESSING
+    # =====================================================
 
-                if clean_col == "parent":
-                    col_map[col] = "Parent"
-
-                elif clean_col == "sku":
-                    col_map[col] = "SKU"
-
-            df = df.rename(columns=col_map)
-
-            sales_list.append(df)
-
-    if not sales_list:
-        return None, None, "No Sales sheets found."
-
-    sales = pd.concat(sales_list, ignore_index=True)
-
-    sales.columns = [
-        c if c in ["Parent", "SKU"] else c.lower()
-        for c in sales.columns
+    sales_df.columns = [
+        c.strip().lower().replace(" ", "_")
+        for c in sales_df.columns
     ]
 
-    for col in ["discounted_price", "selling_commission"]:
-
-        if col in sales.columns:
-
-            sales[col] = pd.to_numeric(
-                sales[col]
-                .astype(str)
-                .str.strip()
-                .str.replace(r"[$,\s]", "", regex=True)
-                .str.replace(r"[^\d.\-]", "", regex=True),
-                errors="coerce"
-            ).fillna(0)
-
-    sales["revenue"] = (
-        sales["discounted_price"]
-        if "discounted_price" in sales.columns
-        else 0
+    sales_df["date"] = pd.to_datetime(
+        sales_df["purchased_on"],
+        errors="coerce"
     )
 
-    sales["orders"] = pd.to_numeric(
-        sales["no_of_orders"].astype(str).str.replace(
-            r"[^\d.]",
-            "",
-            regex=True
-        )
-        if "no_of_orders" in sales.columns
-        else pd.Series(0, index=sales.index),
+    sales_df["revenue"] = pd.to_numeric(
+        sales_df["discounted_price"],
         errors="coerce"
     ).fillna(0)
 
-    sales["date"] = pd.to_datetime(
-        sales["purchased_on"],
+    sales_df["orders"] = pd.to_numeric(
+        sales_df["no_of_orders"],
         errors="coerce"
-    )
+    ).fillna(0)
 
-    sales["channel"] = (
-        sales.get("channel", "Unknown")
+    sales_df["selling_commission"] = pd.to_numeric(
+        sales_df["selling_commission"],
+        errors="coerce"
+    ).fillna(0)
+
+    sales_df["channel"] = (
+        sales_df["channel"]
         .astype(str)
         .str.strip()
     )
 
-    sales["type"] = (
-        sales.get("type", "Unknown")
+    sales_df["type"] = (
+        sales_df["type"]
         .astype(str)
         .str.strip()
     )
 
-    if "Parent" not in sales.columns:
-        sales["Parent"] = "Unknown"
-
-    if "SKU" not in sales.columns:
-        sales["SKU"] = "Unknown"
-
-    sales = sales.dropna(subset=["date"])
-
-    # --------------------------------------------------
-    # SPEND DATA
-    # --------------------------------------------------
-    spend_list = []
-
-    for name, df in all_dfs.items():
-
-        if (
-            "channel" in name.lower()
-            and "spend" in name.lower()
-        ):
-
-            df = df.copy()
-
-            col_map = {}
-
-            for c in df.columns:
-
-                clean = c.strip().lower()
-
-                if clean in [
-                    "spend",
-                    "ad spend",
-                    "ad_spend"
-                ]:
-                    col_map[c] = "spend"
-
-                if clean in [
-                    "date",
-                    "purchased_on"
-                ]:
-                    col_map[c] = "date"
-
-                if clean == "channel":
-                    col_map[c] = "channel"
-
-            df = df.rename(columns=col_map)
-
-            if (
-                "spend" in df.columns
-                and "date" in df.columns
-            ):
-
-                df["spend"] = pd.to_numeric(
-                    df["spend"]
-                    .astype(str)
-                    .str.replace(
-                        r"[$,]",
-                        "",
-                        regex=True
-                    ),
-                    errors="coerce"
-                ).fillna(0)
-
-                df["date"] = pd.to_datetime(
-                    df["date"],
-                    errors="coerce"
-                )
-
-                df["channel"] = (
-                    df["channel"]
-                    .astype(str)
-                    .str.strip()
-                    if "channel" in df.columns
-                    else "Unknown"
-                )
-
-                spend_list.append(
-                    df[["date", "channel", "spend"]]
-                )
-
-    spend = (
-        pd.concat(spend_list, ignore_index=True)
-        if spend_list
-        else pd.DataFrame(
-            columns=["date", "channel", "spend"]
+    if "parent" in sales_df.columns:
+        sales_df["Parent"] = (
+            sales_df["parent"]
+            .astype(str)
+            .str.strip()
         )
-    )
+    else:
+        sales_df["Parent"] = "Unknown"
 
-    return sales, spend, None
+    if "sku" in sales_df.columns:
+        sales_df["SKU"] = (
+            sales_df["sku"]
+            .astype(str)
+            .str.strip()
+        )
+    else:
+        sales_df["SKU"] = "Unknown"
+
+    sales_df = sales_df.dropna(subset=["date"])
+
+    # =====================================================
+    # SPEND PROCESSING
+    # =====================================================
+
+    spend_df.columns = [
+        c.strip().lower().replace(" ", "_")
+        for c in spend_df.columns
+    ]
+
+    if len(spend_df) > 0:
+
+        spend_df["date"] = pd.to_datetime(
+            spend_df["date"],
+            errors="coerce"
+        )
+
+        spend_df["spend"] = pd.to_numeric(
+            spend_df["spend"],
+            errors="coerce"
+        ).fillna(0)
+
+        spend_df["channel"] = (
+            spend_df["channel"]
+            .astype(str)
+            .str.strip()
+        )
+
+        spend_df = spend_df.dropna(subset=["date"])
+
+    else:
+
+        spend_df = pd.DataFrame(
+            {
+                "date": pd.to_datetime([]),
+                "channel": [],
+                "spend": []
+            }
+        )
+
+    return sales_df, spend_df, None
 
 # ---------------- LOAD STATE ----------------
 with st.spinner("⚡ Loading business intelligence..."):
