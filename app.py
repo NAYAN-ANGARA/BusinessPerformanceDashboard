@@ -8,8 +8,7 @@ import numpy as np
 import json
 import hashlib
 import re
-
-import os  # needed for sku_ads_cache.csv path check
+import os
 
 # Configure Plotly
 import plotly.io as pio
@@ -494,9 +493,12 @@ comparison_period = st.sidebar.selectbox(
 )
 
 # ---------------- APPLY FILTERS ----------------
+start_ts = pd.to_datetime(start_date)
+end_ts = pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+
 mask_sales = (
-    (sales_df["date"].dt.date >= start_date) & 
-    (sales_df["date"].dt.date <= end_date) &
+    (sales_df["date"] >= start_ts) & 
+    (sales_df["date"] <= end_ts) &
     (sales_df["channel"].isin(selected_channels)) &
     (sales_df["type"].isin(selected_types) if "type" in sales_df.columns and selected_types else True)
 )
@@ -506,8 +508,8 @@ if spend_df.empty:
     df_sp = pd.DataFrame(columns=["date","channel","spend"])
 else:
     mask_spend = (
-        (spend_df["date"].dt.date >= start_date)
-        & (spend_df["date"].dt.date <= end_date)
+        (spend_df["date"] >= start_ts)
+        & (spend_df["date"] <= end_ts)
         & (spend_df["channel"].isin(selected_channels))
     )
     df_sp = spend_df.loc[mask_spend]
@@ -528,9 +530,12 @@ else:  # Previous Period
     start_ly = start_date - timedelta(days=days_diff)
     end_ly = start_date - timedelta(days=1)
 
+start_ly_ts = pd.to_datetime(start_ly)
+end_ly_ts = pd.to_datetime(end_ly) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+
 mask_sales_ly = (
-    (sales_df["date"].dt.date >= start_ly.date()) & 
-    (sales_df["date"].dt.date <= end_ly.date()) &
+    (sales_df["date"] >= start_ly_ts) & 
+    (sales_df["date"] <= end_ly_ts) &
     (sales_df["channel"].isin(selected_channels))
 )
 df_s_ly = sales_df[mask_sales_ly]
@@ -539,8 +544,8 @@ if spend_df.empty:
     df_sp_ly = pd.DataFrame(columns=["date","channel","spend"])
 else:
     mask_spend_ly = (
-        (spend_df["date"].dt.date >= start_ly.date())
-        & (spend_df["date"].dt.date <= end_ly.date())
+        (spend_df["date"] >= start_ly_ts)
+        & (spend_df["date"] <= end_ly_ts)
         & (spend_df["channel"].isin(selected_channels))
     )
     df_sp_ly = spend_df.loc[mask_spend_ly]
@@ -784,7 +789,7 @@ with tabs[1]:
             "revenue": "sum",
             "orders": "sum"
         }).reset_index()
-        weekly_aov["aov"] = weekly_aov.apply(lambda x: x["revenue"]/x["orders"] if x["orders"]>0 else 0, axis=1)
+        weekly_aov["aov"] = (weekly_aov["revenue"]/weekly_aov["orders"].replace(0, np.nan)).fillna(0)
         
         fig_aov = go.Figure()
         fig_aov.add_trace(go.Scatter(
@@ -869,7 +874,7 @@ with tabs[2]:
         ch_sp = df_sp.groupby("channel")["spend"].sum().reset_index()
         ch_matrix = pd.merge(ch_rev, ch_sp, on="channel", how="outer").fillna(0)
         ch_matrix["roas"] = ch_matrix.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
-        ch_matrix["aov"] = ch_matrix.apply(lambda x: x["revenue"]/x["orders"] if x["orders"]>0 else 0, axis=1)
+        ch_matrix["aov"] = (ch_matrix["revenue"] / ch_matrix["orders"].replace(0, np.nan)).fillna(0)
         ch_matrix["acos"] = ch_matrix.apply(lambda x: (x["spend"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
         ch_matrix = ch_matrix[ch_matrix["revenue"] > 0]
         
@@ -1104,8 +1109,6 @@ with tabs[3]:
     # Read Supabase credentials at render time (secrets available here)
     _SB_URL, _SB_KEY = _get_supabase_creds()
 
-
-
     # ══════════════════════════════════════════════════════════════════════════
     # SECTION 0  ──  Amazon Ads Summary  (queried from Supabase by date range)
     # ══════════════════════════════════════════════════════════════════════════
@@ -1138,8 +1141,8 @@ with tabs[3]:
             # ── Date range info ───────────────────────────────────────────────
             sb_min, sb_max = _get_supabase_date_range(_url=_SB_URL, _key=_SB_KEY)
             st.caption(
-                f"📅 Supabase covers **{sb_min}** → **{sb_max}**  ·  "
-                f"Showing: **{start_date.strftime('%d %b %Y')}** → **{end_date.strftime('%d %b %Y')}**  ·  "
+                f"📅 Supabase covers **{sb_min}** → **{sb_max}** ·  "
+                f"Showing: **{start_date.strftime('%d %b %Y')}** → **{end_date.strftime('%d %b %Y')}** ·  "
                 f"refreshed daily at 9 AM IST"
             )
 
@@ -1324,6 +1327,9 @@ with tabs[3]:
                     if not sheet_orders.empty:
                         sku_export = sku_export.merge(sheet_orders, on="Parent_SKU", how="left")
                         sku_export["Total_Orders"] = sku_export["Total_Orders"].fillna(0).astype(int)
+                    else:
+                        sku_export["Total_Orders"] = 0
+                        
                     sku_export["CTR"]  = (sku_export["Clicks"]  / sku_export["Impressions"].replace(0, float("nan"))) * 100
                     sku_export["CPC"]  = (sku_export["Spend"]   / sku_export["Clicks"].replace(0,      float("nan")))
                     sku_export["ACOS"] = (sku_export["Spend"]   / sku_export["Ad_Sales"].replace(0,    float("nan"))) * 100
@@ -1384,7 +1390,7 @@ with tabs[3]:
             "revenue": "sum",
             "orders": "sum"
         }).reset_index()
-        Parent_perf_all["aov"] = Parent_perf_all["revenue"] / Parent_perf_all["orders"]
+        Parent_perf_all["aov"] = (Parent_perf_all["revenue"] / Parent_perf_all["orders"].replace(0, np.nan)).fillna(0)
         Parent_perf_all = Parent_perf_all.sort_values("revenue", ascending=False)
 
         # Apply top N
@@ -1524,10 +1530,10 @@ with tabs[3]:
                 st.markdown("**📡 Amazon Ads Performance (fetched period)**")
                 a1, a2, a3, a4, a5 = st.columns(5)
                 a1.metric("👁️ Impressions", f"{ads_info['Impressions']:,}")
-                a2.metric("🖱️ Clicks",      f"{ads_info['Clicks']:,}")
-                a3.metric("💸 Spend",       f"${ads_info['Spend']:,.2f}")
-                a4.metric("🎯 ACOS",        f"{ads_info['ACOS']:.1f}%")
-                a5.metric("📊 CTR",         f"{ads_info['CTR']:.2f}%")
+                a2.metric("🖱️ Clicks",       f"{ads_info['Clicks']:,}")
+                a3.metric("💸 Spend",        f"${ads_info['Spend']:,.2f}")
+                a4.metric("🎯 ACOS",         f"{ads_info['ACOS']:.1f}%")
+                a5.metric("📊 CTR",          f"{ads_info['CTR']:.2f}%")
 
             st.markdown("")
 
@@ -1617,7 +1623,7 @@ with tabs[3]:
                     .reset_index()
                     .sort_values("revenue", ascending=False)
                 )
-                child_skus["aov"]   = child_skus["revenue"] / child_skus["orders"].replace(0, np.nan)
+                child_skus["aov"]   = (child_skus["revenue"] / child_skus["orders"].replace(0, np.nan)).fillna(0)
                 child_skus["share"] = (child_skus["revenue"] / child_skus["revenue"].sum() * 100).round(1)
                 valid_children      = child_skus[child_skus["SKU"] != "Unknown"]
 
@@ -1652,7 +1658,7 @@ with tabs[3]:
                     "revenue": "sum",
                     "orders": "sum"
                 }).reset_index()
-                child_data["aov"] = child_data["revenue"] / child_data["orders"]
+                child_data["aov"] = (child_data["revenue"] / child_data["orders"].replace(0, np.nan)).fillna(0)
                 child_data = child_data.sort_values("revenue", ascending=False)
                 
                 has_children = len(child_data) > 0 and child_data["SKU"].iloc[0] != "Unknown"
@@ -1682,10 +1688,10 @@ with tabs[3]:
                     st.markdown("**📡 Amazon Ads** (fetched period)")
                     ac1, ac2, ac3, ac4, ac5 = st.columns(5)
                     ac1.metric("👁️ Impressions", f"{ads_info_card['Impressions']:,}")
-                    ac2.metric("🖱️ Clicks",      f"{ads_info_card['Clicks']:,}")
-                    ac3.metric("💸 Spend",       f"${ads_info_card['Spend']:,.2f}")
-                    ac4.metric("🎯 ACOS",        f"{ads_info_card['ACOS']:.1f}%")
-                    ac5.metric("📊 CTR",         f"{ads_info_card['CTR']:.2f}%")
+                    ac2.metric("🖱️ Clicks",       f"{ads_info_card['Clicks']:,}")
+                    ac3.metric("💸 Spend",        f"${ads_info_card['Spend']:,.2f}")
+                    ac4.metric("🎯 ACOS",         f"{ads_info_card['ACOS']:.1f}%")
+                    ac5.metric("📊 CTR",          f"{ads_info_card['CTR']:.2f}%")
                 
                 # Show child SKUs if available
                 if has_children:
@@ -1877,11 +1883,9 @@ with tabs[5]:
                 # YoY data
                 yoy_revenue = None
                 if use_yoy:
-                    yoy_mask = (
-                        sales_df["date"].dt.date >= (daily_revenue["date"].max() - pd.DateOffset(years=1) - timedelta(days=forecast_days)).date()
-                    ) & (
-                        sales_df["date"].dt.date <= (daily_revenue["date"].max() - pd.DateOffset(years=1)).date()
-                    )
+                    yoy_start_ts = pd.to_datetime(daily_revenue["date"].max() - pd.DateOffset(years=1) - timedelta(days=forecast_days))
+                    yoy_end_ts = pd.to_datetime(daily_revenue["date"].max() - pd.DateOffset(years=1)) + pd.Timedelta(days=1, microseconds=-1)
+                    yoy_mask = (sales_df["date"] >= yoy_start_ts) & (sales_df["date"] <= yoy_end_ts)
                     yoy_raw = sales_df[yoy_mask]
                     if len(yoy_raw) > 0:
                         yoy_revenue = yoy_raw.groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().values
@@ -2066,16 +2070,16 @@ with tabs[5]:
                 st.dataframe(
                     df_display,
                     column_config={
-                        "Rank":         st.column_config.NumberColumn("Rank", format="%d"),
-                        "SKU":          st.column_config.TextColumn("SKU"),
-                        "Historical Avg":      st.column_config.NumberColumn("Hist. Avg/Day", format="$%.0f"),
-                        "Recent 2wk Avg":      st.column_config.NumberColumn("Recent 2wk Avg", format="$%.0f"),
-                        "Forecast Avg":        st.column_config.NumberColumn("Forecast Avg/Day", format="$%.0f"),
+                        "Rank":                 st.column_config.NumberColumn("Rank", format="%d"),
+                        "SKU":                  st.column_config.TextColumn("SKU"),
+                        "Historical Avg":       st.column_config.NumberColumn("Hist. Avg/Day", format="$%.0f"),
+                        "Recent 2wk Avg":       st.column_config.NumberColumn("Recent 2wk Avg", format="$%.0f"),
+                        "Forecast Avg":         st.column_config.NumberColumn("Forecast Avg/Day", format="$%.0f"),
                         f"Total Forecast ({forecast_days}d)": st.column_config.NumberColumn(f"Total Forecast", format="$%.0f"),
-                        "Growth %":            st.column_config.NumberColumn("Growth %", format="%.1f%%"),
-                        "Momentum %":          st.column_config.NumberColumn("Momentum %", format="%.1f%%"),
-                        "YoY Change %":        st.column_config.NumberColumn("YoY Change %", format="%.1f%%"),
-                        "Confidence %":        st.column_config.NumberColumn("Confidence %", format="%.0f%%"),
+                        "Growth %":             st.column_config.NumberColumn("Growth %", format="%.1f%%"),
+                        "Momentum %":           st.column_config.NumberColumn("Momentum %", format="%.1f%%"),
+                        "YoY Change %":         st.column_config.NumberColumn("YoY Change %", format="%.1f%%"),
+                        "Confidence %":         st.column_config.NumberColumn("Confidence %", format="%.0f%%"),
                     },
                     hide_index=True,
                     use_container_width=True,
@@ -2180,12 +2184,12 @@ with tabs[5]:
                 # YoY data for this marketplace
                 yoy_mp_vals = None
                 if use_yoy:
+                    yoy_mp_start_ts = pd.to_datetime(mp_data["date"].max() - pd.DateOffset(years=1) - timedelta(days=forecast_days))
+                    yoy_mp_end_ts = pd.to_datetime(mp_data["date"].max() - pd.DateOffset(years=1)) + pd.Timedelta(days=1, microseconds=-1)
                     yoy_mp_mask = (
                         df_s["channel"].eq(marketplace) &
-                        df_s["date"].dt.date.between(
-                            (mp_data["date"].max() - pd.DateOffset(years=1) - timedelta(days=forecast_days)).date(),
-                            (mp_data["date"].max() - pd.DateOffset(years=1)).date()
-                        )
+                        (df_s["date"] >= yoy_mp_start_ts) &
+                        (df_s["date"] <= yoy_mp_end_ts)
                     )
                     yoy_mp_chunk = df_s[yoy_mp_mask]["revenue"].values
                     if len(yoy_mp_chunk) > 0:
@@ -2350,29 +2354,35 @@ with tabs[6]:
                 if submitted and test_name:
                     # Calculate metrics for both variants
                     # Variant A
+                    var_a_start_ts = pd.to_datetime(var_a_date_start)
+                    var_a_end_ts = pd.to_datetime(var_a_date_end) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+                    
                     mask_a = (
-                        (sales_df["date"].dt.date >= var_a_date_start) & 
-                        (sales_df["date"].dt.date <= var_a_date_end) &
+                        (sales_df["date"] >= var_a_start_ts) & 
+                        (sales_df["date"] <= var_a_end_ts) &
                         (sales_df["channel"] == variant_a_channel)
                     )
                     df_a = sales_df[mask_a]
                     mask_spend_a = (
-                        (spend_df["date"].dt.date >= var_a_date_start) & 
-                        (spend_df["date"].dt.date <= var_a_date_end) &
+                        (spend_df["date"] >= var_a_start_ts) & 
+                        (spend_df["date"] <= var_a_end_ts) &
                         (spend_df["channel"] == variant_a_channel)
                     )
                     spend_a = spend_df[mask_spend_a]["spend"].sum()
                     
                     # Variant B
+                    var_b_start_ts = pd.to_datetime(var_b_date_start)
+                    var_b_end_ts = pd.to_datetime(var_b_date_end) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+
                     mask_b = (
-                        (sales_df["date"].dt.date >= var_b_date_start) & 
-                        (sales_df["date"].dt.date <= var_b_date_end) &
+                        (sales_df["date"] >= var_b_start_ts) & 
+                        (sales_df["date"] <= var_b_end_ts) &
                         (sales_df["channel"] == variant_b_channel)
                     )
                     df_b = sales_df[mask_b]
                     mask_spend_b = (
-                        (spend_df["date"].dt.date >= var_b_date_start) & 
-                        (spend_df["date"].dt.date <= var_b_date_end) &
+                        (spend_df["date"] >= var_b_start_ts) & 
+                        (spend_df["date"] <= var_b_end_ts) &
                         (spend_df["channel"] == variant_b_channel)
                     )
                     spend_b = spend_df[mask_spend_b]["spend"].sum()
@@ -2427,20 +2437,21 @@ with tabs[6]:
                 submitted_multi = st.form_submit_button("🚀 Create Multi-Marketplace Test", type="primary")
                 
                 if submitted_multi and test_name and len(marketplaces_to_compare) >= 2:
-                    # Calculate metrics for each marketplace
                     marketplace_results = []
+                    multi_start_ts = pd.to_datetime(multi_date_start)
+                    multi_end_ts = pd.to_datetime(multi_date_end) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
                     
                     for mp in marketplaces_to_compare:
                         mask_mp = (
-                            (sales_df["date"].dt.date >= multi_date_start) & 
-                            (sales_df["date"].dt.date <= multi_date_end) &
+                            (sales_df["date"] >= multi_start_ts) & 
+                            (sales_df["date"] <= multi_end_ts) &
                             (sales_df["channel"] == mp)
                         )
                         df_mp = sales_df[mask_mp]
                         
                         mask_spend_mp = (
-                            (spend_df["date"].dt.date >= multi_date_start) & 
-                            (spend_df["date"].dt.date <= multi_date_end) &
+                            (spend_df["date"] >= multi_start_ts) & 
+                            (spend_df["date"] <= multi_end_ts) &
                             (spend_df["channel"] == mp)
                         )
                         spend_mp = spend_df[mask_spend_mp]["spend"].sum()
@@ -2490,19 +2501,25 @@ with tabs[6]:
                 submitted_time = st.form_submit_button("🚀 Create Time Period Test", type="primary")
                 
                 if submitted_time and test_name:
+                    # Convert
+                    pa_start_ts = pd.to_datetime(period_a_start)
+                    pa_end_ts = pd.to_datetime(period_a_end) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+                    pb_start_ts = pd.to_datetime(period_b_start)
+                    pb_end_ts = pd.to_datetime(period_b_end) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+
                     # Period A
                     if marketplace_time == "All Marketplaces":
-                        mask_period_a = (sales_df["date"].dt.date >= period_a_start) & (sales_df["date"].dt.date <= period_a_end)
-                        mask_spend_a = (spend_df["date"].dt.date >= period_a_start) & (spend_df["date"].dt.date <= period_a_end)
+                        mask_period_a = (sales_df["date"] >= pa_start_ts) & (sales_df["date"] <= pa_end_ts)
+                        mask_spend_a = (spend_df["date"] >= pa_start_ts) & (spend_df["date"] <= pa_end_ts)
                     else:
                         mask_period_a = (
-                            (sales_df["date"].dt.date >= period_a_start) & 
-                            (sales_df["date"].dt.date <= period_a_end) &
+                            (sales_df["date"] >= pa_start_ts) & 
+                            (sales_df["date"] <= pa_end_ts) &
                             (sales_df["channel"] == marketplace_time)
                         )
                         mask_spend_a = (
-                            (spend_df["date"].dt.date >= period_a_start) & 
-                            (spend_df["date"].dt.date <= period_a_end) &
+                            (spend_df["date"] >= pa_start_ts) & 
+                            (spend_df["date"] <= pa_end_ts) &
                             (spend_df["channel"] == marketplace_time)
                         )
                     
@@ -2511,17 +2528,17 @@ with tabs[6]:
                     
                     # Period B
                     if marketplace_time == "All Marketplaces":
-                        mask_period_b = (sales_df["date"].dt.date >= period_b_start) & (sales_df["date"].dt.date <= period_b_end)
-                        mask_spend_b = (spend_df["date"].dt.date >= period_b_start) & (spend_df["date"].dt.date <= period_b_end)
+                        mask_period_b = (sales_df["date"] >= pb_start_ts) & (sales_df["date"] <= pb_end_ts)
+                        mask_spend_b = (spend_df["date"] >= pb_start_ts) & (spend_df["date"] <= pb_end_ts)
                     else:
                         mask_period_b = (
-                            (sales_df["date"].dt.date >= period_b_start) & 
-                            (sales_df["date"].dt.date <= period_b_end) &
+                            (sales_df["date"] >= pb_start_ts) & 
+                            (sales_df["date"] <= pb_end_ts) &
                             (sales_df["channel"] == marketplace_time)
                         )
                         mask_spend_b = (
-                            (spend_df["date"].dt.date >= period_b_start) & 
-                            (spend_df["date"].dt.date <= period_b_end) &
+                            (spend_df["date"] >= pb_start_ts) & 
+                            (spend_df["date"] <= pb_end_ts) &
                             (spend_df["channel"] == marketplace_time)
                         )
                     
@@ -2792,6 +2809,7 @@ with tabs[6]:
                         st.rerun()
     else:
         st.info("📝 No A/B tests created yet. Use the forms above to create your first test!")
+
 # TAB 8: Weekly Reports
 with tabs[7]:
     st.markdown('<div class="section-header">📅 Weekly Performance Reports</div>', unsafe_allow_html=True)
@@ -2859,15 +2877,18 @@ with tabs[7]:
         if st.button("📊 Generate Report", type="primary", key="generate_report"):
             period_len = (report_end - report_start).days + 1
 
+            rep_start_ts = pd.to_datetime(report_start)
+            rep_end_ts = pd.to_datetime(report_end) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+
             # ── Current period ──────────────────────────────────────────────
             mask_s = (
-                (sales_df["date"].dt.date >= report_start) &
-                (sales_df["date"].dt.date <= report_end) &
+                (sales_df["date"] >= rep_start_ts) &
+                (sales_df["date"] <= rep_end_ts) &
                 (sales_df["channel"].isin(report_channels))
             )
             mask_sp = (
-                (spend_df["date"].dt.date >= report_start) &
-                (spend_df["date"].dt.date <= report_end) &
+                (spend_df["date"] >= rep_start_ts) &
+                (spend_df["date"] <= rep_end_ts) &
                 (spend_df["channel"].isin(report_channels))
             )
             report_df_s  = sales_df[mask_s]
@@ -2877,14 +2898,17 @@ with tabs[7]:
             # ── Same period LAST YEAR ───────────────────────────────────────
             yoy_start = report_start - timedelta(days=365)
             yoy_end   = report_end   - timedelta(days=365)
+            yoy_start_ts = pd.to_datetime(yoy_start)
+            yoy_end_ts = pd.to_datetime(yoy_end) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+            
             mask_yoy_s = (
-                (sales_df["date"].dt.date >= yoy_start) &
-                (sales_df["date"].dt.date <= yoy_end) &
+                (sales_df["date"] >= yoy_start_ts) &
+                (sales_df["date"] <= yoy_end_ts) &
                 (sales_df["channel"].isin(report_channels))
             )
             mask_yoy_sp = (
-                (spend_df["date"].dt.date >= yoy_start) &
-                (spend_df["date"].dt.date <= yoy_end) &
+                (spend_df["date"] >= yoy_start_ts) &
+                (spend_df["date"] <= yoy_end_ts) &
                 (spend_df["channel"].isin(report_channels))
             )
             yoy_df_s  = sales_df[mask_yoy_s]
@@ -3175,7 +3199,7 @@ with tabs[7]:
             st.markdown("### 🏷️ Top SKU Performance")
 
             sku_now = report['sales_data'].groupby("Parent").agg({"revenue":"sum","orders":"sum"}).reset_index()
-            sku_now["aov"] = sku_now["revenue"] / sku_now["orders"].replace(0, np.nan)
+            sku_now["aov"] = (sku_now["revenue"] / sku_now["orders"].replace(0, pd.NA)).fillna(0)
             sku_now = sku_now.sort_values("revenue", ascending=False).head(10)
 
             if has_yoy and "Parent" in report['yoy_sales'].columns:
@@ -3857,7 +3881,7 @@ Same period last year: **{report['yoy_period']}**
 
                     sku_now = (report["sales_data"].groupby("Parent")
                                .agg({"revenue":"sum","orders":"sum"}).reset_index())
-                    sku_now["aov"] = sku_now["revenue"]/sku_now["orders"].replace(0,pd.NA)
+                    sku_now["aov"] = (sku_now["revenue"]/sku_now["orders"].replace(0,pd.NA)).fillna(0)
                     sku_now = sku_now.sort_values("revenue",ascending=False).head(20)
                     has_sku_yoy = has_yoy and "Parent" in report["yoy_sales"].columns
                     if has_sku_yoy:
@@ -4037,7 +4061,7 @@ with tabs[8]:
             .agg(Revenue=("revenue","sum"), Orders=("orders","sum"))
             .sort_values("Revenue", ascending=False)
         )
-        jt_tbl["AOV"]       = jt_tbl.apply(lambda r: r["Revenue"]/r["Orders"] if r["Orders"] > 0 else 0, axis=1)
+        jt_tbl["AOV"]       = (jt_tbl["Revenue"] / jt_tbl["Orders"].replace(0, np.nan)).fillna(0)
         _total_rev = jt_tbl["Revenue"].sum()
         _total_ord = jt_tbl["Orders"].sum()
         jt_tbl["Rev_Share"] = jt_tbl["Revenue"] / _total_rev * 100 if _total_rev > 0 else 0
@@ -4133,9 +4157,6 @@ with tabs[8]:
     else:
         st.info("No 'type' column found in sales data.")
 
-
-
-
 # TAB 10: Merchandising Intel
 with tabs[9]:
     st.markdown('<div class="section-header">💎 Merchandising Intelligence</div>', unsafe_allow_html=True)
@@ -4223,8 +4244,8 @@ with tabs[9]:
     # Merchandising Intelligence has its own Jewelry Type / Stone filters.
     # We still respect the global Date Range + Marketplaces filters.
     mask_merch_sales = (
-    (sales_df["date"].dt.date >= start_date) &
-    (sales_df["date"].dt.date <= end_date) &
+    (sales_df["date"] >= start_ts) &
+    (sales_df["date"] <= end_ts) &
     (sales_df["channel"].isin(selected_channels))
     )
     df_s_merch = sales_df[mask_merch_sales]
@@ -4693,10 +4714,10 @@ with tabs[9]:
         dc_disp[["design_code","jewelry_type","stones","variants",
                  "revenue","orders","aov","revenue_share"]],
         column_config={
-            "design_code":   st.column_config.TextColumn("Design Code",   width="medium"),
-            "jewelry_type":  st.column_config.TextColumn("Jewelry Type",  width="small"),
-            "stones":        st.column_config.TextColumn("Stones",        width="large"),
-            "variants":      st.column_config.NumberColumn("# Variants",  format="%d"),
+            "design_code":   st.column_config.TextColumn("Design Code",  width="medium"),
+            "jewelry_type":  st.column_config.TextColumn("Jewelry Type", width="small"),
+            "stones":        st.column_config.TextColumn("Stones",       width="large"),
+            "variants":      st.column_config.NumberColumn("# Variants", format="%d"),
             "revenue":       st.column_config.NumberColumn("Revenue ($)", format="$%,.0f"),
             "orders":        st.column_config.NumberColumn("Orders",      format="%d"),
             "aov":           st.column_config.NumberColumn("AOV ($)",     format="$%.2f"),
@@ -4758,13 +4779,12 @@ with tabs[9]:
                                 unmatched_df.to_csv(index=False).encode("utf-8"),
                                 "unmatched_skus.csv", "text/csv", key="dl_unmatched")
 
-    # ---------------- FOOTER ----------------
-    st.markdown("---")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(f"<div style='text-align: left; color: #6b7280; font-size: 12px;'>📅 Last Updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}</div>", unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"<div style='text-align: center; color: #6b7280; font-size: 12px;'>⚙️ Safe Margin: {SAFE_MARGIN*100:.0f}%</div>", unsafe_allow_html=True)
-    with col3:
-        st.markdown(f"<div style='text-align: right; color: #6b7280; font-size: 12px;'>📊 Data Points: {len(df_s):,}</div>", unsafe_allow_html=True)
-        
+# ---------------- FOOTER ----------------
+st.markdown("---")
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.markdown(f"<div style='text-align: left; color: #6b7280; font-size: 12px;'>📅 Last Updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}</div>", unsafe_allow_html=True)
+with col2:
+    st.markdown(f"<div style='text-align: center; color: #6b7280; font-size: 12px;'>⚙️ Safe Margin: {SAFE_MARGIN*100:.0f}%</div>", unsafe_allow_html=True)
+with col3:
+    st.markdown(f"<div style='text-align: right; color: #6b7280; font-size: 12px;'>📊 Data Points: {len(df_s):,}</div>", unsafe_allow_html=True)
