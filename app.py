@@ -259,17 +259,14 @@ def load_and_process_data():
     except Exception as e:
         return None, None, f"Credentials error: {e}"
     try:
-        data1 = load_all_sheets(creds, "USA - DB for Marketplace Dashboard")
-        data2 = load_all_sheets(creds, "IB - Database for Marketplace Dashboard")
-        
-        all_dfs = {}
-        if data1: 
-            for k, v in data1.items(): all_dfs[f"USA_{k}"] = v
-        if data2: 
-            for k, v in data2.items(): all_dfs[f"IB_{k}"] = v
-            
-    except Exception as e:
-        return None, None, str(e)
+    # New consolidated data source
+    all_dfs = load_all_sheets(
+        creds,
+        "New BI Dashboard"
+    )
+
+except Exception as e:
+    return None, None, str(e)
     finally:
         try: _os.unlink(creds)
         except Exception: pass
