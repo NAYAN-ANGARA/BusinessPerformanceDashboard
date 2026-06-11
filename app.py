@@ -394,8 +394,8 @@ def load_and_process_data():
         spend_df["date"] = pd.to_datetime(
         spend_df["date"],
         errors="coerce",
-        infer_datetime_format=True
-        )
+        format="mixed"  # Use this in Pandas 2.0+ for inconsistent date strings
+    )
 
         spend_df["spend"] = pd.to_numeric(
             spend_df["spend"],
