@@ -393,8 +393,9 @@ def load_and_process_data():
     if len(spend_df) > 0:
 
         spend_df["date"] = pd.to_datetime(
-            spend_df["date"],
-            errors="coerce"
+        spend_df["date"],
+        errors="coerce",
+        infer_datetime_format=True
         )
 
         spend_df["spend"] = pd.to_numeric(
@@ -431,7 +432,10 @@ with st.spinner("⚡ Loading business intelligence..."):
         st.stop()
     
     sales_df, spend_df = result[0], result[1]
-    
+
+    sales_df["date"] = pd.to_datetime(sales_df["date"], errors="coerce")
+    spend_df["date"] = pd.to_datetime(spend_df["date"], errors="coerce")
+
     if sales_df is None or sales_df.empty:
         st.warning("⚠️ No sales data available.")
         st.stop()
@@ -498,12 +502,15 @@ mask_sales = (
 )
 df_s = sales_df[mask_sales]
 
-mask_spend = (
-    (spend_df["date"].dt.date >= start_date) & 
-    (spend_df["date"].dt.date <= end_date) &
-    (spend_df["channel"].isin(selected_channels))
-)
-df_sp = spend_df[mask_spend]
+if spend_df.empty:
+    df_sp = pd.DataFrame(columns=["date","channel","spend"])
+else:
+    mask_spend = (
+        (spend_df["date"].dt.date >= start_date)
+        & (spend_df["date"].dt.date <= end_date)
+        & (spend_df["channel"].isin(selected_channels))
+    )
+    df_sp = spend_df.loc[mask_spend]
 
 # Previous Period Calculation
 days_diff = (end_date - start_date).days + 1
@@ -528,12 +535,15 @@ mask_sales_ly = (
 )
 df_s_ly = sales_df[mask_sales_ly]
 
-mask_spend_ly = (
-    (spend_df["date"].dt.date >= start_ly.date()) & 
-    (spend_df["date"].dt.date <= end_ly.date()) &
-    (spend_df["channel"].isin(selected_channels))
-)
-df_sp_ly = spend_df[mask_spend_ly]
+if spend_df.empty:
+    df_sp_ly = pd.DataFrame(columns=["date","channel","spend"])
+else:
+    mask_spend_ly = (
+        (spend_df["date"].dt.date >= start_ly.date())
+        & (spend_df["date"].dt.date <= end_ly.date())
+        & (spend_df["channel"].isin(selected_channels))
+    )
+    df_sp_ly = spend_df.loc[mask_spend_ly]
 
 # ---------------- METRIC CALCULATIONS ----------------
 def calc_metrics(sales, spend):
