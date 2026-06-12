@@ -28,12 +28,9 @@ SAFE_MARGIN = 0.62  # Profit margin after COGS but before Ads/Commission
 # ---------------- ENHANCED CSS ----------------
 st.markdown("""
 <style>
-    /* Main Background with Gradient */
     .stApp {
         background: linear-gradient(135deg, #0f1116 0%, #1a1d29 100%);
     }
-    
-    /* KPI Cards with Enhanced Glassmorphism */
     .metric-card {
         background: linear-gradient(135deg, rgba(30, 32, 40, 0.8) 0%, rgba(42, 45, 58, 0.6) 100%);
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -45,29 +42,21 @@ st.markdown("""
         position: relative;
         overflow: hidden;
     }
-    
     .metric-card::before {
         content: "";
         position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
+        top: 0; left: 0; right: 0;
         height: 4px;
         background: linear-gradient(90deg, var(--accent-color), transparent);
         opacity: 0;
         transition: opacity 0.3s ease;
     }
-    
     .metric-card:hover {
         transform: translateY(-6px);
         border-color: rgba(255, 255, 255, 0.25);
         box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
     }
-    
-    .metric-card:hover::before {
-        opacity: 1;
-    }
-    
+    .metric-card:hover::before { opacity: 1; }
     .metric-label {
         font-size: 13px;
         text-transform: uppercase;
@@ -79,7 +68,6 @@ st.markdown("""
         align-items: center;
         gap: 8px;
     }
-    
     .metric-value {
         font-size: 32px;
         font-weight: 900;
@@ -91,18 +79,14 @@ st.markdown("""
         -webkit-text-fill-color: transparent;
         background-clip: text;
     }
-    
-    /* Dynamic Metric Accents */
-    .accent-blue { --accent-color: #3b82f6; }
-    .accent-green { --accent-color: #10b981; }
+    .accent-blue   { --accent-color: #3b82f6; }
+    .accent-green  { --accent-color: #10b981; }
     .accent-orange { --accent-color: #f97316; }
     .accent-purple { --accent-color: #8b5cf6; }
-    .accent-pink { --accent-color: #ec4899; }
-    .accent-cyan { --accent-color: #06b6d4; }
+    .accent-pink   { --accent-color: #ec4899; }
+    .accent-cyan   { --accent-color: #06b6d4; }
     .accent-yellow { --accent-color: #eab308; }
-    .accent-red { --accent-color: #ef4444; }
-    
-    /* Delta Badge with Glow */
+    .accent-red    { --accent-color: #ef4444; }
     .delta-badge {
         display: inline-flex;
         align-items: center;
@@ -112,108 +96,46 @@ st.markdown("""
         font-weight: 800;
         gap: 4px;
     }
-    .delta-pos { 
-        background: rgba(16, 185, 129, 0.25); 
-        color: #34d399;
-        box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
-    }
-    .delta-neg { 
-        background: rgba(239, 68, 68, 0.25); 
-        color: #f87171;
-        box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
-    }
-    
-    /* Section Headers with Icons */
+    .delta-pos { background: rgba(16,185,129,0.25); color:#34d399; box-shadow:0 0 20px rgba(16,185,129,0.3); }
+    .delta-neg { background: rgba(239,68,68,0.25);  color:#f87171; box-shadow:0 0 20px rgba(239,68,68,0.3); }
     .section-header {
-        font-size: 20px;
-        font-weight: 700;
-        color: #f3f4f6;
+        font-size: 20px; font-weight: 700; color: #f3f4f6;
         margin: 40px 0 20px 0;
-        display: flex;
-        align-items: center;
-        gap: 12px;
+        display: flex; align-items: center; gap: 12px;
         padding-bottom: 12px;
-        border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+        border-bottom: 2px solid rgba(255,255,255,0.1);
     }
-    
-    /* Tabs Enhancement */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background: rgba(30, 32, 40, 0.5);
-        padding: 8px;
-        border-radius: 12px;
+        gap: 8px; background: rgba(30,32,40,0.5); padding: 8px; border-radius: 12px;
     }
-    
     .stTabs [data-baseweb="tab"] {
-        border-radius: 8px;
-        padding: 12px 24px;
-        font-weight: 600;
-        transition: all 0.3s ease;
+        border-radius: 8px; padding: 12px 24px; font-weight: 600; transition: all 0.3s ease;
     }
-    
     .stTabs [aria-selected="true"] {
         background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
     }
-    
-    /* Custom Button Styles */
     .stButton > button {
-        border-radius: 10px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px; font-weight: 600; transition: all 0.3s ease;
+        border: 1px solid rgba(255,255,255,0.1);
     }
-    
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-    }
-    
-    /* Hide Plotly Modebar */
-    .js-plotly-plot .plotly .modebar {
-        display: none !important;
-    }
-    
-    /* Expander Styling */
+    .stButton > button:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+    .js-plotly-plot .plotly .modebar { display: none !important; }
     .streamlit-expanderHeader {
-        background: rgba(30, 32, 40, 0.6);
-        border-radius: 8px;
-        font-weight: 600;
+        background: rgba(30,32,40,0.6); border-radius: 8px; font-weight: 600;
     }
-    
-    .streamlit-expanderHeader:hover {
-        background: rgba(42, 45, 58, 0.8);
-    }
-
-    /* RECOMMENDATION CARDS */
+    .streamlit-expanderHeader:hover { background: rgba(42,45,58,0.8); }
     .rec-card {
-        background: rgba(30, 32, 40, 0.6);
+        background: rgba(30,32,40,0.6);
         border-left: 4px solid #3b82f6;
-        border-radius: 8px;
-        padding: 16px;
-        margin-bottom: 12px;
-        transition: transform 0.2s;
+        border-radius: 8px; padding: 16px; margin-bottom: 12px; transition: transform 0.2s;
     }
-    .rec-card:hover {
-        transform: translateX(5px);
-        background: rgba(42, 45, 58, 0.8);
-    }
-    .rec-title {
-        font-weight: 700;
-        font-size: 16px;
-        color: #fff;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    .rec-body {
-        color: #9ca3af;
-        font-size: 14px;
-        margin-top: 4px;
-    }
-    .rec-high { border-left-color: #10b981; } /* Green - Scale */
-    .rec-warn { border-left-color: #f59e0b; } /* Orange - Optimize */
-    .rec-crit { border-left-color: #ef4444; } /* Red - Cut */
-    .rec-info { border-left-color: #3b82f6; } /* Blue - Info */
+    .rec-card:hover { transform: translateX(5px); background: rgba(42,45,58,0.8); }
+    .rec-title { font-weight:700; font-size:16px; color:#fff; display:flex; align-items:center; gap:8px; }
+    .rec-body  { color:#9ca3af; font-size:14px; margin-top:4px; }
+    .rec-high { border-left-color: #10b981; }
+    .rec-warn { border-left-color: #f59e0b; }
+    .rec-crit { border-left-color: #ef4444; }
+    .rec-info { border-left-color: #3b82f6; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -221,17 +143,14 @@ st.markdown("""
 def metric_card(label, value, delta=None, prefix="", suffix="", color="blue", inverse=False, icon=""):
     delta_html = ""
     if delta is not None:
-        is_pos = delta >= 0
+        is_pos  = delta >= 0
         is_good = not is_pos if inverse else is_pos
-        
         delta_class = "delta-pos" if is_good else "delta-neg"
         arrow = "↑" if is_pos else "↓"
         delta_html = f'<span class="delta-badge {delta_class}">{arrow} {abs(delta):.1f}%</span>'
     else:
         delta_html = '<span style="color:#6b7280; font-size:11px">No prev data</span>'
-    
-    icon_html = f'<span style="font-size: 16px;">{icon}</span>' if icon else ''
-        
+    icon_html = f'<span style="font-size:16px;">{icon}</span>' if icon else ''
     st.markdown(f"""
     <div class="metric-card accent-{color}">
         <div class="metric-label">{icon_html}{label}</div>
@@ -241,48 +160,41 @@ def metric_card(label, value, delta=None, prefix="", suffix="", color="blue", in
     """, unsafe_allow_html=True)
 
 def multiselect_with_all(label, options):
-    ALL = "All"
+    ALL  = "All"
     opts = [ALL] + sorted(list(options))
     selected = st.sidebar.multiselect(label, opts, default=[ALL])
     return list(options) if ALL in selected or not selected else selected
 
+# ============================================================
+# FIX: robust column normaliser used everywhere in loader
+# ============================================================
+def _norm_cols(df):
+    """Return list of stripped-lowercase column names."""
+    return [str(c).strip().lower() for c in df.columns]
+
 # ---------------- DATA LOADER ----------------
 @st.cache_data(show_spinner=True, ttl=600)
 def load_and_process_data():
-
     import tempfile
     import json as _json
     import os as _os
 
     try:
         creds_dict = dict(st.secrets["gcp_service_account"])
-
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".json",
-            delete=False
-        ) as tmp:
-
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
             _json.dump(creds_dict, tmp)
             creds = tmp.name
-
     except Exception as e:
         return None, None, f"Credentials error: {e}"
 
     try:
-
-        workbook = load_all_sheets(
-            creds,
-            "New BI Dashboard"
-        )
-
+        workbook = load_all_sheets(creds, "New BI Dashboard")
     except Exception as e:
         return None, None, str(e)
-
     finally:
         try:
             _os.unlink(creds)
-        except:
+        except Exception:
             pass
 
     if not workbook:
@@ -292,22 +204,25 @@ def load_and_process_data():
     spend_df = None
 
     for sheet_name, df in workbook.items():
+        # ── Normalise column names for detection only ──────────────────
+        cols_norm = _norm_cols(df)
 
-        cols = [str(c).strip().lower() for c in df.columns]
-
-        # SALES TAB
+        # ── SALES TAB detection ────────────────────────────────────────
         if (
-            "purchased on" in cols
-            and "discounted price" in cols
-            and "no of orders" in cols
+            "purchased on"    in cols_norm
+            and "discounted price" in cols_norm
+            and "no of orders"     in cols_norm
         ):
             sales_df = df.copy()
 
-        # SPEND TAB
+        # ── SPEND TAB detection ────────────────────────────────────────
+        # FIX: removed strict "channel" requirement; now only needs
+        # "date" + "spend" so "Spend _data" sheet is always picked up
+        # regardless of extra/missing columns or capitalisation.
         elif (
-            "date" in cols
-            and "channel" in cols
-            and "spend" in cols
+            "date"  in cols_norm
+            and "spend" in cols_norm
+            and "purchased on" not in cols_norm   # make sure it's not sales sheet
         ):
             spend_df = df.copy()
 
@@ -315,121 +230,104 @@ def load_and_process_data():
         return None, None, "Sales sheet not found."
 
     if spend_df is None:
-        spend_df = pd.DataFrame(
-            columns=["date", "channel", "spend"]
-        )
+        spend_df = pd.DataFrame(columns=["date", "channel", "spend"])
 
-    # =====================================================
+    # =====================================================================
     # SALES PROCESSING
-    # =====================================================
+    # =====================================================================
+    # Normalise column names to snake_case
+    sales_df.columns = [str(c).strip().lower().replace(" ", "_") for c in sales_df.columns]
 
-    sales_df.columns = [
-        c.strip().lower().replace(" ", "_")
-        for c in sales_df.columns
-    ]
-
-    sales_df["date"] = pd.to_datetime(
-        sales_df["purchased_on"],
-        errors="coerce"
-    )
+    sales_df["date"] = pd.to_datetime(sales_df["purchased_on"], errors="coerce")
 
     sales_df["revenue"] = pd.to_numeric(
-        sales_df["discounted_price"],
-        errors="coerce"
+        sales_df.get("discounted_price", 0), errors="coerce"
     ).fillna(0)
 
     sales_df["orders"] = pd.to_numeric(
-        sales_df["no_of_orders"],
-        errors="coerce"
+        sales_df.get("no_of_orders", 0), errors="coerce"
     ).fillna(0)
 
-    sales_df["selling_commission"] = pd.to_numeric(
-        sales_df["selling_commission"],
-        errors="coerce"
-    ).fillna(0)
+    # ── FIX: selling_commission — tolerate missing column ─────────────
+    # The actual column from the sheet header is "Selling Commission"
+    # → snake_case → "selling_commission".
+    # Also guard against the column simply not existing.
+    if "selling_commission" in sales_df.columns:
+        sales_df["selling_commission"] = pd.to_numeric(
+            sales_df["selling_commission"], errors="coerce"
+        ).fillna(0)
+    else:
+        # Try to find it under any similar name
+        _comm_candidates = [
+            c for c in sales_df.columns
+            if "commission" in c or "comm" in c
+        ]
+        if _comm_candidates:
+            sales_df["selling_commission"] = pd.to_numeric(
+                sales_df[_comm_candidates[0]], errors="coerce"
+            ).fillna(0)
+        else:
+            sales_df["selling_commission"] = 0.0
 
-    sales_df["channel"] = (
-        sales_df["channel"]
-        .astype(str)
-        .str.strip()
-    )
-
-    sales_df["type"] = (
-        sales_df["type"]
-        .astype(str)
-        .str.strip()
-    )
+    sales_df["channel"] = sales_df["channel"].astype(str).str.strip()
+    sales_df["type"]    = sales_df["type"].astype(str).str.strip() if "type" in sales_df.columns else "Unknown"
 
     if "parent" in sales_df.columns:
-        sales_df["Parent"] = (
-            sales_df["parent"]
-            .astype(str)
-            .str.strip()
-        )
+        sales_df["Parent"] = sales_df["parent"].astype(str).str.strip()
     else:
         sales_df["Parent"] = "Unknown"
 
     if "sku" in sales_df.columns:
-        sales_df["SKU"] = (
-            sales_df["sku"]
-            .astype(str)
-            .str.strip()
-        )
+        sales_df["SKU"] = sales_df["sku"].astype(str).str.strip()
     else:
         sales_df["SKU"] = "Unknown"
 
     sales_df = sales_df.dropna(subset=["date"])
 
-    # =====================================================
+    # =====================================================================
     # SPEND PROCESSING
-    # =====================================================
-
-    spend_df.columns = [
-        c.strip().lower().replace(" ", "_")
-        for c in spend_df.columns
-    ]
+    # =====================================================================
+    spend_df.columns = [str(c).strip().lower().replace(" ", "_") for c in spend_df.columns]
 
     if len(spend_df) > 0:
+        spend_df["date"] = pd.to_datetime(spend_df["date"], errors="coerce", format="mixed")
+        spend_df["spend"] = pd.to_numeric(spend_df["spend"], errors="coerce").fillna(0)
 
-        spend_df["date"] = pd.to_datetime(
-        spend_df["date"],
-        errors="coerce",
-        format="mixed"  # Use this in Pandas 2.0+ for inconsistent date strings
-    )
+        # FIX: channel column may be named differently or absent
+        if "channel" not in spend_df.columns:
+            # Try common alternatives
+            _ch_candidates = [c for c in spend_df.columns if "channel" in c or "marketplace" in c or "platform" in c]
+            if _ch_candidates:
+                spend_df["channel"] = spend_df[_ch_candidates[0]].astype(str).str.strip()
+            else:
+                spend_df["channel"] = "All"
+        else:
+            spend_df["channel"] = spend_df["channel"].astype(str).str.strip()
 
-        spend_df["spend"] = pd.to_numeric(
-            spend_df["spend"],
-            errors="coerce"
-        ).fillna(0)
-
-        spend_df["channel"] = (
-            spend_df["channel"]
-            .astype(str)
-            .str.strip()
+        # Replace blank/nan channel values
+        spend_df["channel"] = spend_df["channel"].replace(
+            {"": "All", "nan": "All", "None": "All", "NaN": "All"}
         )
 
         spend_df = spend_df.dropna(subset=["date"])
-
     else:
-
-        spend_df = pd.DataFrame(
-            {
-                "date": pd.to_datetime([]),
-                "channel": [],
-                "spend": []
-            }
-        )
+        spend_df = pd.DataFrame({
+            "date":    pd.to_datetime([]),
+            "channel": [],
+            "spend":   [],
+        })
 
     return sales_df, spend_df, None
+
 
 # ---------------- LOAD STATE ----------------
 with st.spinner("⚡ Loading business intelligence..."):
     result = load_and_process_data()
-    
-    if result[2]:  # Error
+
+    if result[2]:
         st.error(f"❌ **Data Load Failed:** {result[2]}")
         st.stop()
-    
+
     sales_df, spend_df = result[0], result[1]
 
     sales_df["date"] = pd.to_datetime(sales_df["date"], errors="coerce")
@@ -442,21 +340,30 @@ with st.spinner("⚡ Loading business intelligence..."):
 # ---------------- SIDEBAR FILTERS ----------------
 st.sidebar.title("🎛️ Control Panel")
 
-# Date Range
 min_date = sales_df["date"].min().date()
 max_date = sales_df["date"].max().date()
 
 col1, col2 = st.sidebar.columns(2)
 with col1:
-    start_date = st.date_input("Start Date", max_date - timedelta(days=30), min_value=min_date, max_value=max_date)
+    # FIX: max_value=date.today() so calendar isn't locked at last data row
+    start_date = st.date_input(
+        "Start Date",
+        max_date - timedelta(days=30),
+        min_value=min_date,
+        max_value=date.today()      # ← was max_date
+    )
 with col2:
-    end_date = st.date_input("End Date", max_date, min_value=min_date, max_value=max_date)
+    end_date = st.date_input(
+        "End Date",
+        max_date,
+        min_value=min_date,
+        max_value=date.today()      # ← was max_date
+    )
 
 # Multi-Selects
 selected_channels = multiselect_with_all("📺 Marketplaces", sales_df["channel"].unique())
 
 if "type" in sales_df.columns:
-    # Remap type values to canonical names before showing in sidebar
     def _sidebar_remap(v):
         v = str(v).strip()
         if v in ("", "nan", "None", "NaN", "<NA>", "Unknown"):
@@ -475,17 +382,15 @@ if "type" in sales_df.columns:
         return _m.get(v.lower(), v)
 
     _type_display_series = sales_df["type"].apply(_sidebar_remap)
-    _type_options = sorted(_type_display_series.unique().tolist())
+    _type_options        = sorted(_type_display_series.unique().tolist())
     selected_types_display = multiselect_with_all("🏷️ Product Types", _type_options)
-    # Map display selection back to all raw values that map to it
     selected_types = sales_df.loc[
         _type_display_series.isin(selected_types_display), "type"
     ].unique().tolist()
 else:
-    selected_types = []
+    selected_types         = []
     selected_types_display = []
 
-# Comparison Period
 st.sidebar.markdown("---")
 comparison_period = st.sidebar.selectbox(
     "📊 Compare Against",
@@ -494,10 +399,10 @@ comparison_period = st.sidebar.selectbox(
 
 # ---------------- APPLY FILTERS ----------------
 start_ts = pd.to_datetime(start_date)
-end_ts = pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+end_ts   = pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
 
 mask_sales = (
-    (sales_df["date"] >= start_ts) & 
+    (sales_df["date"] >= start_ts) &
     (sales_df["date"] <= end_ts) &
     (sales_df["channel"].isin(selected_channels)) &
     (sales_df["type"].isin(selected_types) if "type" in sales_df.columns and selected_types else True)
@@ -505,63 +410,61 @@ mask_sales = (
 df_s = sales_df[mask_sales]
 
 if spend_df.empty:
-    df_sp = pd.DataFrame(columns=["date","channel","spend"])
+    df_sp = pd.DataFrame(columns=["date", "channel", "spend"])
 else:
     mask_spend = (
-        (spend_df["date"] >= start_ts)
-        & (spend_df["date"] <= end_ts)
-        & (spend_df["channel"].isin(selected_channels))
+        (spend_df["date"] >= start_ts) &
+        (spend_df["date"] <= end_ts) &
+        (spend_df["channel"].isin(selected_channels))
     )
     df_sp = spend_df.loc[mask_spend]
 
-# Previous Period Calculation
+# Previous Period
 days_diff = (end_date - start_date).days + 1
 
 if comparison_period == "Year over Year":
     start_ly = start_date - pd.DateOffset(years=1)
-    end_ly = end_date - pd.DateOffset(years=1)
+    end_ly   = end_date   - pd.DateOffset(years=1)
 elif comparison_period == "Month over Month":
     start_ly = start_date - pd.DateOffset(months=1)
-    end_ly = end_date - pd.DateOffset(months=1)
+    end_ly   = end_date   - pd.DateOffset(months=1)
 elif comparison_period == "Week over Week":
     start_ly = start_date - timedelta(days=7)
-    end_ly = end_date - timedelta(days=7)
-else:  # Previous Period
+    end_ly   = end_date   - timedelta(days=7)
+else:
     start_ly = start_date - timedelta(days=days_diff)
-    end_ly = start_date - timedelta(days=1)
+    end_ly   = start_date - timedelta(days=1)
 
 start_ly_ts = pd.to_datetime(start_ly)
-end_ly_ts = pd.to_datetime(end_ly) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+end_ly_ts   = pd.to_datetime(end_ly) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
 
 mask_sales_ly = (
-    (sales_df["date"] >= start_ly_ts) & 
+    (sales_df["date"] >= start_ly_ts) &
     (sales_df["date"] <= end_ly_ts) &
     (sales_df["channel"].isin(selected_channels))
 )
 df_s_ly = sales_df[mask_sales_ly]
 
 if spend_df.empty:
-    df_sp_ly = pd.DataFrame(columns=["date","channel","spend"])
+    df_sp_ly = pd.DataFrame(columns=["date", "channel", "spend"])
 else:
     mask_spend_ly = (
-        (spend_df["date"] >= start_ly_ts)
-        & (spend_df["date"] <= end_ly_ts)
-        & (spend_df["channel"].isin(selected_channels))
+        (spend_df["date"] >= start_ly_ts) &
+        (spend_df["date"] <= end_ly_ts) &
+        (spend_df["channel"].isin(selected_channels))
     )
     df_sp_ly = spend_df.loc[mask_spend_ly]
 
 # ---------------- METRIC CALCULATIONS ----------------
 def calc_metrics(sales, spend):
-    rev = sales["revenue"].sum()
-    comm = sales["selling_commission"].sum() if "selling_commission" in sales.columns else 0
-    ads = spend["spend"].sum()
+    rev    = sales["revenue"].sum()
+    comm   = sales["selling_commission"].sum() if "selling_commission" in sales.columns else 0
+    ads    = spend["spend"].sum() if not spend.empty else 0
     orders = sales["orders"].sum()
-    
-    net = (rev * SAFE_MARGIN) - ads - comm
-    roas = (rev / ads) if ads > 0 else 0
-    acos = (ads / rev * 100) if rev > 0 else 0
-    aov = (rev / orders) if orders > 0 else 0
-    
+    net    = (rev * SAFE_MARGIN) - ads - comm
+    roas   = (rev / ads)       if ads > 0  else 0
+    acos   = (ads / rev * 100) if rev > 0  else 0
+    aov    = (rev / orders)    if orders > 0 else 0
     return {
         "Revenue": rev, "Orders": orders, "Spend": ads, "Commission": comm,
         "Net": net, "ROAS": roas, "ACOS": acos, "AOV": aov
@@ -569,60 +472,49 @@ def calc_metrics(sales, spend):
 
 def generate_insights(df_channel, current_metrics):
     insights = []
-    
-    # 1. CHANNEL SCALING OPPORTUNITIES (High ROAS)
     if 'roas' in df_channel.columns:
-        scale_ops = df_channel[df_channel['roas'] >= 3.0]
-        for _, row in scale_ops.iterrows():
+        for _, row in df_channel[df_channel['roas'] >= 3.0].iterrows():
             insights.append({
                 "type": "scale",
                 "title": f"🚀 Scale Up: {row['channel']}",
-                "msg": f"ROAS is strong at {row['roas']:.2f}x. Consider increasing daily budget by 15-20% to maximize volume while maintaining profitability.",
+                "msg": f"ROAS is strong at {row['roas']:.2f}x. Consider increasing daily budget by 15-20%.",
                 "metric": f"{row['roas']:.2f}x ROAS"
             })
-
-    # 2. BLEEDING CAMPAIGNS (Low ROAS / High Spend)
     if 'roas' in df_channel.columns and 'spend' in df_channel.columns:
-        bleeding = df_channel[(df_channel['roas'] < 1.5) & (df_channel['spend'] > 500)]
-        for _, row in bleeding.iterrows():
+        for _, row in df_channel[(df_channel['roas'] < 1.5) & (df_channel['spend'] > 500)].iterrows():
             insights.append({
                 "type": "crit",
                 "title": f"🛑 High Spend / Low Return: {row['channel']}",
-                "msg": f"This channel has spent ${row['spend']:,.0f} with only {row['roas']:.2f}x ROAS. Review search terms, pause bleeding keywords, or lower bids immediately.",
+                "msg": f"Spent ${row['spend']:,.0f} with only {row['roas']:.2f}x ROAS. Review search terms or lower bids.",
                 "metric": f"${row['spend']:,.0f} Spend"
             })
-
-    # 3. PROFITABILITY WARNING
     if current_metrics['Net'] < 0:
         insights.append({
             "type": "crit",
             "title": "📉 Net Loss Alert",
-            "msg": "The business is currently operating at a net loss for the selected period. Prioritize cutting Ad Spend on channels with < 2.0 ROAS immediately.",
+            "msg": "Operating at a net loss for this period. Cut spend on channels with < 2.0 ROAS immediately.",
             "metric": f"${current_metrics['Net']:,.0f}"
         })
     elif current_metrics['Revenue'] > 0 and (current_metrics['Net'] / current_metrics['Revenue']) < 0.10:
         insights.append({
             "type": "warn",
             "title": "⚠️ Thin Margins",
-            "msg": "Net Profit margin is below 10%. Keep a close eye on COGS and Commission rates.",
+            "msg": "Net margin is below 10%. Watch COGS and commission rates closely.",
             "metric": f"{(current_metrics['Net']/current_metrics['Revenue']*100):.1f}% Margin"
         })
-
-    # 4. AOV OPPORTUNITIES
-    if current_metrics['AOV'] > 0 and current_metrics['AOV'] < 50: # Example threshold
+    if current_metrics['AOV'] > 0 and current_metrics['AOV'] < 50:
         insights.append({
             "type": "info",
             "title": "📦 Bundle Opportunity",
-            "msg": "AOV is below $50. Consider creating 'Buy 2 Save 10%' bundles or adding post-purchase upsells to increase basket size.",
+            "msg": "AOV is below $50. Try 'Buy 2 Save 10%' bundles or post-purchase upsells.",
             "metric": f"${current_metrics['AOV']:.2f} Avg"
         })
-
     return insights
 
 curr = calc_metrics(df_s, df_sp)
 prev = calc_metrics(df_s_ly, df_sp_ly)
 
-def delta(k): 
+def delta(k):
     if prev[k] == 0: return 0
     return ((curr[k] - prev[k]) / prev[k]) * 100
 
@@ -636,39 +528,29 @@ with c2:
         st.cache_data.clear()
         st.rerun()
 
-# ---------------- UI: ENHANCED KPI GRID ----------------
+# ---------------- KPI GRID ----------------
 st.markdown('<div class="section-header">💎 Key Performance Indicators</div>', unsafe_allow_html=True)
 
-# First Row - Primary Metrics
 k1, k2, k3, k4 = st.columns(4)
-with k1: 
-    metric_card("Total Revenue", f"{curr['Revenue']:,.0f}", delta("Revenue"), prefix="$", color="blue", icon="💰")
-with k2: 
-    metric_card("Total Orders", f"{curr['Orders']:,.0f}", delta("Orders"), color="cyan", icon="🛒")
-with k3: 
-    metric_card("Average Order Value", f"{curr['AOV']:,.2f}", delta("AOV"), prefix="$", color="purple", icon="📊")
-with k4: 
-    metric_card("Net Profit", f"{curr['Net']:,.0f}", delta("Net"), prefix="$", color="green", icon="💹")
+with k1: metric_card("Total Revenue",        f"{curr['Revenue']:,.0f}",  delta("Revenue"),    prefix="$", color="blue",   icon="💰")
+with k2: metric_card("Total Orders",         f"{curr['Orders']:,.0f}",   delta("Orders"),                color="cyan",   icon="🛒")
+with k3: metric_card("Average Order Value",  f"{curr['AOV']:,.2f}",      delta("AOV"),        prefix="$", color="purple", icon="📊")
+with k4: metric_card("Net Profit",           f"{curr['Net']:,.0f}",      delta("Net"),        prefix="$", color="green",  icon="💹")
 
 st.markdown("")
 
-# Second Row - Performance Metrics
 k5, k6, k7, k8 = st.columns(4)
-with k5: 
-    metric_card("Ad Spend", f"{curr['Spend']:,.0f}", delta("Spend"), prefix="$", color="orange", inverse=True, icon="📢")
-with k6: 
-    metric_card("Selling Commission", f"{curr['Commission']:,.0f}", delta("Commission"), prefix="$", color="pink", inverse=True, icon="💳")
-with k7: 
-    metric_card("ROAS", f"{curr['ROAS']:.2f}", delta("ROAS"), suffix="x", color="yellow", icon="🎯")
-with k8: 
-    metric_card("ACOS", f"{curr['ACOS']:.1f}", delta("ACOS"), suffix="%", color="red", inverse=True, icon="📈")
+with k5: metric_card("Ad Spend",         f"{curr['Spend']:,.0f}",      delta("Spend"),      prefix="$", color="orange", inverse=True, icon="📢")
+with k6: metric_card("Selling Commission",f"{curr['Commission']:,.0f}", delta("Commission"), prefix="$", color="pink",   inverse=True, icon="💳")
+with k7: metric_card("ROAS",             f"{curr['ROAS']:.2f}",         delta("ROAS"),                  suffix="x", color="yellow", icon="🎯")
+with k8: metric_card("ACOS",             f"{curr['ACOS']:.1f}",         delta("ACOS"),                  suffix="%", color="red",    inverse=True, icon="📈")
 
-# ---------------- UI: ENHANCED ANALYSIS TABS ----------------
+# ---------------- TABS ----------------
 st.markdown("")
 tabs = st.tabs([
     "🚀 Strategy & Recommendations",
-    "📈 Performance Trends", 
-    "🛒 Marketplace Analysis", 
+    "📈 Performance Trends",
+    "🛒 Marketplace Analysis",
     "🏷️ SKU Analysis",
     "📊 Profitability Deep Dive",
     "🔮 Forecasting & Predictions",
@@ -678,389 +560,240 @@ tabs = st.tabs([
     "💎 Merchandising Intel"
 ])
 
+# ══════════════════════════════════════════════════════════════════════════════
 # TAB 1: Strategy & Recommendations
+# ══════════════════════════════════════════════════════════════════════════════
 with tabs[0]:
     st.markdown('<div class="section-header">🧠 AI Strategic Insights</div>', unsafe_allow_html=True)
-    
-    # Generate insights based on the Channel Matrix
+
     ch_rev_rec = df_s.groupby("channel")["revenue"].sum().reset_index()
-    ch_sp_rec = df_sp.groupby("channel")["spend"].sum().reset_index()
+    ch_sp_rec  = df_sp.groupby("channel")["spend"].sum().reset_index() if not df_sp.empty else pd.DataFrame(columns=["channel","spend"])
     ch_matrix_rec = pd.merge(ch_rev_rec, ch_sp_rec, on="channel", how="outer").fillna(0)
     ch_matrix_rec["roas"] = ch_matrix_rec.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
-    
+
     recommendations = generate_insights(ch_matrix_rec, curr)
-    
+
     col1, col2 = st.columns([2, 1])
-    
     with col1:
         if not recommendations:
-            st.info("✅ Business looks stable. No critical alerts found based on current thresholds.")
+            st.info("✅ Business looks stable. No critical alerts found.")
         else:
+            css_map = {"scale":("rec-high","📈"), "warn":("rec-warn","⚠️"), "crit":("rec-crit","🚨"), "info":("rec-info","💡")}
             for rec in recommendations:
-                # Map type to CSS class and icon
-                css_map = {
-                    "scale": ("rec-high", "📈"),
-                    "warn": ("rec-warn", "⚠️"),
-                    "crit": ("rec-crit", "🚨"),
-                    "info": ("rec-info", "💡")
-                }
-                style_class, icon = css_map.get(rec['type'], ("rec-info", "ℹ️"))
-                
+                style_class, icon = css_map.get(rec['type'], ("rec-info","ℹ️"))
                 st.markdown(f"""
                 <div class="rec-card {style_class}">
-                    <div class="rec-title">{icon} {rec['title']} <span style="margin-left:auto; font-size:12px; opacity:0.8; background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:10px;">{rec['metric']}</span></div>
+                    <div class="rec-title">{icon} {rec['title']}
+                        <span style="margin-left:auto;font-size:12px;opacity:0.8;background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:10px;">{rec['metric']}</span>
+                    </div>
                     <div class="rec-body">{rec['msg']}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
     with col2:
         st.markdown("**🎯 Projected Outcome**")
-        st.caption("If you optimize based on these insights:")
-        
-        # Simple projection logic
-        potential_savings = ch_matrix_rec[ch_matrix_rec['roas'] < 1.5]['spend'].sum() * 0.5 # Assume we cut 50% of bad spend
-        potential_gain = ch_matrix_rec[ch_matrix_rec['roas'] >= 3.0]['revenue'].sum() * 0.2 # Assume 20% growth on good channels
-        
-        new_net = curr['Net'] + potential_savings + (potential_gain * 0.2) # Assuming 20% margin on new rev
-        
-        st.metric("Potential Wasted Ad Spend", f"${potential_savings:,.0f}", help="Spend on channels with < 1.5 ROAS")
-        st.metric("Revenue Growth Opportunity", f"${potential_gain:,.0f}", help="Projected lift from scaling high ROAS channels")
-        
+        st.caption("If you optimise based on these insights:")
+        potential_savings = ch_matrix_rec[ch_matrix_rec['roas'] < 1.5]['spend'].sum() * 0.5
+        potential_gain    = ch_matrix_rec[ch_matrix_rec['roas'] >= 3.0]['revenue'].sum() * 0.2
+        new_net = curr['Net'] + potential_savings + (potential_gain * 0.2)
+        st.metric("Potential Wasted Ad Spend",    f"${potential_savings:,.0f}")
+        st.metric("Revenue Growth Opportunity",   f"${potential_gain:,.0f}")
         st.markdown("---")
-        st.markdown(f"**Projected Net Profit:**")
+        st.markdown("**Projected Net Profit:**")
         st.markdown(f"<h2 style='color:#10b981'>${new_net:,.0f}</h2>", unsafe_allow_html=True)
         st.caption(f"Vs Current: ${curr['Net']:,.0f}")
 
+# ══════════════════════════════════════════════════════════════════════════════
 # TAB 2: Performance Trends
+# ══════════════════════════════════════════════════════════════════════════════
 with tabs[1]:
     col1, col2 = st.columns([2, 1])
-    
+
     with col1:
         st.markdown("**Revenue, Orders & Efficiency Timeline**")
-        
-        # Daily aggregation
-        daily_rev = df_s.groupby(pd.Grouper(key="date", freq="D")).agg({
-            "revenue": "sum",
-            "orders": "sum"
-        }).reset_index()
-        daily_spend = df_sp.groupby(pd.Grouper(key="date", freq="D"))["spend"].sum().reset_index()
+        daily_rev   = df_s.groupby(pd.Grouper(key="date", freq="D")).agg({"revenue":"sum","orders":"sum"}).reset_index()
+        daily_spend = df_sp.groupby(pd.Grouper(key="date", freq="D"))["spend"].sum().reset_index() if not df_sp.empty else pd.DataFrame(columns=["date","spend"])
         daily_trend = pd.merge(daily_rev, daily_spend, on="date", how="outer").fillna(0)
         daily_trend["roas"] = daily_trend.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
-        
+
         fig_multi = go.Figure()
-        
-        # Revenue Bar
-        fig_multi.add_trace(go.Bar(
-            x=daily_trend["date"], y=daily_trend["revenue"],
-            name="Revenue", marker_color="#3b82f6", opacity=0.7, yaxis="y"
-        ))
-        
-        # Orders Line
-        fig_multi.add_trace(go.Scatter(
-            x=daily_trend["date"], y=daily_trend["orders"],
-            name="Orders", line=dict(color="#ec4899", width=2), yaxis="y2"
-        ))
-        
-        # ROAS Line
-        fig_multi.add_trace(go.Scatter(
-            x=daily_trend["date"], y=daily_trend["roas"],
-            name="ROAS", line=dict(color="#10b981", width=3, dash='dot'), yaxis="y3"
-        ))
-        
+        fig_multi.add_trace(go.Bar(x=daily_trend["date"], y=daily_trend["revenue"], name="Revenue", marker_color="#3b82f6", opacity=0.7, yaxis="y"))
+        fig_multi.add_trace(go.Scatter(x=daily_trend["date"], y=daily_trend["orders"], name="Orders", line=dict(color="#ec4899", width=2), yaxis="y2"))
+        fig_multi.add_trace(go.Scatter(x=daily_trend["date"], y=daily_trend["roas"],   name="ROAS",   line=dict(color="#10b981", width=3, dash='dot'), yaxis="y3"))
         fig_multi.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
+            template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
             hovermode="x unified",
             yaxis=dict(title="Revenue ($)", showgrid=True, gridcolor="#2d303e"),
             yaxis2=dict(title="Orders", overlaying="y", side="right", showgrid=False),
             yaxis3=dict(title="ROAS", overlaying="y", side="right", position=0.95, showgrid=False),
             legend=dict(orientation="h", y=1.15, x=0),
-            margin=dict(l=0, r=80, t=60, b=0),
-            height=420
+            margin=dict(l=0, r=80, t=60, b=0), height=420
         )
         st.plotly_chart(fig_multi, config={'displayModeBar': False})
-    
+
     with col2:
         st.markdown("**AOV Trend Analysis**")
-        
-        # Weekly AOV
-        weekly_aov = df_s.groupby(pd.Grouper(key="date", freq="W")).agg({
-            "revenue": "sum",
-            "orders": "sum"
-        }).reset_index()
-        weekly_aov["aov"] = (weekly_aov["revenue"]/weekly_aov["orders"].replace(0, np.nan)).fillna(0)
-        
+        weekly_aov = df_s.groupby(pd.Grouper(key="date", freq="W")).agg({"revenue":"sum","orders":"sum"}).reset_index()
+        weekly_aov["aov"] = (weekly_aov["revenue"] / weekly_aov["orders"].replace(0, np.nan)).fillna(0)
         fig_aov = go.Figure()
-        fig_aov.add_trace(go.Scatter(
-            x=weekly_aov["date"], y=weekly_aov["aov"],
-            fill='tozeroy',
-            line=dict(color="#8b5cf6", width=3),
-            fillcolor="rgba(139, 92, 246, 0.2)"
-        ))
-        
+        fig_aov.add_trace(go.Scatter(x=weekly_aov["date"], y=weekly_aov["aov"], fill='tozeroy', line=dict(color="#8b5cf6", width=3), fillcolor="rgba(139,92,246,0.2)"))
         fig_aov.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
+            template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
             showlegend=False,
             yaxis=dict(title="AOV ($)", showgrid=True, gridcolor="#2d303e"),
             xaxis=dict(showgrid=False),
-            margin=dict(l=0, r=0, t=40, b=0),
-            height=420
+            margin=dict(l=0, r=0, t=40, b=0), height=420
         )
         st.plotly_chart(fig_aov, config={'displayModeBar': False})
-    
-    # Commission Over Time
+
     st.markdown("**Commission & Spend Comparison**")
     if "selling_commission" in df_s.columns:
         daily_comm = df_s.groupby(pd.Grouper(key="date", freq="D"))["selling_commission"].sum().reset_index()
-        
-        if not daily_comm.empty:
+        if not daily_comm.empty and not daily_spend.empty:
             daily_costs = pd.merge(daily_spend, daily_comm, on="date", how="outer").fillna(0)
-            
             fig_costs = go.Figure()
-            fig_costs.add_trace(go.Bar(
-                x=daily_costs["date"], y=daily_costs["spend"],
-                name="Ad Spend", marker_color="#f97316"
-            ))
-            fig_costs.add_trace(go.Bar(
-                x=daily_costs["date"], y=daily_costs["selling_commission"],
-                name="Commission", marker_color="#ec4899"
-            ))
-            
+            fig_costs.add_trace(go.Bar(x=daily_costs["date"], y=daily_costs["spend"],               name="Ad Spend",   marker_color="#f97316"))
+            fig_costs.add_trace(go.Bar(x=daily_costs["date"], y=daily_costs["selling_commission"],   name="Commission", marker_color="#ec4899"))
             fig_costs.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
+                template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 barmode='stack',
                 yaxis=dict(title="Cost ($)", showgrid=True, gridcolor="#2d303e"),
                 legend=dict(orientation="h", y=1.1, x=0),
-                margin=dict(l=0, r=0, t=40, b=0),
-                height=350
+                margin=dict(l=0, r=0, t=40, b=0), height=350
             )
             st.plotly_chart(fig_costs, config={'displayModeBar': False})
 
+# ══════════════════════════════════════════════════════════════════════════════
 # TAB 3: Marketplace Analysis
+# ══════════════════════════════════════════════════════════════════════════════
 with tabs[2]:
     st.markdown('<div class="section-header">🛒 Marketplace Performance Analysis</div>', unsafe_allow_html=True)
-    
-    # Info box explaining the analysis
-    st.markdown("""
-    <div class="info-box">
-    📊 <strong>Understanding This Analysis:</strong><br>
-    • <strong>Bubble Size</strong> = ROAS (bigger bubbles = better efficiency)<br>
-    • <strong>Bubble Color</strong> = Average Order Value (darker = higher AOV)<br>
-    • <strong>Top Right</strong> = High revenue + High spend (established channels)<br>
-    • <strong>Top Left</strong> = High revenue + Low spend (highly efficient, scale these!)<br>
-    • <strong>Bottom Right</strong> = Low revenue + High spend (bleeding money, optimize or cut)
-    </div>
-    """, unsafe_allow_html=True)
-    
+
     col1, col2 = st.columns([3, 2])
-    
+
     with col1:
         st.markdown("**Marketplace Performance Matrix**")
-        
-        ch_rev = df_s.groupby("channel").agg({
-            "revenue": "sum",
-            "orders": "sum"
-        }).reset_index()
-        
+        ch_rev = df_s.groupby("channel").agg({"revenue":"sum","orders":"sum"}).reset_index()
         if "selling_commission" in df_s.columns:
             ch_comm = df_s.groupby("channel")["selling_commission"].sum().reset_index()
-            ch_rev = pd.merge(ch_rev, ch_comm, on="channel", how="left").fillna(0)
-        
-        ch_sp = df_sp.groupby("channel")["spend"].sum().reset_index()
+            ch_rev  = pd.merge(ch_rev, ch_comm, on="channel", how="left").fillna(0)
+        ch_sp = df_sp.groupby("channel")["spend"].sum().reset_index() if not df_sp.empty else pd.DataFrame(columns=["channel","spend"])
         ch_matrix = pd.merge(ch_rev, ch_sp, on="channel", how="outer").fillna(0)
         ch_matrix["roas"] = ch_matrix.apply(lambda x: x["revenue"]/x["spend"] if x["spend"]>0 else 0, axis=1)
-        ch_matrix["aov"] = (ch_matrix["revenue"] / ch_matrix["orders"].replace(0, np.nan)).fillna(0)
+        ch_matrix["aov"]  = (ch_matrix["revenue"] / ch_matrix["orders"].replace(0, np.nan)).fillna(0)
         ch_matrix["acos"] = ch_matrix.apply(lambda x: (x["spend"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
         ch_matrix = ch_matrix[ch_matrix["revenue"] > 0]
-        
+
         fig_bubble = px.scatter(
-            ch_matrix, x="spend", y="revenue", 
-            size="roas", color="aov",
+            ch_matrix, x="spend", y="revenue", size="roas", color="aov",
             hover_name="channel",
-            hover_data={"orders": ":,", "roas": ":.2f", "aov": ":$.2f", "acos": ":.1f%"},
-            labels={"spend": "Ad Spend ($)", "revenue": "Revenue ($)", "aov": "AOV ($)"},
-            size_max=80,
-            text="channel",
-            color_continuous_scale="viridis"
+            hover_data={"orders":":.0f","roas":":.2f","aov":":$.2f","acos":":.1f"},
+            labels={"spend":"Ad Spend ($)","revenue":"Revenue ($)","aov":"AOV ($)"},
+            size_max=80, text="channel", color_continuous_scale="viridis"
         )
-        
         fig_bubble.update_traces(textposition='top center', textfont_size=10)
         fig_bubble.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(255,255,255,0.05)",
-            height=500,
-            margin=dict(l=0, r=0, t=40, b=0)
+            template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.05)",
+            height=500, margin=dict(l=0, r=0, t=40, b=0)
         )
         st.plotly_chart(fig_bubble, config={'displayModeBar': False})
-    
+
     with col2:
         st.markdown("**Marketplace Revenue Share**")
-        st.caption("Distribution of revenue across marketplaces")
-        
-        fig_pie = px.pie(
-            ch_matrix, values="revenue", names="channel",
-            hole=0.5,
-            color_discrete_sequence=px.colors.sequential.Viridis
-        )
+        fig_pie = px.pie(ch_matrix, values="revenue", names="channel", hole=0.5,
+                         color_discrete_sequence=px.colors.sequential.Viridis)
         fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-        fig_pie.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            showlegend=False,
-            height=250,
-            margin=dict(l=0, r=0, t=0, b=0)
-        )
+        fig_pie.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", showlegend=False, height=250, margin=dict(l=0,r=0,t=0,b=0))
         st.plotly_chart(fig_pie, config={'displayModeBar': False})
-        
+
         st.markdown("**Marketplace Efficiency Ranking**")
-        st.caption("Ranked by ROAS (Return on Ad Spend)")
-        
-        ch_rank = ch_matrix.sort_values("roas", ascending=False)[["channel", "roas", "revenue", "spend"]].head(10).copy()
-        ch_rank["acos"] = ch_rank.apply(lambda x: (x["spend"] / x["revenue"] * 100) if x["revenue"] > 0 else 0, axis=1)
-        
+        ch_rank = ch_matrix.sort_values("roas", ascending=False)[["channel","roas","revenue","spend"]].head(10).copy()
+        ch_rank["acos"] = ch_rank.apply(lambda x: (x["spend"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
         fig_rank = go.Figure()
-        fig_rank.add_trace(go.Bar(
-            y=ch_rank["channel"], x=ch_rank["roas"],
-            orientation='h',
-            marker=dict(
-                color=ch_rank["roas"],
-                colorscale='Viridis',
-                showscale=False
-            ),
-            text=ch_rank["roas"].apply(lambda x: f"{x:.2f}x"),
-            textposition='outside'
-        ))
-        
+        fig_rank.add_trace(go.Bar(y=ch_rank["channel"], x=ch_rank["roas"], orientation='h',
+                                  marker=dict(color=ch_rank["roas"], colorscale='Viridis', showscale=False),
+                                  text=ch_rank["roas"].apply(lambda x: f"{x:.2f}x"), textposition='outside'))
         fig_rank.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
+            template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
             xaxis=dict(title="ROAS", showgrid=True, gridcolor="#2d303e"),
             yaxis=dict(title=""),
-            margin=dict(l=0, r=0, t=20, b=0),
-            height=250
+            margin=dict(l=0, r=0, t=20, b=0), height=250
         )
         st.plotly_chart(fig_rank, config={'displayModeBar': False})
-        
-        # Quick Actions
+
         st.markdown("**⚡ Quick Actions**")
-        st.caption("Recommended actions based on ROAS performance")
         for _, row in ch_matrix.sort_values('roas', ascending=False).head(3).iterrows():
             if row['roas'] >= 3.0:
                 st.success(f"**{row['channel']}**: Scale budget +20%")
             elif row['roas'] < 1.5:
                 st.error(f"**{row['channel']}**: Reduce spend -30%")
             else:
-                st.info(f"**{row['channel']}**: Optimize campaigns")
-    
-    # Detailed Marketplace Breakdown Table (full width below charts)
+                st.info(f"**{row['channel']}**: Optimise campaigns")
+
     st.markdown("---")
     st.markdown("**📋 Detailed Marketplace Metrics**")
-    st.caption("Complete performance breakdown for all marketplaces")
-    
-    display_ch = ch_matrix.copy()
-    display_ch = display_ch.sort_values('revenue', ascending=False)
+    display_ch = ch_matrix.copy().sort_values('revenue', ascending=False)
     display_ch['profit_margin'] = display_ch.apply(
-        lambda x: ((x['revenue'] * SAFE_MARGIN - x['spend'] - x.get('selling_commission', 0)) / x['revenue'] * 100) if x['revenue'] > 0 else 0, 
-        axis=1
+        lambda x: ((x['revenue']*SAFE_MARGIN - x['spend'] - x.get('selling_commission',0))/x['revenue']*100) if x['revenue']>0 else 0, axis=1
     )
-    
     st.dataframe(
-        display_ch[['channel', 'revenue', 'orders', 'aov', 'spend', 'roas', 'acos', 'profit_margin']],
+        display_ch[['channel','revenue','orders','aov','spend','roas','acos','profit_margin']],
         column_config={
-            "channel": "Marketplace",
-            "revenue": st.column_config.NumberColumn("Revenue", format="$%d"),
-            "orders": st.column_config.NumberColumn("Orders", format="%d"),
-            "aov": st.column_config.NumberColumn("AOV", format="$%.2f"),
-            "spend": st.column_config.NumberColumn("Ad Spend", format="$%d"),
-            "roas": st.column_config.NumberColumn("ROAS", format="%.2fx"),
-            "acos": st.column_config.NumberColumn("ACOS", format="%.1f%%"),
-            "profit_margin": st.column_config.NumberColumn("Profit %", format="%.1f%%"),
+            "channel":       "Marketplace",
+            "revenue":       st.column_config.NumberColumn("Revenue",      format="$%d"),
+            "orders":        st.column_config.NumberColumn("Orders",       format="%d"),
+            "aov":           st.column_config.NumberColumn("AOV",          format="$%.2f"),
+            "spend":         st.column_config.NumberColumn("Ad Spend",     format="$%d"),
+            "roas":          st.column_config.NumberColumn("ROAS",         format="%.2fx"),
+            "acos":          st.column_config.NumberColumn("ACOS",         format="%.1f%%"),
+            "profit_margin": st.column_config.NumberColumn("Profit %",     format="%.1f%%"),
         },
-        hide_index=True,
-        height=350
+        hide_index=True, height=350
     )
 
-# ==============================================================================
-# TAB 4: SKU Analysis  —  Ads data loaded from Supabase
-# ==============================================================================
-
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 4: SKU Analysis  (Ads data from Supabase)
+# ══════════════════════════════════════════════════════════════════════════════
 import requests as _requests
 
 def _get_supabase_creds():
-    """Get Supabase URL and key from env or Streamlit secrets."""
     def _get(key):
-        # Try environment variable first
         val = os.environ.get(key, "").strip()
-        if val:
-            return val
-        # Try Streamlit secrets
+        if val: return val
         try:
             import streamlit as _st
             if hasattr(_st, "secrets"):
-                try:
-                    return "".join(str(_st.secrets[key]).split())
-                except KeyError:
-                    pass
-        except Exception:
-            pass
+                try: return "".join(str(_st.secrets[key]).split())
+                except KeyError: pass
+        except Exception: pass
         return ""
-
     url = _get("SUPABASE_URL")
-
-    # Key can be stored whole as SUPABASE_SERVICE_KEY,
-    # OR split into SUPABASE_KEY_1 + SUPABASE_KEY_2 (workaround for editor line-wrap)
     key = _get("SUPABASE_SERVICE_KEY")
     if not key:
         key = _get("SUPABASE_KEY_1") + _get("SUPABASE_KEY_2")
-
     return url, key
 
-
 def _load_sku_ads_raw(start: str, end: str, _url: str = "", _key: str = "") -> pd.DataFrame:
-    """Query Supabase for rows in the given date range — paginated to bypass 1000-row cap."""
     if not _url or not _key:
-        return pd.DataFrame({"_error": ["Supabase credentials not set. Add SUPABASE_URL and SUPABASE_SERVICE_KEY to Streamlit secrets."]})
+        return pd.DataFrame({"_error": ["Supabase credentials not set."]})
     try:
-        headers = {
-            "apikey":        _key,
-            "Authorization": f"Bearer {_key}",
-            "Accept":        "application/json",
-            "Prefer":        "count=none",
-        }
-        all_data = []
-        page_size = 1000
-        offset = 0
+        headers = {"apikey": _key, "Authorization": f"Bearer {_key}", "Accept": "application/json", "Prefer": "count=none"}
+        all_data, page_size, offset = [], 1000, 0
         while True:
             params = f"select=*&date=gte.{start}&date=lte.{end}&limit={page_size}&offset={offset}"
             r = _requests.get(f"{_url}/rest/v1/sku_ads_cache?{params}", headers=headers, timeout=30)
             if r.status_code != 200:
                 return pd.DataFrame({"_error": [f"Supabase error {r.status_code}: {r.text[:300]}"]})
             batch = r.json()
-            if not batch:
-                break
+            if not batch: break
             all_data.extend(batch)
-            if len(batch) < page_size:
-                break
+            if len(batch) < page_size: break
             offset += page_size
-        if not all_data:
-            return pd.DataFrame()
+        if not all_data: return pd.DataFrame()
         df = pd.DataFrame(all_data)
-        # Rename lowercase DB columns → capitalized app columns
-        df = df.rename(columns={
-            "date": "Date", "market": "Market", "parent_sku": "Parent_SKU",
-            "sku": "SKU", "asin": "ASIN", "impressions": "Impressions",
-            "clicks": "Clicks", "spend": "Spend", "ad_sales": "Ad_Sales",
-            "ad_orders": "Ad_Orders",
-        })
+        df = df.rename(columns={"date":"Date","market":"Market","parent_sku":"Parent_SKU","sku":"SKU","asin":"ASIN",
+                                  "impressions":"Impressions","clicks":"Clicks","spend":"Spend","ad_sales":"Ad_Sales","ad_orders":"Ad_Orders"})
         df["Date"] = pd.to_datetime(df["Date"])
-        # Drop rows with no SKU (blank/null rows at top of CSV import)
         if "SKU" in df.columns:
             df = df[df["SKU"].notna() & (df["SKU"].astype(str).str.strip() != "")]
         needed = ["Date","Market","Parent_SKU","SKU","ASIN","Impressions","Clicks","Spend","Ad_Sales","Ad_Orders"]
@@ -1068,203 +801,117 @@ def _load_sku_ads_raw(start: str, end: str, _url: str = "", _key: str = "") -> p
     except Exception as exc:
         return pd.DataFrame({"_error": [str(exc)]})
 
-
 def _get_supabase_date_range(_url: str = "", _key: str = "") -> tuple:
-    """Returns (min_date_str, max_date_str) of all data in Supabase."""
-    if not _url or not _key:
-        return ("", "")
+    if not _url or not _key: return ("","")
     try:
         headers = {"apikey": _key, "Authorization": f"Bearer {_key}"}
         r_min = _requests.get(f"{_url}/rest/v1/sku_ads_cache?select=date&order=date.asc&limit=1",  headers=headers, timeout=10)
         r_max = _requests.get(f"{_url}/rest/v1/sku_ads_cache?select=date&order=date.desc&limit=1", headers=headers, timeout=10)
-        min_d = r_min.json()[0].get("date","") if r_min.status_code == 200 and r_min.json() else ""
-        max_d = r_max.json()[0].get("date","") if r_max.status_code == 200 and r_max.json() else ""
+        min_d = r_min.json()[0].get("date","") if r_min.status_code==200 and r_min.json() else ""
+        max_d = r_max.json()[0].get("date","") if r_max.status_code==200 and r_max.json() else ""
         return (min_d, max_d)
-    except Exception:
-        return ("", "")
-
+    except Exception: return ("","")
 
 def _aggregate_ads(df: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate daily rows to one row per (Market, Parent_SKU)."""
-    agg = (
-        df.groupby(["Market", "Parent_SKU"], as_index=False)
-        .agg(
-            Impressions=("Impressions", "sum"),
-            Clicks=("Clicks",           "sum"),
-            Spend=("Spend",             "sum"),
-            Ad_Sales=("Ad_Sales",       "sum"),
-            Ad_Orders=("Ad_Orders",     "sum"),
-        )
+    agg = df.groupby(["Market","Parent_SKU"], as_index=False).agg(
+        Impressions=("Impressions","sum"), Clicks=("Clicks","sum"),
+        Spend=("Spend","sum"), Ad_Sales=("Ad_Sales","sum"), Ad_Orders=("Ad_Orders","sum")
     )
     agg["CTR"]  = (agg["Clicks"]  / agg["Impressions"].replace(0, float("nan"))) * 100
-    agg["CPC"]  = (agg["Spend"]   / agg["Clicks"].replace(0,      float("nan")))
-    agg["ACOS"] = (agg["Spend"]   / agg["Ad_Sales"].replace(0,    float("nan"))) * 100
+    agg["CPC"]  = (agg["Spend"]   / agg["Clicks"].replace(0, float("nan")))
+    agg["ACOS"] = (agg["Spend"]   / agg["Ad_Sales"].replace(0, float("nan"))) * 100
     agg[["CTR","CPC","ACOS"]] = agg[["CTR","CPC","ACOS"]].fillna(0)
     return agg.sort_values("Spend", ascending=False).reset_index(drop=True)
-
 
 with tabs[3]:
     st.markdown('<div class="section-header">🏷️ SKU Performance Analysis</div>', unsafe_allow_html=True)
 
-    # Read Supabase credentials at render time (secrets available here)
     _SB_URL, _SB_KEY = _get_supabase_creds()
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # SECTION 0  ──  Amazon Ads Summary  (queried from Supabase by date range)
-    # ══════════════════════════════════════════════════════════════════════════
     with st.expander("📡 Amazon Ads Data  —  Spend · Impressions · Clicks per SKU", expanded=True):
-
-        # Query Supabase for exactly the selected date range
-        _ads_raw = _load_sku_ads_raw(
-            start_date.strftime("%Y-%m-%d"),
-            end_date.strftime("%Y-%m-%d"),
-            _url=_SB_URL, _key=_SB_KEY,
-        )
+        _ads_raw = _load_sku_ads_raw(start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"), _url=_SB_URL, _key=_SB_KEY)
 
         if not _ads_raw.empty and "_error" in _ads_raw.columns:
             st.error(f"❌ {_ads_raw['_error'].iloc[0]}")
-
         elif _ads_raw.empty:
             sb_min, sb_max = _get_supabase_date_range(_url=_SB_URL, _key=_SB_KEY)
             if sb_min and sb_max:
-                st.warning(
-                    f"No ads data for **{start_date}** → **{end_date}**. "
-                    f"Supabase has data from **{sb_min}** → **{sb_max}**. "
-                    f"Try adjusting the sidebar date filter."
-                )
+                st.warning(f"No ads data for **{start_date}** → **{end_date}**. Supabase has data from **{sb_min}** → **{sb_max}**.")
             else:
-                st.info("ℹ️ No ads data in Supabase yet. Run the GitHub Action to fetch and load data.")
-
+                st.info("ℹ️ No ads data in Supabase yet.")
         else:
             ads_filtered = _ads_raw.copy()
-
-            # ── Date range info ───────────────────────────────────────────────
             sb_min, sb_max = _get_supabase_date_range(_url=_SB_URL, _key=_SB_KEY)
-            st.caption(
-                f"📅 Supabase covers **{sb_min}** → **{sb_max}** ·  "
-                f"Showing: **{start_date.strftime('%d %b %Y')}** → **{end_date.strftime('%d %b %Y')}** ·  "
-                f"refreshed daily at 9 AM IST"
-            )
+            st.caption(f"📅 Supabase covers **{sb_min}** → **{sb_max}** · Showing: **{start_date.strftime('%d %b %Y')}** → **{end_date.strftime('%d %b %Y')}** · refreshed daily at 9 AM IST")
 
             if ads_filtered.empty:
-                st.warning(f"No ads data found for the selected date range ({start_date} → {end_date}).")
+                st.warning(f"No ads data for selected range.")
             else:
-                # ── Market filter ─────────────────────────────────────────────
-                mkt_filter = st.radio(
-                    "Market", ["All", "US", "CA"],
-                    horizontal=True, key="ads_mkt_filter"
-                )
+                mkt_filter = st.radio("Market", ["All","US","CA"], horizontal=True, key="ads_mkt_filter")
                 if mkt_filter != "All":
                     ads_filtered = ads_filtered[ads_filtered["Market"] == mkt_filter]
 
-                # ── Product type filter (uses sheet data to map type → Parent SKUs) ──
                 if "type" in df_s.columns and "Parent" in df_s.columns and selected_types:
-                    # Build set of Parent SKUs that belong to the selected product types
-                    type_skus = set(
-                        df_s[df_s["type"].isin(selected_types)]["Parent"].dropna().unique()
-                    )
+                    type_skus = set(df_s[df_s["type"].isin(selected_types)]["Parent"].dropna().unique())
                     ads_filtered = ads_filtered[ads_filtered["Parent_SKU"].isin(type_skus)]
 
-                # ── Aggregate filtered data ───────────────────────────────────
                 ads_df_raw = _aggregate_ads(ads_filtered)
-
-                # ── KPI row ───────────────────────────────────────────────────────
                 total_imp      = ads_df_raw["Impressions"].sum()
                 total_clk      = ads_df_raw["Clicks"].sum()
                 total_spend    = ads_df_raw["Spend"].sum()
                 total_ad_sales = ads_df_raw["Ad_Sales"].sum()
                 blended_acos   = (total_spend / total_ad_sales * 100) if total_ad_sales > 0 else 0
-                blended_ctr    = (total_clk / total_imp * 100) if total_imp > 0 else 0
-    
-                ak1, ak2, ak3, ak4, ak5 = st.columns(5)
+
+                ak1,ak2,ak3,ak4,ak5 = st.columns(5)
                 ak1.metric("👁️ Impressions",  f"{total_imp:,.0f}")
                 ak2.metric("🖱️ Clicks",       f"{total_clk:,.0f}")
                 ak3.metric("💸 Ad Spend",     f"${total_spend:,.2f}")
                 ak4.metric("📈 Ad Sales",     f"${total_ad_sales:,.2f}")
                 ak5.metric("🎯 Blended ACOS", f"{blended_acos:.1f}%")
-    
                 st.markdown("---")
-    
-                # ── Top 15 SKUs by Spend ──────────────────────────────────────────
+
                 top_spend = ads_df_raw.nlargest(15, "Spend")
                 fig_ads_bar = px.bar(
-                    top_spend,
-                    x="Spend", y="Parent_SKU",
-                    orientation="h",
-                    color="ACOS",
-                    color_continuous_scale="RdYlGn_r",
-                    range_color=[0, 60],
-                    custom_data=["Impressions", "Clicks", "ACOS", "CTR", "CPC", "Ad_Sales"],
-                    labels={"Spend": "Ad Spend ($)", "Parent_SKU": "Parent SKU", "ACOS": "ACOS %"},
-                    title="Top 15 SKUs by Ad Spend  (colour = ACOS%)",
+                    top_spend, x="Spend", y="Parent_SKU", orientation="h",
+                    color="ACOS", color_continuous_scale="RdYlGn_r", range_color=[0,60],
+                    custom_data=["Impressions","Clicks","ACOS","CTR","CPC","Ad_Sales"],
+                    labels={"Spend":"Ad Spend ($)","Parent_SKU":"Parent SKU","ACOS":"ACOS %"},
+                    title="Top 15 SKUs by Ad Spend (colour = ACOS%)",
                 )
-                fig_ads_bar.update_traces(
-                    hovertemplate=(
-                        "<b>%{y}</b><br>"
-                        "Spend: $%{x:,.2f}<br>"
-                        "Impressions: %{customdata[0]:,.0f}<br>"
-                        "Clicks: %{customdata[1]:,.0f}<br>"
-                        "CTR: %{customdata[3]:.2f}%<br>"
-                        "CPC: $%{customdata[4]:.2f}<br>"
-                        "Ad Sales: $%{customdata[5]:,.2f}<br>"
-                        "ACOS: %{customdata[2]:.1f}%<extra></extra>"
-                    )
-                )
+                fig_ads_bar.update_traces(hovertemplate=(
+                    "<b>%{y}</b><br>Spend: $%{x:,.2f}<br>Impressions: %{customdata[0]:,.0f}<br>"
+                    "Clicks: %{customdata[1]:,.0f}<br>CTR: %{customdata[3]:.2f}%<br>"
+                    "CPC: $%{customdata[4]:.2f}<br>Ad Sales: $%{customdata[5]:,.2f}<br>ACOS: %{customdata[2]:.1f}%<extra></extra>"
+                ))
                 fig_ads_bar.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    height=430,
-                    margin=dict(l=0, r=0, t=40, b=0),
-                    yaxis=dict(autorange="reversed"),
-                    coloraxis_colorbar=dict(title="ACOS %"),
+                    template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    height=430, margin=dict(l=0,r=0,t=40,b=0),
+                    yaxis=dict(autorange="reversed"), coloraxis_colorbar=dict(title="ACOS %")
                 )
-                st.plotly_chart(fig_ads_bar, config={"displayModeBar": False}, use_container_width=True)
-    
-                # ── Impressions vs Clicks scatter ─────────────────────────────────
+                st.plotly_chart(fig_ads_bar, config={"displayModeBar":False}, use_container_width=True)
+
                 fig_scatter = px.scatter(
-                    ads_df_raw[ads_df_raw["Impressions"] > 0],
-                    x="Impressions", y="Clicks",
-                    size="Spend",
-                    color="ACOS",
-                    color_continuous_scale="RdYlGn_r",
-                    range_color=[0, 60],
-                    hover_name="Parent_SKU",
-                    custom_data=["Spend", "ACOS", "CTR"],
-                    title="Impressions vs Clicks  (bubble = Spend, colour = ACOS%)",
+                    ads_df_raw[ads_df_raw["Impressions"]>0], x="Impressions", y="Clicks",
+                    size="Spend", color="ACOS", color_continuous_scale="RdYlGn_r", range_color=[0,60],
+                    hover_name="Parent_SKU", custom_data=["Spend","ACOS","CTR"],
+                    title="Impressions vs Clicks (bubble = Spend, colour = ACOS%)",
                 )
-                fig_scatter.update_traces(
-                    hovertemplate=(
-                        "<b>%{hovertext}</b><br>"
-                        "Impressions: %{x:,.0f}<br>"
-                        "Clicks: %{y:,.0f}<br>"
-                        "Spend: $%{customdata[0]:,.2f}<br>"
-                        "ACOS: %{customdata[1]:.1f}%<br>"
-                        "CTR: %{customdata[2]:.2f}%<extra></extra>"
-                    )
-                )
+                fig_scatter.update_traces(hovertemplate=(
+                    "<b>%{hovertext}</b><br>Impressions: %{x:,.0f}<br>Clicks: %{y:,.0f}<br>"
+                    "Spend: $%{customdata[0]:,.2f}<br>ACOS: %{customdata[1]:.1f}%<br>CTR: %{customdata[2]:.2f}%<extra></extra>"
+                ))
                 fig_scatter.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(255,255,255,0.03)",
-                    height=400,
-                    margin=dict(l=0, r=0, t=40, b=0),
+                    template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.03)",
+                    height=400, margin=dict(l=0,r=0,t=40,b=0)
                 )
-                st.plotly_chart(fig_scatter, config={"displayModeBar": False}, use_container_width=True)
-    
-                # ── Full table + download ─────────────────────────────────────────
-                # Merge sheet orders into ads data — only keep SKUs present in ads data
+                st.plotly_chart(fig_scatter, config={"displayModeBar":False}, use_container_width=True)
+
                 sheet_orders = pd.DataFrame()
                 if "Parent" in df_s.columns and "orders" in df_s.columns:
-                    sheet_orders = (
-                        df_s.groupby("Parent", as_index=False)["orders"]
-                        .sum()
-                        .rename(columns={"Parent": "Parent_SKU", "orders": "Total_Orders"})
-                    )
+                    sheet_orders = (df_s.groupby("Parent", as_index=False)["orders"]
+                                    .sum().rename(columns={"Parent":"Parent_SKU","orders":"Total_Orders"}))
 
                 disp_ads = ads_df_raw.sort_values("Spend", ascending=False).copy()
-
-                # Join sheet orders — inner-style: only rows already in ads data get the column
                 if not sheet_orders.empty:
                     disp_ads = disp_ads.merge(sheet_orders, on="Parent_SKU", how="left")
                     disp_ads["Total_Orders"] = disp_ads["Total_Orders"].fillna(0).astype(int)
@@ -1272,588 +919,343 @@ with tabs[3]:
                     disp_ads["Total_Orders"] = 0
 
                 st.markdown("**📋 Full SKU Ads Data**")
-                _max_spend = float(disp_ads["Spend"].max()) if not disp_ads.empty and disp_ads["Spend"].max() > 0 else 1.0
                 st.dataframe(
                     disp_ads,
                     column_config={
-                        "Market":        st.column_config.TextColumn("Market",        width="small"),
-                        "Parent_SKU":    st.column_config.TextColumn("Parent SKU",    width="medium"),
-                        "Impressions":   st.column_config.NumberColumn("Impressions",  format="%d"),
-                        "Clicks":        st.column_config.NumberColumn("Clicks",       format="%d"),
-                        "Spend":         st.column_config.NumberColumn("Spend ($)",    format="$%.2f"),
-                        "Ad_Sales":      st.column_config.NumberColumn("Ad Sales ($)", format="$%.2f"),
-                        "Ad_Orders":     st.column_config.NumberColumn("Ad Orders",    format="%d"),
-                        "Total_Orders":  st.column_config.NumberColumn("Total Orders", format="%d"),
-                        "CTR":           st.column_config.NumberColumn("CTR %",        format="%.2f%%"),
-                        "CPC":           st.column_config.NumberColumn("CPC ($)",      format="$%.2f"),
-                        "ACOS":          st.column_config.NumberColumn("ACOS %",       format="%.1f%%"),
+                        "Market":       st.column_config.TextColumn("Market",        width="small"),
+                        "Parent_SKU":   st.column_config.TextColumn("Parent SKU",    width="medium"),
+                        "Impressions":  st.column_config.NumberColumn("Impressions",  format="%d"),
+                        "Clicks":       st.column_config.NumberColumn("Clicks",       format="%d"),
+                        "Spend":        st.column_config.NumberColumn("Spend ($)",    format="$%.2f"),
+                        "Ad_Sales":     st.column_config.NumberColumn("Ad Sales ($)", format="$%.2f"),
+                        "Ad_Orders":    st.column_config.NumberColumn("Ad Orders",    format="%d"),
+                        "Total_Orders": st.column_config.NumberColumn("Total Orders", format="%d"),
+                        "CTR":          st.column_config.NumberColumn("CTR %",        format="%.2f%%"),
+                        "CPC":          st.column_config.NumberColumn("CPC ($)",      format="$%.2f"),
+                        "ACOS":         st.column_config.NumberColumn("ACOS %",       format="%.1f%%"),
                     },
-                    hide_index=True, use_container_width=True, height=430,
+                    hide_index=True, use_container_width=True, height=430
                 )
 
                 dl_col1, dl_col2 = st.columns(2)
-
-                # ── Download 1: Parent-SKU summary with Total Orders ──────────
                 with dl_col1:
-                    st.download_button(
-                        "📥 Download Parent-SKU Summary (CSV)",
-                        disp_ads.to_csv(index=False).encode("utf-8"),
-                        f"sku_ads_summary_{start_date}_{end_date}.csv",
-                        "text/csv", key="dl_sku_ads_summary",
-                        use_container_width=True,
-                    )
-
-                # ── Download 2: Child-SKU level data ─────────────────────────
+                    st.download_button("📥 Download Parent-SKU Summary (CSV)", disp_ads.to_csv(index=False).encode("utf-8"),
+                                       f"sku_ads_summary_{start_date}_{end_date}.csv","text/csv",key="dl_sku_ads_summary",use_container_width=True)
                 with dl_col2:
-                    sku_level_cols = [c for c in
-                        ["Market", "Parent_SKU", "SKU", "ASIN",
-                         "Impressions", "Clicks", "Spend", "Ad_Sales", "Ad_Orders"]
-                        if c in ads_filtered.columns]
-
-                    sku_export = (
-                        ads_filtered[sku_level_cols]
-                        .groupby([c for c in sku_level_cols
-                                  if c not in ("Impressions","Clicks","Spend","Ad_Sales","Ad_Orders")],
-                                 as_index=False)
-                        .agg(
-                            Impressions=("Impressions", "sum"),
-                            Clicks=("Clicks",           "sum"),
-                            Spend=("Spend",             "sum"),
-                            Ad_Sales=("Ad_Sales",       "sum"),
-                            Ad_Orders=("Ad_Orders",     "sum"),
-                        )
-                    )
-                    # Add Total Orders from sheets at child SKU level too
+                    sku_level_cols = [c for c in ["Market","Parent_SKU","SKU","ASIN","Impressions","Clicks","Spend","Ad_Sales","Ad_Orders"] if c in ads_filtered.columns]
+                    sku_export = (ads_filtered[sku_level_cols]
+                                  .groupby([c for c in sku_level_cols if c not in ("Impressions","Clicks","Spend","Ad_Sales","Ad_Orders")], as_index=False)
+                                  .agg(Impressions=("Impressions","sum"),Clicks=("Clicks","sum"),Spend=("Spend","sum"),Ad_Sales=("Ad_Sales","sum"),Ad_Orders=("Ad_Orders","sum")))
                     if not sheet_orders.empty:
                         sku_export = sku_export.merge(sheet_orders, on="Parent_SKU", how="left")
                         sku_export["Total_Orders"] = sku_export["Total_Orders"].fillna(0).astype(int)
                     else:
                         sku_export["Total_Orders"] = 0
-                        
                     sku_export["CTR"]  = (sku_export["Clicks"]  / sku_export["Impressions"].replace(0, float("nan"))) * 100
-                    sku_export["CPC"]  = (sku_export["Spend"]   / sku_export["Clicks"].replace(0,      float("nan")))
-                    sku_export["ACOS"] = (sku_export["Spend"]   / sku_export["Ad_Sales"].replace(0,    float("nan"))) * 100
+                    sku_export["CPC"]  = (sku_export["Spend"]   / sku_export["Clicks"].replace(0, float("nan")))
+                    sku_export["ACOS"] = (sku_export["Spend"]   / sku_export["Ad_Sales"].replace(0, float("nan"))) * 100
                     sku_export[["CTR","CPC","ACOS"]] = sku_export[["CTR","CPC","ACOS"]].fillna(0)
-                    sku_export = sku_export.sort_values(["Market","Spend"], ascending=[True, False]).reset_index(drop=True)
-
-                    st.download_button(
-                        "📥 Download Child-SKU Level Data (CSV)",
-                        sku_export.to_csv(index=False).encode("utf-8"),
-                        f"sku_ads_child_level_{start_date}_{end_date}.csv",
-                        "text/csv", key="dl_sku_ads_child",
-                        use_container_width=True,
-                    )
+                    sku_export = sku_export.sort_values(["Market","Spend"], ascending=[True,False]).reset_index(drop=True)
+                    st.download_button("📥 Download Child-SKU Level Data (CSV)", sku_export.to_csv(index=False).encode("utf-8"),
+                                       f"sku_ads_child_level_{start_date}_{end_date}.csv","text/csv",key="dl_sku_ads_child",use_container_width=True)
 
     st.markdown("---")
 
-    # ── Build ads summary for SKU lookups (_ads_raw already date-filtered from Supabase)
     if not _ads_raw.empty and "_error" not in _ads_raw.columns:
         _ads_summary_tab = _aggregate_ads(_ads_raw)
     else:
         _ads_summary_tab = pd.DataFrame()
 
-    def _get_ads_for_sku(parent_sku: str) -> dict | None:
-        """Return date-filtered ads metrics for a given Parent SKU."""
-        if _ads_summary_tab.empty:
-            return None
+    def _get_ads_for_sku(parent_sku: str):
+        if _ads_summary_tab.empty: return None
         row = _ads_summary_tab[_ads_summary_tab["Parent_SKU"] == parent_sku]
-        if row.empty:
-            return None
+        if row.empty: return None
         r = row.iloc[0]
-        return {
-            "Impressions": int(r["Impressions"]),
-            "Clicks":      int(r["Clicks"]),
-            "Spend":       float(r["Spend"]),
-            "Ad_Sales":    float(r["Ad_Sales"]),
-            "CTR":         float(r["CTR"]),
-            "CPC":         float(r["CPC"]),
-            "ACOS":        float(r["ACOS"]),
-        }
+        return {"Impressions":int(r["Impressions"]),"Clicks":int(r["Clicks"]),"Spend":float(r["Spend"]),
+                "Ad_Sales":float(r["Ad_Sales"]),"CTR":float(r["CTR"]),"CPC":float(r["CPC"]),"ACOS":float(r["ACOS"])}
 
     if "Parent" in df_s.columns and df_s["Parent"].nunique() > 1:
-        # ── Top N selector ───────────────────────────────────────────────────
-        tn_col1, tn_col2 = st.columns([3, 1])
-        with tn_col1:
-            st.markdown("**🏷️ Parent SKU Performance**")
+        tn_col1, tn_col2 = st.columns([3,1])
+        with tn_col1: st.markdown("**🏷️ Parent SKU Performance**")
         with tn_col2:
-            top_n_sku = st.selectbox(
-                "Show top",
-                options=[10, 20, 50, 100],
-                index=0,
-                key="sku_top_n",
-                label_visibility="collapsed",
-                format_func=lambda x: f"Top {x} SKUs"
-            )
+            top_n_sku = st.selectbox("Show top", options=[10,20,50,100], index=0, key="sku_top_n",
+                                     label_visibility="collapsed", format_func=lambda x: f"Top {x} SKUs")
 
-        # Calculate Parent SKU Performance
-        Parent_perf_all = df_s.groupby("Parent").agg({
-            "revenue": "sum",
-            "orders": "sum"
-        }).reset_index()
+        Parent_perf_all = df_s.groupby("Parent").agg({"revenue":"sum","orders":"sum"}).reset_index()
         Parent_perf_all["aov"] = (Parent_perf_all["revenue"] / Parent_perf_all["orders"].replace(0, np.nan)).fillna(0)
         Parent_perf_all = Parent_perf_all.sort_values("revenue", ascending=False)
-
-        # Apply top N
         Parent_perf = Parent_perf_all.head(top_n_sku)
 
-        col1, col2 = st.columns([2, 1])
-
+        col1, col2 = st.columns([2,1])
         with col1:
             st.markdown(f"**Top {top_n_sku} Parent SKUs by Revenue**")
-            
-            fig_sku_bar = px.bar(
-                Parent_perf, 
-                x="revenue", 
-                y="Parent",
-                orientation='h',
-                color="orders",
-                color_continuous_scale="Blues",
-                labels={"revenue": "Revenue ($)", "Parent": "Parent SKU", "orders": "Orders"}
-            )
-            
+            fig_sku_bar = px.bar(Parent_perf, x="revenue", y="Parent", orientation='h',
+                                 color="orders", color_continuous_scale="Blues",
+                                 labels={"revenue":"Revenue ($)","Parent":"Parent SKU","orders":"Orders"})
             fig_sku_bar.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                height=max(450, top_n_sku * 28),
-                margin=dict(l=0, r=0, t=20, b=0),
+                template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                height=max(450, top_n_sku*28), margin=dict(l=0,r=0,t=20,b=0),
                 yaxis=dict(tickmode='linear')
             )
             st.plotly_chart(fig_sku_bar, config={'displayModeBar': False})
-        
+
         with col2:
             st.markdown("**SKU Revenue Distribution**")
-            
-            fig_sku_tree = px.treemap(
-                Parent_perf, 
-                path=['Parent'], 
-                values='revenue',
-                color='aov',
-                color_continuous_scale='Viridis',
-                labels={"revenue": "Revenue", "aov": "AOV"}
-            )
-            
-            fig_sku_tree.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="rgba(0,0,0,0)",
-                margin=dict(l=0, r=0, t=20, b=0),
-                height=450
-            )
+            fig_sku_tree = px.treemap(Parent_perf, path=['Parent'], values='revenue', color='aov',
+                                      color_continuous_scale='Viridis', labels={"revenue":"Revenue","aov":"AOV"})
+            fig_sku_tree.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+                                       margin=dict(l=0,r=0,t=20,b=0), height=450)
             st.plotly_chart(fig_sku_tree, config={'displayModeBar': False})
-        
-        # ── SKU SEARCH / LOOKUP ──────────────────────────────────────────────
+
         st.markdown("---")
         st.markdown('<div class="section-header">🔍 SKU Deep-Dive Search</div>', unsafe_allow_html=True)
-
         all_parent_skus_list = sorted(df_s["Parent"].dropna().unique().tolist())
 
-        search_col1, search_col2 = st.columns([3, 1])
+        search_col1, search_col2 = st.columns([3,1])
         with search_col1:
-            sku_search_query = st.text_input(
-                "Search SKU",
-                placeholder="Type a Parent SKU name...",
-                key="sku_search_input",
-                label_visibility="collapsed"
-            )
+            sku_search_query = st.text_input("Search SKU", placeholder="Type a Parent SKU name...", key="sku_search_input", label_visibility="collapsed")
         with search_col2:
-            sku_search_exact = st.selectbox(
-                "Match",
-                options=["Contains", "Exact"],
-                key="sku_search_mode",
-                label_visibility="collapsed"
-            )
+            sku_search_exact = st.selectbox("Match", options=["Contains","Exact"], key="sku_search_mode", label_visibility="collapsed")
 
-        # Filter matching SKUs
         if sku_search_query.strip():
             q = sku_search_query.strip()
-            if sku_search_exact == "Exact":
-                matching_skus = [s for s in all_parent_skus_list if s.lower() == q.lower()]
-            else:
-                matching_skus = [s for s in all_parent_skus_list if q.lower() in s.lower()]
+            matching_skus = ([s for s in all_parent_skus_list if s.lower()==q.lower()]
+                             if sku_search_exact=="Exact"
+                             else [s for s in all_parent_skus_list if q.lower() in s.lower()])
         else:
             matching_skus = []
 
         if sku_search_query.strip() and not matching_skus:
-            st.warning(f"No SKUs found matching **'{sku_search_query}'**. Try a shorter keyword or switch to Contains mode.")
-
+            st.warning(f"No SKUs found matching **'{sku_search_query}'**.")
         elif matching_skus:
-            # If multiple matches show a selector, otherwise jump straight in
-            if len(matching_skus) > 1:
-                st.caption(f"Found **{len(matching_skus)}** matching SKUs — select one to inspect:")
-                selected_sku = st.selectbox(
-                    "Select SKU",
-                    options=matching_skus,
-                    key="sku_search_select",
-                    label_visibility="collapsed"
-                )
-            else:
-                selected_sku = matching_skus[0]
+            selected_sku = (st.selectbox("Select SKU", options=matching_skus, key="sku_search_select", label_visibility="collapsed")
+                            if len(matching_skus)>1 else matching_skus[0])
+            if len(matching_skus)>1:
+                st.caption(f"Found **{len(matching_skus)}** matching SKUs:")
 
-            # ── Pull data for selected SKU ──────────────────────────────────
-            sku_df = df_s[df_s["Parent"] == selected_sku].copy()
-
+            sku_df       = df_s[df_s["Parent"]==selected_sku].copy()
             total_rev    = sku_df["revenue"].sum()
             total_orders = sku_df["orders"].sum()
-            aov          = (total_rev / total_orders) if total_orders > 0 else 0
+            aov          = (total_rev / total_orders) if total_orders>0 else 0
             active_days  = sku_df["date"].nunique()
             first_sale   = sku_df["date"].min().strftime("%b %d, %Y")
             last_sale    = sku_df["date"].max().strftime("%b %d, %Y")
 
-            # ── Header ───────────────────────────────────────────────────────
             st.markdown(f"""
             <div style='background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(139,92,246,0.1));
-                        border:1px solid rgba(59,130,246,0.35); border-radius:12px;
-                        padding:16px 20px; margin:12px 0;'>
-                <div style='font-size:20px; font-weight:800; color:#f3f4f6;'>🏷️ {selected_sku}</div>
-                <div style='font-size:12px; color:#9ca3af; margin-top:4px;'>
+                        border:1px solid rgba(59,130,246,0.35);border-radius:12px;padding:16px 20px;margin:12px 0;'>
+                <div style='font-size:20px;font-weight:800;color:#f3f4f6;'>🏷️ {selected_sku}</div>
+                <div style='font-size:12px;color:#9ca3af;margin-top:4px;'>
                     First sale: {first_sale} &nbsp;·&nbsp; Last sale: {last_sale} &nbsp;·&nbsp; {active_days} active days
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-            # ── KPI row ──────────────────────────────────────────────────────
-            m1, m2, m3, m4 = st.columns(4)
-            with m1:
-                st.metric("💰 Revenue",    f"${total_rev:,.0f}")
-            with m2:
-                st.metric("🛒 Orders",     f"{total_orders:,.0f}")
-            with m3:
-                st.metric("📊 AOV",        f"${aov:,.2f}")
-            with m4:
-                revenue_share = (total_rev / df_s["revenue"].sum() * 100) if df_s["revenue"].sum() > 0 else 0
-                st.metric("📈 Rev Share",  f"{revenue_share:.1f}%")
+            m1,m2,m3,m4 = st.columns(4)
+            m1.metric("💰 Revenue", f"${total_rev:,.0f}")
+            m2.metric("🛒 Orders",  f"{total_orders:,.0f}")
+            m3.metric("📊 AOV",     f"${aov:,.2f}")
+            revenue_share = (total_rev / df_s["revenue"].sum() * 100) if df_s["revenue"].sum()>0 else 0
+            m4.metric("📈 Rev Share", f"{revenue_share:.1f}%")
 
-            # ── Amazon Ads metrics row (if API data is loaded) ────────────────
             ads_info = _get_ads_for_sku(selected_sku)
             if ads_info:
                 st.markdown("")
                 st.markdown("**📡 Amazon Ads Performance (fetched period)**")
-                a1, a2, a3, a4, a5 = st.columns(5)
+                a1,a2,a3,a4,a5 = st.columns(5)
                 a1.metric("👁️ Impressions", f"{ads_info['Impressions']:,}")
-                a2.metric("🖱️ Clicks",       f"{ads_info['Clicks']:,}")
-                a3.metric("💸 Spend",        f"${ads_info['Spend']:,.2f}")
-                a4.metric("🎯 ACOS",         f"{ads_info['ACOS']:.1f}%")
-                a5.metric("📊 CTR",          f"{ads_info['CTR']:.2f}%")
+                a2.metric("🖱️ Clicks",      f"{ads_info['Clicks']:,}")
+                a3.metric("💸 Spend",       f"${ads_info['Spend']:,.2f}")
+                a4.metric("🎯 ACOS",        f"{ads_info['ACOS']:.1f}%")
+                a5.metric("📊 CTR",         f"{ads_info['CTR']:.2f}%")
 
-            st.markdown("")
-
-            chart_col, info_col = st.columns([3, 2])
-
-            # ── Daily revenue trend ──────────────────────────────────────────
+            chart_col, info_col = st.columns([3,2])
             with chart_col:
                 st.markdown("**📅 Daily Revenue Trend**")
-                daily_sku = (
-                    sku_df.groupby(pd.Grouper(key="date", freq="D"))["revenue"]
-                    .sum().reset_index().sort_values("date")
-                )
-                # 7-day rolling average
+                daily_sku = sku_df.groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index().sort_values("date")
                 daily_sku["rolling7"] = daily_sku["revenue"].rolling(7, min_periods=1).mean()
-
                 fig_sku_trend = go.Figure()
-                fig_sku_trend.add_trace(go.Bar(
-                    x=daily_sku["date"], y=daily_sku["revenue"],
-                    name="Daily Revenue",
-                    marker_color="rgba(59,130,246,0.5)"
-                ))
-                fig_sku_trend.add_trace(go.Scatter(
-                    x=daily_sku["date"], y=daily_sku["rolling7"],
-                    name="7-day Avg",
-                    line=dict(color="#10b981", width=2),
-                    mode="lines"
-                ))
+                fig_sku_trend.add_trace(go.Bar(x=daily_sku["date"], y=daily_sku["revenue"], name="Daily Revenue", marker_color="rgba(59,130,246,0.5)"))
+                fig_sku_trend.add_trace(go.Scatter(x=daily_sku["date"], y=daily_sku["rolling7"], name="7-day Avg", line=dict(color="#10b981",width=2), mode="lines"))
                 fig_sku_trend.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    height=280,
-                    margin=dict(l=0, r=0, t=10, b=0),
-                    legend=dict(orientation="h", y=1.15),
-                    xaxis=dict(showgrid=False),
-                    yaxis=dict(showgrid=True, gridcolor="#2d303e", title="Revenue ($)")
+                    template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    height=280, margin=dict(l=0,r=0,t=10,b=0),
+                    legend=dict(orientation="h",y=1.15),
+                    xaxis=dict(showgrid=False), yaxis=dict(showgrid=True,gridcolor="#2d303e",title="Revenue ($)")
                 )
-                st.plotly_chart(fig_sku_trend, config={"displayModeBar": False})
+                st.plotly_chart(fig_sku_trend, config={"displayModeBar":False})
 
-            # ── Marketplace breakdown ────────────────────────────────────────
             with info_col:
                 st.markdown("**🛒 Revenue by Marketplace**")
-                mp_breakdown = (
-                    sku_df.groupby("channel")
-                    .agg(revenue=("revenue","sum"), orders=("orders","sum"))
-                    .reset_index()
-                    .sort_values("revenue", ascending=False)
-                )
-                mp_breakdown["share"] = (
-                    mp_breakdown["revenue"] / mp_breakdown["revenue"].sum() * 100
-                ).round(1)
-
-                if len(mp_breakdown) > 0:
-                    fig_mp_pie = px.pie(
-                        mp_breakdown, values="revenue", names="channel",
-                        hole=0.55,
-                        color_discrete_sequence=["#3b82f6","#10b981","#f59e0b",
-                                                  "#8b5cf6","#ec4899","#06b6d4"]
-                    )
+                mp_breakdown = (sku_df.groupby("channel").agg(revenue=("revenue","sum"),orders=("orders","sum"))
+                                .reset_index().sort_values("revenue",ascending=False))
+                mp_breakdown["share"] = (mp_breakdown["revenue"]/mp_breakdown["revenue"].sum()*100).round(1)
+                if len(mp_breakdown)>0:
+                    fig_mp_pie = px.pie(mp_breakdown, values="revenue", names="channel", hole=0.55,
+                                        color_discrete_sequence=["#3b82f6","#10b981","#f59e0b","#8b5cf6","#ec4899","#06b6d4"])
                     fig_mp_pie.update_traces(textposition="outside", textinfo="percent+label")
-                    fig_mp_pie.update_layout(
-                        template="plotly_dark",
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        showlegend=False,
-                        height=280,
-                        margin=dict(l=0, r=0, t=10, b=0)
-                    )
-                    st.plotly_chart(fig_mp_pie, config={"displayModeBar": False})
+                    fig_mp_pie.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", showlegend=False, height=280, margin=dict(l=0,r=0,t=10,b=0))
+                    st.plotly_chart(fig_mp_pie, config={"displayModeBar":False})
 
-            # ── Marketplace table ────────────────────────────────────────────
-            st.dataframe(
-                mp_breakdown,
-                column_config={
-                    "channel": st.column_config.TextColumn("Marketplace"),
-                    "revenue": st.column_config.NumberColumn("Revenue",  format="$%d"),
-                    "orders":  st.column_config.NumberColumn("Orders",   format="%d"),
-                    "share":   st.column_config.NumberColumn("Share %",  format="%.1f%%"),
-                },
-                hide_index=True, use_container_width=True
-            )
+            st.dataframe(mp_breakdown, column_config={
+                "channel":st.column_config.TextColumn("Marketplace"),
+                "revenue":st.column_config.NumberColumn("Revenue",format="$%d"),
+                "orders": st.column_config.NumberColumn("Orders", format="%d"),
+                "share":  st.column_config.NumberColumn("Share %",format="%.1f%%"),
+            }, hide_index=True, use_container_width=True)
 
-            # ── Child SKUs ───────────────────────────────────────────────────
             if "SKU" in df_s.columns:
-                child_skus = (
-                    sku_df.groupby("SKU")
-                    .agg(revenue=("revenue","sum"), orders=("orders","sum"))
-                    .reset_index()
-                    .sort_values("revenue", ascending=False)
-                )
-                child_skus["aov"]   = (child_skus["revenue"] / child_skus["orders"].replace(0, np.nan)).fillna(0)
-                child_skus["share"] = (child_skus["revenue"] / child_skus["revenue"].sum() * 100).round(1)
-                valid_children      = child_skus[child_skus["SKU"] != "Unknown"]
-
-                if len(valid_children) > 0:
+                child_skus = (sku_df.groupby("SKU").agg(revenue=("revenue","sum"),orders=("orders","sum"))
+                              .reset_index().sort_values("revenue",ascending=False))
+                child_skus["aov"]   = (child_skus["revenue"]/child_skus["orders"].replace(0,np.nan)).fillna(0)
+                child_skus["share"] = (child_skus["revenue"]/child_skus["revenue"].sum()*100).round(1)
+                valid_children = child_skus[child_skus["SKU"]!="Unknown"]
+                if len(valid_children)>0:
                     st.markdown(f"**📦 Child SKUs ({len(valid_children)} variants)**")
-                    st.dataframe(
-                        valid_children,
-                        column_config={
-                            "SKU":     st.column_config.TextColumn("Child SKU", width="large"),
-                            "revenue": st.column_config.NumberColumn("Revenue", format="$%d"),
-                            "orders":  st.column_config.NumberColumn("Orders",  format="%d"),
-                            "aov":     st.column_config.NumberColumn("AOV",     format="$%.2f"),
-                            "share":   st.column_config.NumberColumn("Share %", format="%.1f%%"),
-                        },
-                        hide_index=True, use_container_width=True,
-                        height=min(400, 60 + len(valid_children) * 38)
-                    )
-
+                    st.dataframe(valid_children, column_config={
+                        "SKU":    st.column_config.TextColumn("Child SKU",width="large"),
+                        "revenue":st.column_config.NumberColumn("Revenue",format="$%d"),
+                        "orders": st.column_config.NumberColumn("Orders", format="%d"),
+                        "aov":    st.column_config.NumberColumn("AOV",    format="$%.2f"),
+                        "share":  st.column_config.NumberColumn("Share %",format="%.1f%%"),
+                    }, hide_index=True, use_container_width=True, height=min(400,60+len(valid_children)*38))
         else:
-            st.caption("🔎 Type a SKU name above to search. Supports partial matches.")
+            st.caption("🔎 Type a SKU name above to search.")
 
-        # ── Detailed SKU Cards with Child SKUs ───────────────────────────────
         st.markdown("---")
         st.markdown(f"**📦 Top {top_n_sku} SKU Breakdown (Click to expand for Child SKUs)**")
-
         for idx, parent_row in Parent_perf.iterrows():
             parent = parent_row['Parent']
-            
-            # Get child SKUs for this parent
             if "SKU" in df_s.columns:
-                child_data = df_s[df_s["Parent"] == parent].groupby("SKU").agg({
-                    "revenue": "sum",
-                    "orders": "sum"
-                }).reset_index()
-                child_data["aov"] = (child_data["revenue"] / child_data["orders"].replace(0, np.nan)).fillna(0)
-                child_data = child_data.sort_values("revenue", ascending=False)
-                
-                has_children = len(child_data) > 0 and child_data["SKU"].iloc[0] != "Unknown"
+                child_data = df_s[df_s["Parent"]==parent].groupby("SKU").agg({"revenue":"sum","orders":"sum"}).reset_index()
+                child_data["aov"] = (child_data["revenue"]/child_data["orders"].replace(0,np.nan)).fillna(0)
+                child_data = child_data.sort_values("revenue",ascending=False)
+                has_children = len(child_data)>0 and child_data["SKU"].iloc[0]!="Unknown"
             else:
-                has_children = False
-                child_data = pd.DataFrame()
-            
-            # Create expander for each parent SKU
-            with st.expander(f"🏷️ {parent} - ${parent_row['revenue']:,.0f} Revenue", expanded=False):
-                # Parent SKU metrics
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Revenue", f"${parent_row['revenue']:,.0f}")
-                with col2:
-                    st.metric("Orders", f"{parent_row['orders']:,.0f}")
-                with col3:
-                    st.metric("AOV", f"${parent_row['aov']:,.2f}")
-                with col4:
-                    if has_children:
-                        st.metric("Child SKUs", f"{len(child_data)}")
-                    else:
-                        st.metric("Child SKUs", "N/A")
+                has_children, child_data = False, pd.DataFrame()
 
-                # ── Ads data row (if available) ───────────────────────────────
+            with st.expander(f"🏷️ {parent} - ${parent_row['revenue']:,.0f} Revenue", expanded=False):
+                c1,c2,c3,c4 = st.columns(4)
+                c1.metric("Revenue", f"${parent_row['revenue']:,.0f}")
+                c2.metric("Orders",  f"{parent_row['orders']:,.0f}")
+                c3.metric("AOV",     f"${parent_row['aov']:,.2f}")
+                c4.metric("Child SKUs", f"{len(child_data)}" if has_children else "N/A")
+
                 ads_info_card = _get_ads_for_sku(parent)
                 if ads_info_card:
                     st.markdown("**📡 Amazon Ads** (fetched period)")
-                    ac1, ac2, ac3, ac4, ac5 = st.columns(5)
+                    ac1,ac2,ac3,ac4,ac5 = st.columns(5)
                     ac1.metric("👁️ Impressions", f"{ads_info_card['Impressions']:,}")
-                    ac2.metric("🖱️ Clicks",       f"{ads_info_card['Clicks']:,}")
-                    ac3.metric("💸 Spend",        f"${ads_info_card['Spend']:,.2f}")
-                    ac4.metric("🎯 ACOS",         f"{ads_info_card['ACOS']:.1f}%")
-                    ac5.metric("📊 CTR",          f"{ads_info_card['CTR']:.2f}%")
-                
-                # Show child SKUs if available
+                    ac2.metric("🖱️ Clicks",      f"{ads_info_card['Clicks']:,}")
+                    ac3.metric("💸 Spend",       f"${ads_info_card['Spend']:,.2f}")
+                    ac4.metric("🎯 ACOS",        f"{ads_info_card['ACOS']:.1f}%")
+                    ac5.metric("📊 CTR",         f"{ads_info_card['CTR']:.2f}%")
+
                 if has_children:
                     st.markdown("---")
                     st.markdown("**Child SKUs Performance:**")
-                    
-                    # Create a nice table for child SKUs
                     child_display = child_data.copy()
                     child_display["revenue"] = child_display["revenue"].apply(lambda x: f"${x:,.0f}")
-                    child_display["orders"] = child_display["orders"].apply(lambda x: f"{x:,.0f}")
-                    child_display["aov"] = child_display["aov"].apply(lambda x: f"${x:,.2f}")
-                    
-                    st.dataframe(
-                        child_display,
-                        column_config={
-                            "SKU": st.column_config.TextColumn("SKU", width="medium"),
-                            "revenue": st.column_config.TextColumn("Revenue", width="small"),
-                            "orders": st.column_config.TextColumn("Orders", width="small"),
-                            "aov": st.column_config.TextColumn("AOV", width="small"),
-                        },
-                        hide_index=True,
-                        height=min(300, 50 + len(child_display) * 35)
-                    )
-                    
-                    # Visual breakdown
-                    if len(child_data) > 1:
-                        fig_child = px.pie(
-                            child_data, 
-                            values="revenue", 
-                            names="SKU",
-                            title="Revenue Distribution by Child SKU",
-                            color_discrete_sequence=px.colors.sequential.Plasma
-                        )
-                        fig_child.update_layout(
-                            template="plotly_dark",
-                            paper_bgcolor="rgba(0,0,0,0)",
-                            height=300,
-                            margin=dict(l=0, r=0, t=40, b=0)
-                        )
+                    child_display["orders"]  = child_display["orders"].apply(lambda x: f"{x:,.0f}")
+                    child_display["aov"]     = child_display["aov"].apply(lambda x: f"${x:,.2f}")
+                    st.dataframe(child_display, column_config={
+                        "SKU":    st.column_config.TextColumn("SKU",    width="medium"),
+                        "revenue":st.column_config.TextColumn("Revenue",width="small"),
+                        "orders": st.column_config.TextColumn("Orders", width="small"),
+                        "aov":    st.column_config.TextColumn("AOV",    width="small"),
+                    }, hide_index=True, height=min(300,50+len(child_display)*35))
+                    if len(child_data)>1:
+                        fig_child = px.pie(child_data, values="revenue", names="SKU",
+                                           title="Revenue Distribution by Child SKU",
+                                           color_discrete_sequence=px.colors.sequential.Plasma)
+                        fig_child.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", height=300, margin=dict(l=0,r=0,t=40,b=0))
                         st.plotly_chart(fig_child, config={'displayModeBar': False})
                 else:
-                    st.info("ℹ️ No child SKU data available for this parent SKU")
-        
+                    st.info("ℹ️ No child SKU data available.")
     else:
-        st.info("📦 SKU data not available in the current dataset. Please ensure 'Parent' column exists in your data.")
+        st.info("📦 SKU data not available. Ensure 'Parent' column exists in your data.")
 
+# ══════════════════════════════════════════════════════════════════════════════
 # TAB 5: Profitability Deep Dive
+# ══════════════════════════════════════════════════════════════════════════════
 with tabs[4]:
-    col1, col2 = st.columns([1, 2])
-    
+    col1, col2 = st.columns([1,2])
+    cost_goods = curr['Revenue'] * (1 - SAFE_MARGIN)
+
     with col1:
         st.markdown("**Profit Waterfall**")
-        cost_goods = curr['Revenue'] * (1 - SAFE_MARGIN)
-        
         fig_water = go.Figure(go.Waterfall(
-            name = "Profitability", orientation = "v",
-            measure = ["relative", "relative", "relative", "relative", "total"],
-            x = ["Gross Revenue", "COGS", "Commission", "Ad Spend", "Net Profit"],
-            textposition = "outside",
-            text = [f"${curr['Revenue']/1000:.1f}k", f"-${cost_goods/1000:.1f}k", 
-                    f"-${curr['Commission']/1000:.1f}k", f"-${curr['Spend']/1000:.1f}k", f"${curr['Net']/1000:.1f}k"],
-            y = [curr['Revenue'], -cost_goods, -curr['Commission'], -curr['Spend'], curr['Net']],
-            connector = {"line":{"color":"#6366f1"}},
-            decreasing = {"marker":{"color":"#f87171"}},
-            increasing = {"marker":{"color":"#10b981"}},
-            totals = {"marker":{"color":"#3b82f6"}}
+            name="Profitability", orientation="v",
+            measure=["relative","relative","relative","relative","total"],
+            x=["Gross Revenue","COGS","Commission","Ad Spend","Net Profit"],
+            textposition="outside",
+            text=[f"${curr['Revenue']/1000:.1f}k", f"-${cost_goods/1000:.1f}k",
+                  f"-${curr['Commission']/1000:.1f}k", f"-${curr['Spend']/1000:.1f}k", f"${curr['Net']/1000:.1f}k"],
+            y=[curr['Revenue'], -cost_goods, -curr['Commission'], -curr['Spend'], curr['Net']],
+            connector={"line":{"color":"#6366f1"}},
+            decreasing={"marker":{"color":"#f87171"}},
+            increasing={"marker":{"color":"#10b981"}},
+            totals={"marker":{"color":"#3b82f6"}}
         ))
-        
         fig_water.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            yaxis=dict(showgrid=False),
-            margin=dict(l=0, r=0, t=40, b=0),
-            height=450
+            template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            yaxis=dict(showgrid=False), margin=dict(l=0,r=0,t=40,b=0), height=450
         )
         st.plotly_chart(fig_water, config={'displayModeBar': False})
-    
+
     with col2:
         st.markdown("**Cost Breakdown Analysis**")
-        
         costs_data = pd.DataFrame({
-            "Category": ["COGS", "Ad Spend", "Commission", "Net Profit"],
-            "Amount": [cost_goods, curr['Spend'], curr['Commission'], curr['Net']],
+            "Category": ["COGS","Ad Spend","Commission","Net Profit"],
+            "Amount":   [cost_goods, curr['Spend'], curr['Commission'], curr['Net']],
             "Percentage": [
-                (cost_goods / curr['Revenue'] * 100) if curr['Revenue'] > 0 else 0,
-                (curr['Spend'] / curr['Revenue'] * 100) if curr['Revenue'] > 0 else 0,
-                (curr['Commission'] / curr['Revenue'] * 100) if curr['Revenue'] > 0 else 0,
-                (curr['Net'] / curr['Revenue'] * 100) if curr['Revenue'] > 0 else 0
+                (cost_goods/curr['Revenue']*100) if curr['Revenue']>0 else 0,
+                (curr['Spend']/curr['Revenue']*100) if curr['Revenue']>0 else 0,
+                (curr['Commission']/curr['Revenue']*100) if curr['Revenue']>0 else 0,
+                (curr['Net']/curr['Revenue']*100) if curr['Revenue']>0 else 0,
             ]
         })
-        
-        fig_costs_pie = px.pie(
-            costs_data, values="Amount", names="Category",
-            hole=0.6,
-            color_discrete_sequence=['#f87171', '#f97316', '#ec4899', '#10b981']
-        )
+        fig_costs_pie = px.pie(costs_data, values="Amount", names="Category", hole=0.6,
+                               color_discrete_sequence=['#f87171','#f97316','#ec4899','#10b981'])
         fig_costs_pie.update_traces(textposition='outside', textinfo='percent+label')
         fig_costs_pie.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            showlegend=True,
-            height=450,
-            margin=dict(l=0, r=0, t=40, b=0),
+            template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", showlegend=True,
+            height=450, margin=dict(l=0,r=0,t=40,b=0),
             annotations=[dict(text=f'${curr["Revenue"]/1000:.0f}k<br>Total', x=0.5, y=0.5, font_size=20, showarrow=False)]
         )
         st.plotly_chart(fig_costs_pie, config={'displayModeBar': False})
-    
-    # Profitability metrics table
+
     st.markdown("**Profitability Metrics Summary**")
-    
     profit_metrics = pd.DataFrame({
-        "Metric": ["Gross Revenue", "COGS", "Gross Margin", "Ad Spend", "Commission", "Total Costs", "Net Profit", "Profit Margin"],
+        "Metric": ["Gross Revenue","COGS","Gross Margin","Ad Spend","Commission","Total Costs","Net Profit","Profit Margin"],
         "Amount": [
-            f"${curr['Revenue']:,.0f}",
-            f"${cost_goods:,.0f}",
-            f"${curr['Revenue'] - cost_goods:,.0f}",
-            f"${curr['Spend']:,.0f}",
-            f"${curr['Commission']:,.0f}",
-            f"${cost_goods + curr['Spend'] + curr['Commission']:,.0f}",
+            f"${curr['Revenue']:,.0f}", f"${cost_goods:,.0f}",
+            f"${curr['Revenue']-cost_goods:,.0f}", f"${curr['Spend']:,.0f}",
+            f"${curr['Commission']:,.0f}", f"${cost_goods+curr['Spend']+curr['Commission']:,.0f}",
             f"${curr['Net']:,.0f}",
-            f"{(curr['Net'] / curr['Revenue'] * 100) if curr['Revenue'] > 0 else 0:.2f}%"
+            f"{(curr['Net']/curr['Revenue']*100) if curr['Revenue']>0 else 0:.2f}%"
         ]
     })
-    
     st.dataframe(profit_metrics, hide_index=True)
 
+# ══════════════════════════════════════════════════════════════════════════════
 # TAB 6: Forecasting & Predictions
+# ══════════════════════════════════════════════════════════════════════════════
 with tabs[5]:
     st.markdown('<div class="section-header">🔮 Advanced Ensemble ML Forecasting</div>', unsafe_allow_html=True)
 
-    st.markdown("""
-    <div class="info-box">
-    🤖 <strong>Ensemble Forecasting Engine:</strong> Combines <strong>5 models</strong> — 
-    Gradient Boosting, Random Forest, Ridge Regression, Exponential Smoothing, and YoY Seasonal Adjustment — 
-    then blends them by inverse-error weighting so the best-performing model on your data gets the highest vote.
-    Confidence is calculated from cross-validation R² scores, not just data volume.
-    </div>
-    """, unsafe_allow_html=True)
-
-    # ── Controls ─────────────────────────────────────────────────────────────
     fc1, fc2, fc3 = st.columns(3)
     with fc1:
-        forecast_period = st.selectbox(
-            "📅 Forecast Period",
-            ["Next 7 Days", "Next 30 Days", "Next Quarter (90 Days)"],
-            index=1
-        )
+        forecast_period = st.selectbox("📅 Forecast Period",
+                                       ["Next 7 Days","Next 30 Days","Next Quarter (90 Days)"], index=1)
     with fc2:
-        forecast_type = st.selectbox(
-            "📊 Forecast Type",
-            ["Revenue & Orders", "SKU Performance", "Marketplace Performance"],
-            index=0
-        )
+        forecast_type = st.selectbox("📊 Forecast Type",
+                                     ["Revenue & Orders","SKU Performance","Marketplace Performance"], index=0)
     with fc3:
-        use_yoy = st.checkbox("Year-over-Year Seasonal Boost", value=True,
-                              help="Adjust predictions using same-period last year growth rate")
+        use_yoy = st.checkbox("Year-over-Year Seasonal Boost", value=True)
 
-    forecast_days = {"Next 7 Days": 7, "Next 30 Days": 30, "Next Quarter (90 Days)": 90}[forecast_period]
+    forecast_days = {"Next 7 Days":7,"Next 30 Days":30,"Next Quarter (90 Days)":90}[forecast_period]
 
-
-    # ── Lazy import: ML only loads when this tab is first opened ─────────
     try:
         from forecast_engine import ensemble_forecast, forecast_all_skus
     except Exception as _fe_err:
@@ -1862,1080 +1264,392 @@ with tabs[5]:
 
     st.markdown("---")
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # ========== REVENUE & ORDERS FORECASTING ==========
-    # ═══════════════════════════════════════════════════════════════════════
     if forecast_type == "Revenue & Orders":
-        col1, col2 = st.columns([3, 1])
-
+        col1, col2 = st.columns([3,1])
         with col1:
             st.markdown(f"**📈 Ensemble Revenue Forecast — {forecast_period}**")
-
-            daily_revenue = df_s.groupby(pd.Grouper(key="date", freq="D")).agg(
-                {"revenue": "sum", "orders": "sum"}
-            ).reset_index().sort_values("date")
-
+            daily_revenue = df_s.groupby(pd.Grouper(key="date", freq="D")).agg({"revenue":"sum","orders":"sum"}).reset_index().sort_values("date")
             if len(daily_revenue) >= 14:
-                future_dates = pd.date_range(
-                    daily_revenue["date"].max() + timedelta(days=1), periods=forecast_days
-                )
-
-                # YoY data
+                future_dates = pd.date_range(daily_revenue["date"].max() + timedelta(days=1), periods=forecast_days)
                 yoy_revenue = None
                 if use_yoy:
                     yoy_start_ts = pd.to_datetime(daily_revenue["date"].max() - pd.DateOffset(years=1) - timedelta(days=forecast_days))
-                    yoy_end_ts = pd.to_datetime(daily_revenue["date"].max() - pd.DateOffset(years=1)) + pd.Timedelta(days=1, microseconds=-1)
-                    yoy_mask = (sales_df["date"] >= yoy_start_ts) & (sales_df["date"] <= yoy_end_ts)
-                    yoy_raw = sales_df[yoy_mask]
-                    if len(yoy_raw) > 0:
+                    yoy_end_ts   = pd.to_datetime(daily_revenue["date"].max() - pd.DateOffset(years=1)) + pd.Timedelta(days=1, microseconds=-1)
+                    yoy_raw = sales_df[(sales_df["date"]>=yoy_start_ts) & (sales_df["date"]<=yoy_end_ts)]
+                    if len(yoy_raw)>0:
                         yoy_revenue = yoy_raw.groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().values
 
                 with st.spinner("🤖 Training ensemble (5 models)…"):
                     rev_pred, rev_std, confidence, weighted_r2, model_info = ensemble_forecast(
-                        daily_revenue["date"], daily_revenue["revenue"].values,
-                        future_dates, yoy_revenue
-                    )
+                        daily_revenue["date"], daily_revenue["revenue"].values, future_dates, yoy_revenue)
                     ord_pred, _, _, _, _ = ensemble_forecast(
-                        daily_revenue["date"], daily_revenue["orders"].values,
-                        future_dates
-                    )
+                        daily_revenue["date"], daily_revenue["orders"].values, future_dates)
 
                 forecast_df = pd.DataFrame({
-                    "date": future_dates,
-                    "predicted_revenue": rev_pred,
-                    "predicted_orders":  ord_pred,
-                    "upper": rev_pred + rev_std,
-                    "lower": np.maximum(rev_pred - rev_std, 0)
+                    "date": future_dates, "predicted_revenue": rev_pred, "predicted_orders": ord_pred,
+                    "upper": rev_pred+rev_std, "lower": np.maximum(rev_pred-rev_std, 0)
                 })
 
-                # Chart
                 fig_fc = go.Figure()
+                fig_fc.add_trace(go.Scatter(x=daily_revenue["date"], y=daily_revenue["revenue"],
+                                            name="Historical", line=dict(color="#3b82f6",width=2), fill="tozeroy", fillcolor="rgba(59,130,246,0.1)"))
                 fig_fc.add_trace(go.Scatter(
-                    x=daily_revenue["date"], y=daily_revenue["revenue"],
-                    name="Historical", line=dict(color="#3b82f6", width=2),
-                    fill="tozeroy", fillcolor="rgba(59,130,246,0.1)"
-                ))
-                # Confidence band
-                fig_fc.add_trace(go.Scatter(
-                    x=list(forecast_df["date"]) + list(forecast_df["date"])[::-1],
-                    y=list(forecast_df["upper"]) + list(forecast_df["lower"])[::-1],
-                    fill="toself", fillcolor="rgba(16,185,129,0.15)",
-                    line=dict(width=0), name="Confidence Band", showlegend=True
-                ))
-                fig_fc.add_trace(go.Scatter(
-                    x=forecast_df["date"], y=forecast_df["predicted_revenue"],
-                    name="Ensemble Forecast", line=dict(color="#10b981", width=3)
-                ))
-                if yoy_revenue is not None:
-                    yoy_dates = pd.date_range(
-                        daily_revenue["date"].max() + timedelta(days=1) - pd.DateOffset(years=1),
-                        periods=min(len(yoy_revenue), forecast_days)
-                    )
-                    fig_fc.add_trace(go.Scatter(
-                        x=yoy_dates, y=yoy_revenue[:len(yoy_dates)],
-                        name="Last Year Same Period",
-                        line=dict(color="#f59e0b", width=1.5, dash="dot"), opacity=0.7
-                    ))
+                    x=list(forecast_df["date"])+list(forecast_df["date"])[::-1],
+                    y=list(forecast_df["upper"])+list(forecast_df["lower"])[::-1],
+                    fill="toself", fillcolor="rgba(16,185,129,0.15)", line=dict(width=0), name="Confidence Band"))
+                fig_fc.add_trace(go.Scatter(x=forecast_df["date"], y=forecast_df["predicted_revenue"],
+                                            name="Ensemble Forecast", line=dict(color="#10b981",width=3)))
                 fig_fc.update_layout(
-                    template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)", hovermode="x unified",
+                    template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    hovermode="x unified",
                     yaxis=dict(title="Revenue ($)", showgrid=True, gridcolor="#2d303e"),
                     xaxis=dict(showgrid=False),
                     legend=dict(orientation="h", y=1.18),
-                    margin=dict(l=0, r=0, t=60, b=0), height=440
+                    margin=dict(l=0,r=0,t=60,b=0), height=440
                 )
-                st.plotly_chart(fig_fc, config={"displayModeBar": False})
+                st.plotly_chart(fig_fc, config={"displayModeBar":False})
 
-                # Summary metrics
                 total_rev = forecast_df["predicted_revenue"].sum()
                 total_ord = forecast_df["predicted_orders"].sum()
                 hist_avg  = daily_revenue["revenue"].tail(forecast_days).mean()
-                growth    = ((forecast_df["predicted_revenue"].mean() - hist_avg) / hist_avg * 100) if hist_avg > 0 else 0
-                yoy_vs    = None
-                if yoy_revenue is not None:
-                    yoy_tot = yoy_revenue.sum()
-                    yoy_vs  = ((total_rev - yoy_tot) / yoy_tot * 100) if yoy_tot > 0 else None
+                growth    = ((forecast_df["predicted_revenue"].mean()-hist_avg)/hist_avg*100) if hist_avg>0 else 0
 
-                mc1, mc2, mc3, mc4 = st.columns(4)
+                mc1,mc2,mc3,mc4 = st.columns(4)
                 mc1.metric(f"Predicted Revenue ({forecast_days}d)", f"${total_rev:,.0f}")
                 mc2.metric(f"Predicted Orders ({forecast_days}d)",  f"{total_ord:,.0f}")
                 mc3.metric("Growth vs Historical",                  f"{growth:+.1f}%")
-                if yoy_vs is not None:
-                    mc4.metric("vs Same Period Last Year",          f"{yoy_vs:+.1f}%")
-                else:
-                    mc4.metric("YoY Data",                          "Not available")
-
+                mc4.metric("YoY Data", "Enabled" if yoy_revenue is not None else "Not available")
             else:
                 st.warning(f"⚠️ Need at least 14 days of data. Currently have {len(daily_revenue)} days.")
 
         with col2:
             st.markdown("**🎯 Model Performance**")
             if len(daily_revenue) >= 14:
-                # Confidence gauge
-                conf_color = "#10b981" if confidence >= 75 else ("#f59e0b" if confidence >= 55 else "#ef4444")
+                conf_color = "#10b981" if confidence>=75 else ("#f59e0b" if confidence>=55 else "#ef4444")
                 st.markdown(
-                    f"<div style='text-align:center; padding:16px; background:rgba(0,0,0,0.3); border-radius:10px; border:2px solid {conf_color}'>"
-                    f"<p style='margin:0; color:#9ca3af; font-size:12px;'>ENSEMBLE CONFIDENCE</p>"
-                    f"<p style='margin:4px 0; font-size:42px; font-weight:900; color:{conf_color}'>{confidence:.0f}%</p>"
-                    f"<p style='margin:0; color:#9ca3af; font-size:11px;'>Weighted CV R² = {weighted_r2*100:.1f}%</p>"
-                    f"</div>",
-                    unsafe_allow_html=True
-                )
-                st.progress(confidence / 100)
-
+                    f"<div style='text-align:center;padding:16px;background:rgba(0,0,0,0.3);border-radius:10px;border:2px solid {conf_color}'>"
+                    f"<p style='margin:0;color:#9ca3af;font-size:12px;'>ENSEMBLE CONFIDENCE</p>"
+                    f"<p style='margin:4px 0;font-size:42px;font-weight:900;color:{conf_color}'>{confidence:.0f}%</p>"
+                    f"<p style='margin:0;color:#9ca3af;font-size:11px;'>Weighted CV R² = {weighted_r2*100:.1f}%</p>"
+                    f"</div>", unsafe_allow_html=True)
+                st.progress(confidence/100)
                 st.markdown("---")
                 st.markdown("**📊 Model Breakdown**")
                 for mname, minfo in model_info.items():
-                    if mname == "_weights":
-                        continue
-                    weight = model_info["_weights"].get(mname, 0)
+                    if mname=="_weights": continue
+                    weight = model_info["_weights"].get(mname,0)
                     r2_val = minfo["r2"]
-                    bar_w  = int(r2_val)
-                    color  = "#10b981" if r2_val >= 70 else ("#f59e0b" if r2_val >= 40 else "#ef4444")
+                    color  = "#10b981" if r2_val>=70 else ("#f59e0b" if r2_val>=40 else "#ef4444")
                     st.markdown(
-                        f"<div style='margin:4px 0'>"
-                        f"<span style='font-size:11px; color:#9ca3af'>{mname}</span>"
-                        f"<div style='background:#1e2030; border-radius:4px; height:6px; margin:2px 0'>"
-                        f"<div style='background:{color}; width:{bar_w}%; height:6px; border-radius:4px'></div></div>"
-                        f"<span style='font-size:10px; color:{color}'>R²={r2_val}% · weight={weight}%</span>"
-                        f"</div>",
-                        unsafe_allow_html=True
-                    )
+                        f"<div style='margin:4px 0'><span style='font-size:11px;color:#9ca3af'>{mname}</span>"
+                        f"<div style='background:#1e2030;border-radius:4px;height:6px;margin:2px 0'>"
+                        f"<div style='background:{color};width:{int(r2_val)}%;height:6px;border-radius:4px'></div></div>"
+                        f"<span style='font-size:10px;color:{color}'>R²={r2_val}% · weight={weight}%</span></div>",
+                        unsafe_allow_html=True)
 
-                st.markdown("---")
-                st.markdown("**💡 Insight**")
-                if growth > 10:
-                    st.success("📈 Strong growth expected.")
-                elif growth < -10:
-                    st.error("📉 Decline predicted. Review strategy.")
-                else:
-                    st.info("➡️ Stable performance expected.")
-                if yoy_vs is not None:
-                    if yoy_vs > 20:   st.success(f"🎉 {yoy_vs:.0f}% above last year!")
-                    elif yoy_vs < -10: st.warning(f"⚠️ {abs(yoy_vs):.0f}% below last year")
-
-
-    
-    # ═══════════════════════════════════════════════════════════════════════
-    # ========== SKU PERFORMANCE FORECASTING ==========
-    # ═══════════════════════════════════════════════════════════════════════
     elif forecast_type == "SKU Performance":
         st.markdown(f"**🏷️ Top SKU Performance Forecast - {forecast_period}**")
-        st.markdown("""
-        <div class="info-box">
-        🤖 <strong>Auto-Ranked SKU Predictions:</strong> The model runs on all SKUs with sufficient data, 
-        scores each by predicted growth momentum, and ranks the <strong>Top 20 Best Opportunity SKUs</strong> for you — no manual selection needed.
-        </div>
-        """, unsafe_allow_html=True)
-
         if "Parent" in df_s.columns:
             all_parent_skus = df_s["Parent"].dropna().unique().tolist()
-            all_sku_forecasts = []
-
-            with st.spinner(f"⚡ Forecasting {len(all_parent_skus)} SKUs in parallel..."):
+            with st.spinner(f"⚡ Forecasting {len(all_parent_skus)} SKUs…"):
                 all_sku_forecasts = forecast_all_skus(
-                    df_s["revenue"].values,
-                    df_s["date"].values,
-                    df_s["Parent"].values,
-                    tuple(sorted(all_parent_skus)),
-                    forecast_days,
-                    use_yoy,
-                )
-
+                    df_s["revenue"].values, df_s["date"].values, df_s["Parent"].values,
+                    tuple(sorted(all_parent_skus)), forecast_days, use_yoy)
             if not all_sku_forecasts:
                 st.warning("⚠️ No SKUs had enough data (7+ days) to forecast.")
             else:
                 df_sku_rank = pd.DataFrame(all_sku_forecasts)
-
-                # Rank by composite score: growth + momentum + confidence
                 df_sku_rank["_score"] = (
-                    df_sku_rank["Growth %"].clip(-200, 200) * 0.4 +
-                    df_sku_rank["Momentum %"].clip(-200, 200) * 0.4 +
-                    df_sku_rank["Confidence %"] * 0.2
+                    df_sku_rank["Growth %"].clip(-200,200)*0.4 +
+                    df_sku_rank["Momentum %"].clip(-200,200)*0.4 +
+                    df_sku_rank["Confidence %"]*0.2
                 )
                 df_sku_rank = df_sku_rank.sort_values("_score", ascending=False).head(20).reset_index(drop=True)
                 df_sku_rank["Rank"] = df_sku_rank.index + 1
-
-                # ── TOP 20 SUMMARY TABLE ──────────────────────────────────────
-                display_cols = [
-                    "Rank", "SKU", "Historical Avg", "Recent 2wk Avg",
-                    "Forecast Avg", f"Total Forecast ({forecast_days}d)",
-                    "Growth %", "Momentum %", "YoY Change %", "Confidence %"
-                ]
-                df_display = df_sku_rank[display_cols].copy()
-
-                st.markdown(f"### 🏆 Top 20 SKUs by ML Forecast Score")
-                st.caption("Ranked by composite score: Growth (40%) + Short-term Momentum (40%) + Model Confidence (20%)")
-
-                st.dataframe(
-                    df_display,
-                    column_config={
-                        "Rank":                 st.column_config.NumberColumn("Rank", format="%d"),
-                        "SKU":                  st.column_config.TextColumn("SKU"),
-                        "Historical Avg":       st.column_config.NumberColumn("Hist. Avg/Day", format="$%.0f"),
-                        "Recent 2wk Avg":       st.column_config.NumberColumn("Recent 2wk Avg", format="$%.0f"),
-                        "Forecast Avg":         st.column_config.NumberColumn("Forecast Avg/Day", format="$%.0f"),
-                        f"Total Forecast ({forecast_days}d)": st.column_config.NumberColumn(f"Total Forecast", format="$%.0f"),
-                        "Growth %":             st.column_config.NumberColumn("Growth %", format="%.1f%%"),
-                        "Momentum %":           st.column_config.NumberColumn("Momentum %", format="%.1f%%"),
-                        "YoY Change %":         st.column_config.NumberColumn("YoY Change %", format="%.1f%%"),
-                        "Confidence %":         st.column_config.NumberColumn("Confidence %", format="%.0f%%"),
-                    },
-                    hide_index=True,
-                    use_container_width=True,
-                    height=550
-                )
-
-                # ── TOP 5 VISUAL CHARTS ───────────────────────────────────────
-                st.markdown("---")
-                st.markdown("### 📈 Forecast Charts — Top 5 SKUs")
-
-                top5 = df_sku_rank.head(5)
-                chart_cols = st.columns(min(len(top5), 5))
-
-                for i, (_, row) in enumerate(top5.iterrows()):
-                    with chart_cols[i]:
-                        fig_mini = go.Figure()
-                        hist = row["_hist"]
-                        fig_mini.add_trace(go.Bar(
-                            x=hist["date"], y=hist["revenue"],
-                            name="Historical", marker_color="#3b82f6", opacity=0.7,
-                            showlegend=False
-                        ))
-                        fig_mini.add_trace(go.Scatter(
-                            x=row["_dates"], y=row["_pred"],
-                            name="Forecast", line=dict(color="#10b981", width=2),
-                            mode="lines", showlegend=False
-                        ))
-                        fig_mini.update_layout(
-                            title=dict(text=f"#{row['Rank']} {row['SKU']}", font_size=12),
-                            template="plotly_dark",
-                            paper_bgcolor="rgba(0,0,0,0)",
-                            plot_bgcolor="rgba(0,0,0,0)",
-                            margin=dict(l=0, r=0, t=30, b=0),
-                            height=200,
-                            yaxis=dict(showgrid=False, showticklabels=False),
-                            xaxis=dict(showgrid=False, showticklabels=False)
-                        )
-                        st.plotly_chart(fig_mini, config={"displayModeBar": False}, use_container_width=True)
-                        growth_val = row["Growth %"]
-                        color = "green" if growth_val >= 0 else "red"
-                        st.markdown(
-                            f"<p style='text-align:center; color:{color}; font-size:13px; font-weight:700;'>"
-                            f"${row[f'Total Forecast ({forecast_days}d)']:,.0f} | {growth_val:+.1f}%</p>",
-                            unsafe_allow_html=True
-                        )
-
-                # ── GROWTH vs REVENUE SCATTER ─────────────────────────────────
-                st.markdown("---")
-                st.markdown("### 🔵 Opportunity Matrix — Growth vs Forecasted Revenue")
-                st.caption("Top-right = High growth + High revenue = Best opportunities to scale")
-
-                fig_scatter = px.scatter(
-                    df_sku_rank,
-                    x=f"Total Forecast ({forecast_days}d)",
-                    y="Growth %",
-                    text="SKU",
-                    size="Confidence %",
-                    color="Momentum %",
-                    color_continuous_scale="RdYlGn",
-                    labels={
-                        f"Total Forecast ({forecast_days}d)": "Forecasted Revenue ($)",
-                        "Growth %": "Growth vs Historical (%)"
-                    },
-                    size_max=30
-                )
-                fig_scatter.update_traces(textposition="top center", textfont_size=9)
-                fig_scatter.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(255,255,255,0.03)",
-                    height=450,
-                    margin=dict(l=0, r=0, t=20, b=0)
-                )
-                st.plotly_chart(fig_scatter, config={"displayModeBar": False})
-
+                display_cols = ["Rank","SKU","Historical Avg","Recent 2wk Avg","Forecast Avg",
+                                f"Total Forecast ({forecast_days}d)","Growth %","Momentum %","YoY Change %","Confidence %"]
+                st.dataframe(df_sku_rank[[c for c in display_cols if c in df_sku_rank.columns]],
+                             hide_index=True, use_container_width=True, height=550)
         else:
-            st.info("📦 SKU data not available. Ensure 'Parent' column exists in your data.")
-    
-    # ═══════════════════════════════════════════════════════════════════════
-    # ========== MARKETPLACE PERFORMANCE FORECASTING ==========
-    # ═══════════════════════════════════════════════════════════════════════
+            st.info("📦 SKU data not available.")
+
     elif forecast_type == "Marketplace Performance":
         st.markdown(f"**🛒 Ensemble Marketplace Forecast — {forecast_period}**")
-
-        marketplaces       = df_s["channel"].unique().tolist()
+        marketplaces = df_s["channel"].unique().tolist()
         marketplace_forecasts = []
-
         with st.spinner(f"🤖 Running ensemble on {len(marketplaces)} marketplaces…"):
             for marketplace in marketplaces:
-                mp_data = (
-                    df_s[df_s["channel"] == marketplace]
-                    .groupby(pd.Grouper(key="date", freq="D"))["revenue"]
-                    .sum().reset_index().sort_values("date")
-                )
-                if len(mp_data) < 7:
-                    continue
-
-                mp_future_dates = pd.date_range(
-                    mp_data["date"].max() + timedelta(days=1), periods=forecast_days
-                )
-
-                # YoY data for this marketplace
-                yoy_mp_vals = None
-                if use_yoy:
-                    yoy_mp_start_ts = pd.to_datetime(mp_data["date"].max() - pd.DateOffset(years=1) - timedelta(days=forecast_days))
-                    yoy_mp_end_ts = pd.to_datetime(mp_data["date"].max() - pd.DateOffset(years=1)) + pd.Timedelta(days=1, microseconds=-1)
-                    yoy_mp_mask = (
-                        df_s["channel"].eq(marketplace) &
-                        (df_s["date"] >= yoy_mp_start_ts) &
-                        (df_s["date"] <= yoy_mp_end_ts)
-                    )
-                    yoy_mp_chunk = df_s[yoy_mp_mask]["revenue"].values
-                    if len(yoy_mp_chunk) > 0:
-                        yoy_mp_vals = yoy_mp_chunk
-
+                mp_data = (df_s[df_s["channel"]==marketplace]
+                           .groupby(pd.Grouper(key="date",freq="D"))["revenue"].sum().reset_index().sort_values("date"))
+                if len(mp_data)<7: continue
+                mp_future_dates = pd.date_range(mp_data["date"].max()+timedelta(days=1), periods=forecast_days)
                 mp_pred, mp_std, mp_conf, mp_r2, _ = ensemble_forecast(
-                    mp_data["date"], mp_data["revenue"].values,
-                    mp_future_dates, yoy_mp_vals
-                )
-
+                    mp_data["date"], mp_data["revenue"].values, mp_future_dates)
                 hist_avg = mp_data["revenue"].mean()
                 fore_avg = mp_pred.mean()
-                growth   = ((fore_avg - hist_avg) / hist_avg * 100) if hist_avg > 0 else 0
-
+                growth   = ((fore_avg-hist_avg)/hist_avg*100) if hist_avg>0 else 0
                 marketplace_forecasts.append({
-                    "Marketplace":       marketplace,
-                    "Historical Revenue":mp_data["revenue"].sum(),
-                    "Forecast Revenue":  mp_pred.sum(),
-                    "Hist. Daily Avg":   hist_avg,
-                    "Forecast Daily Avg":fore_avg,
-                    "Growth %":          growth,
-                    "Confidence %":      mp_conf,
-                    "_pred":             mp_pred,
-                    "_std":              mp_std,
-                    "_dates":            mp_future_dates,
-                    "_hist":             mp_data,
+                    "Marketplace": marketplace, "Historical Revenue": mp_data["revenue"].sum(),
+                    "Forecast Revenue": mp_pred.sum(), "Growth %": growth, "Confidence %": mp_conf,
+                    "_pred": mp_pred, "_dates": mp_future_dates, "_hist": mp_data
                 })
-
-        if not marketplace_forecasts:
-            st.warning("⚠️ Insufficient data for marketplace forecasting.")
-        else:
+        if marketplace_forecasts:
             df_mp = pd.DataFrame(marketplace_forecasts).sort_values("Forecast Revenue", ascending=False)
+            st.dataframe(df_mp[["Marketplace","Historical Revenue","Forecast Revenue","Growth %","Confidence %"]],
+                         column_config={
+                             "Historical Revenue": st.column_config.NumberColumn("Historical",format="$%.0f"),
+                             "Forecast Revenue":   st.column_config.NumberColumn(f"Forecast ({forecast_days}d)",format="$%.0f"),
+                             "Growth %":           st.column_config.NumberColumn("Growth %",format="%.1f%%"),
+                             "Confidence %":       st.column_config.NumberColumn("Confidence %",format="%.0f%%"),
+                         }, hide_index=True, use_container_width=True)
 
-            # ── Bar chart: historical vs forecast ──────────────────────────
-            fig_mp = go.Figure()
-            fig_mp.add_trace(go.Bar(
-                x=df_mp["Marketplace"], y=df_mp["Historical Revenue"],
-                name="Historical", marker_color="#3b82f6", opacity=0.85
-            ))
-            fig_mp.add_trace(go.Bar(
-                x=df_mp["Marketplace"], y=df_mp["Forecast Revenue"],
-                name=f"Forecast ({forecast_days}d)",
-                marker_color="#10b981", opacity=0.85,
-                text=df_mp["Forecast Revenue"].apply(lambda v: f"${v:,.0f}"),
-                textposition="outside"
-            ))
-            fig_mp.update_layout(
-                template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)", barmode="group",
-                yaxis=dict(title="Revenue ($)", showgrid=True, gridcolor="#2d303e"),
-                xaxis=dict(title="Marketplace"),
-                legend=dict(orientation="h", y=1.1),
-                margin=dict(l=0, r=0, t=40, b=0), height=380
-            )
-            st.plotly_chart(fig_mp, config={"displayModeBar": False})
-
-            # ── Trend lines per marketplace ─────────────────────────────────
-            st.markdown("**📈 Forecast Trend Lines by Marketplace**")
-            fig_lines = go.Figure()
-            colors = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#14b8a6","#f97316"]
-            for i, row in enumerate(marketplace_forecasts):
-                col = colors[i % len(colors)]
-                hist = row["_hist"]
-                fig_lines.add_trace(go.Scatter(
-                    x=hist["date"], y=hist["revenue"],
-                    name=f"{row['Marketplace']} (hist)",
-                    line=dict(color=col, width=1.5), opacity=0.5
-                ))
-                fig_lines.add_trace(go.Scatter(
-                    x=row["_dates"], y=row["_pred"],
-                    name=f"{row['Marketplace']} (fcst)",
-                    line=dict(color=col, width=2.5, dash="dash")
-                ))
-            fig_lines.update_layout(
-                template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                yaxis=dict(title="Revenue ($)", showgrid=True, gridcolor="#2d303e"),
-                xaxis=dict(showgrid=False),
-                legend=dict(orientation="h", y=1.15),
-                margin=dict(l=0, r=0, t=50, b=0), height=380
-            )
-            st.plotly_chart(fig_lines, config={"displayModeBar": False})
-
-            # ── Detail table with confidence ────────────────────────────────
-            st.markdown("**📊 Detailed Marketplace Forecast**")
-            st.dataframe(
-                df_mp[["Marketplace","Historical Revenue","Forecast Revenue",
-                        "Hist. Daily Avg","Forecast Daily Avg","Growth %","Confidence %"]],
-                column_config={
-                    "Marketplace":        "Channel",
-                    "Historical Revenue": st.column_config.NumberColumn("Historical",          format="$%.0f"),
-                    "Forecast Revenue":   st.column_config.NumberColumn(f"Forecast ({forecast_days}d)", format="$%.0f"),
-                    "Hist. Daily Avg":    st.column_config.NumberColumn("Hist. Daily Avg",     format="$%.0f"),
-                    "Forecast Daily Avg": st.column_config.NumberColumn("Forecast Daily Avg",  format="$%.0f"),
-                    "Growth %":           st.column_config.NumberColumn("Growth %",            format="%.1f%%"),
-                    "Confidence %":       st.column_config.NumberColumn("Confidence %",        format="%.0f%%"),
-                },
-                hide_index=True, use_container_width=True
-            )
-
-            # ── Callouts ────────────────────────────────────────────────────
-            st.markdown("---")
-            c1, c2, c3 = st.columns(3)
-            top_rev  = df_mp.iloc[0]
-            top_grow = df_mp.nlargest(1, "Growth %").iloc[0]
-            top_conf = df_mp.nlargest(1, "Confidence %").iloc[0]
-            c1.success(f"💰 **Top Revenue:** {top_rev['Marketplace']} — ${top_rev['Forecast Revenue']:,.0f}")
-            c2.info(   f"🚀 **Highest Growth:** {top_grow['Marketplace']} ({top_grow['Growth %']:+.1f}%)")
-            c3.info(   f"🎯 **Most Confident:** {top_conf['Marketplace']} ({top_conf['Confidence %']:.0f}%)")
-
+# ══════════════════════════════════════════════════════════════════════════════
 # TAB 7: A/B Test Tracker
+# ══════════════════════════════════════════════════════════════════════════════
 with tabs[6]:
     st.markdown('<div class="section-header">🧪 Advanced A/B Test Performance Tracker</div>', unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="info-box">
-    💡 <strong>Enhanced Testing:</strong> Compare campaigns, products, or strategies. Now with support for 
-    <strong>multiple marketplace comparison</strong>, time period analysis, and statistical significance testing.
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Initialize session state for A/B tests
     if 'ab_tests' not in st.session_state:
         st.session_state.ab_tests = []
-    
-    # Test mode selector
-    test_mode = st.radio(
-        "**Test Mode:**",
-        ["Single Marketplace Comparison", "Multi-Marketplace Comparison", "Time Period Comparison"],
-        horizontal=True
-    )
-    
+
+    test_mode = st.radio("**Test Mode:**",
+                         ["Single Marketplace Comparison","Multi-Marketplace Comparison","Time Period Comparison"],
+                         horizontal=True)
     st.markdown("---")
-    
-    col1, col2 = st.columns([2, 1])
-    
+    col1, col2 = st.columns([2,1])
+
     with col1:
         st.markdown("**➕ Create New A/B Test**")
-        
-        # ========== SINGLE MARKETPLACE COMPARISON ==========
+
         if test_mode == "Single Marketplace Comparison":
             with st.form("ab_test_single_form"):
                 test_name = st.text_input("Test Name", placeholder="e.g., Amazon - Old vs New Campaign")
-                
                 col_a, col_b = st.columns(2)
                 with col_a:
                     st.markdown("**Variant A (Control)**")
-                    variant_a_name = st.text_input("Name", value="Control", placeholder="e.g., Original Campaign", key="single_a_name")
+                    variant_a_name    = st.text_input("Name", value="Control", key="single_a_name")
                     variant_a_channel = st.selectbox("Marketplace", df_s["channel"].unique(), key="single_a_ch")
-                    var_a_date_start = st.date_input("Start Date", value=start_date, key="single_a_start")
-                    var_a_date_end = st.date_input("End Date", value=end_date, key="single_a_end")
-                
+                    var_a_date_start  = st.date_input("Start Date", value=start_date, key="single_a_start")
+                    var_a_date_end    = st.date_input("End Date",   value=end_date,   key="single_a_end")
                 with col_b:
                     st.markdown("**Variant B (Test)**")
-                    variant_b_name = st.text_input("Name", value="Test", placeholder="e.g., New Campaign", key="single_b_name")
+                    variant_b_name    = st.text_input("Name", value="Test", key="single_b_name")
                     variant_b_channel = st.selectbox("Marketplace", df_s["channel"].unique(), key="single_b_ch")
-                    var_b_date_start = st.date_input("Start Date", value=start_date, key="single_b_start")
-                    var_b_date_end = st.date_input("End Date", value=end_date, key="single_b_end")
-                
-                submitted = st.form_submit_button("🚀 Create Single Marketplace Test", type="primary")
-                
-                if submitted and test_name:
-                    # Calculate metrics for both variants
-                    # Variant A
-                    var_a_start_ts = pd.to_datetime(var_a_date_start)
-                    var_a_end_ts = pd.to_datetime(var_a_date_end) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-                    
-                    mask_a = (
-                        (sales_df["date"] >= var_a_start_ts) & 
-                        (sales_df["date"] <= var_a_end_ts) &
-                        (sales_df["channel"] == variant_a_channel)
-                    )
-                    df_a = sales_df[mask_a]
-                    mask_spend_a = (
-                        (spend_df["date"] >= var_a_start_ts) & 
-                        (spend_df["date"] <= var_a_end_ts) &
-                        (spend_df["channel"] == variant_a_channel)
-                    )
-                    spend_a = spend_df[mask_spend_a]["spend"].sum()
-                    
-                    # Variant B
-                    var_b_start_ts = pd.to_datetime(var_b_date_start)
-                    var_b_end_ts = pd.to_datetime(var_b_date_end) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+                    var_b_date_start  = st.date_input("Start Date", value=start_date, key="single_b_start")
+                    var_b_date_end    = st.date_input("End Date",   value=end_date,   key="single_b_end")
 
-                    mask_b = (
-                        (sales_df["date"] >= var_b_start_ts) & 
-                        (sales_df["date"] <= var_b_end_ts) &
-                        (sales_df["channel"] == variant_b_channel)
-                    )
-                    df_b = sales_df[mask_b]
-                    mask_spend_b = (
-                        (spend_df["date"] >= var_b_start_ts) & 
-                        (spend_df["date"] <= var_b_end_ts) &
-                        (spend_df["channel"] == variant_b_channel)
-                    )
-                    spend_b = spend_df[mask_spend_b]["spend"].sum()
-                    
+                submitted = st.form_submit_button("🚀 Create Single Marketplace Test", type="primary")
+                if submitted and test_name:
+                    def _ab_metrics(channel, ds, de):
+                        s_ts = pd.to_datetime(ds); e_ts = pd.to_datetime(de) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+                        d = sales_df[(sales_df["date"]>=s_ts)&(sales_df["date"]<=e_ts)&(sales_df["channel"]==channel)]
+                        sp = spend_df[(spend_df["date"]>=s_ts)&(spend_df["date"]<=e_ts)&(spend_df["channel"]==channel)]["spend"].sum() if not spend_df.empty else 0
+                        rev = d["revenue"].sum(); ord_ = d["orders"].sum()
+                        return {"name":channel,"revenue":rev,"orders":ord_,"spend":sp,
+                                "roas":(rev/sp) if sp>0 else 0,"aov":(rev/ord_) if ord_>0 else 0}
                     test_data = {
-                        'test_name': test_name,
-                        'test_type': 'Single Marketplace',
-                        'created_at': datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        'variant_a': {
-                            'name': variant_a_name,
-                            'channel': variant_a_channel,
-                            'revenue': df_a['revenue'].sum(),
-                            'orders': df_a['orders'].sum(),
-                            'spend': spend_a,
-                            'roas': (df_a['revenue'].sum() / spend_a) if spend_a > 0 else 0,
-                            'aov': (df_a['revenue'].sum() / df_a['orders'].sum()) if df_a['orders'].sum() > 0 else 0
-                        },
-                        'variant_b': {
-                            'name': variant_b_name,
-                            'channel': variant_b_channel,
-                            'revenue': df_b['revenue'].sum(),
-                            'orders': df_b['orders'].sum(),
-                            'spend': spend_b,
-                            'roas': (df_b['revenue'].sum() / spend_b) if spend_b > 0 else 0,
-                            'aov': (df_b['revenue'].sum() / df_b['orders'].sum()) if df_b['orders'].sum() > 0 else 0
-                        }
+                        "test_name":test_name,"test_type":"Single Marketplace",
+                        "created_at":datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "variant_a":{**_ab_metrics(variant_a_channel,var_a_date_start,var_a_date_end),"name":variant_a_name},
+                        "variant_b":{**_ab_metrics(variant_b_channel,var_b_date_start,var_b_date_end),"name":variant_b_name},
                     }
-                    
                     st.session_state.ab_tests.append(test_data)
-                    st.success(f"✅ Test '{test_name}' created successfully!")
+                    st.success(f"✅ Test '{test_name}' created!")
                     st.rerun()
-        
-        # ========== MULTI-MARKETPLACE COMPARISON ==========
+
         elif test_mode == "Multi-Marketplace Comparison":
             with st.form("ab_test_multi_form"):
-                test_name = st.text_input("Test Name", placeholder="e.g., Amazon vs Walmart vs eBay Performance")
-                
-                st.markdown("**Select Marketplaces to Compare:**")
-                marketplaces_to_compare = st.multiselect(
-                    "Choose 2-5 marketplaces",
-                    df_s["channel"].unique().tolist(),
-                    max_selections=5
-                )
-                
-                st.markdown("**Time Period:**")
+                test_name = st.text_input("Test Name", placeholder="e.g., Amazon vs Walmart vs eBay")
+                marketplaces_to_compare = st.multiselect("Choose 2-5 marketplaces", df_s["channel"].unique().tolist(), max_selections=5)
                 col_date1, col_date2 = st.columns(2)
-                with col_date1:
-                    multi_date_start = st.date_input("Start Date", value=start_date, key="multi_start")
-                with col_date2:
-                    multi_date_end = st.date_input("End Date", value=end_date, key="multi_end")
-                
+                with col_date1: multi_date_start = st.date_input("Start Date", value=start_date, key="multi_start")
+                with col_date2: multi_date_end   = st.date_input("End Date",   value=end_date,   key="multi_end")
                 submitted_multi = st.form_submit_button("🚀 Create Multi-Marketplace Test", type="primary")
-                
-                if submitted_multi and test_name and len(marketplaces_to_compare) >= 2:
-                    marketplace_results = []
-                    multi_start_ts = pd.to_datetime(multi_date_start)
-                    multi_end_ts = pd.to_datetime(multi_date_end) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-                    
+                if submitted_multi and test_name and len(marketplaces_to_compare)>=2:
+                    s_ts = pd.to_datetime(multi_date_start); e_ts = pd.to_datetime(multi_date_end)+pd.Timedelta(days=1)-pd.Timedelta(seconds=1)
+                    results = []
                     for mp in marketplaces_to_compare:
-                        mask_mp = (
-                            (sales_df["date"] >= multi_start_ts) & 
-                            (sales_df["date"] <= multi_end_ts) &
-                            (sales_df["channel"] == mp)
-                        )
-                        df_mp = sales_df[mask_mp]
-                        
-                        mask_spend_mp = (
-                            (spend_df["date"] >= multi_start_ts) & 
-                            (spend_df["date"] <= multi_end_ts) &
-                            (spend_df["channel"] == mp)
-                        )
-                        spend_mp = spend_df[mask_spend_mp]["spend"].sum()
-                        
-                        marketplace_results.append({
-                            'marketplace': mp,
-                            'revenue': df_mp['revenue'].sum(),
-                            'orders': df_mp['orders'].sum(),
-                            'spend': spend_mp,
-                            'roas': (df_mp['revenue'].sum() / spend_mp) if spend_mp > 0 else 0,
-                            'aov': (df_mp['revenue'].sum() / df_mp['orders'].sum()) if df_mp['orders'].sum() > 0 else 0,
-                            'acos': (spend_mp / df_mp['revenue'].sum() * 100) if df_mp['revenue'].sum() > 0 else 0
-                        })
-                    
-                    test_data = {
-                        'test_name': test_name,
-                        'test_type': 'Multi-Marketplace',
-                        'created_at': datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        'marketplaces': marketplace_results,
-                        'period': f"{multi_date_start} to {multi_date_end}"
-                    }
-                    
-                    st.session_state.ab_tests.append(test_data)
-                    st.success(f"✅ Multi-marketplace test '{test_name}' created with {len(marketplaces_to_compare)} marketplaces!")
+                        d  = sales_df[(sales_df["date"]>=s_ts)&(sales_df["date"]<=e_ts)&(sales_df["channel"]==mp)]
+                        sp = spend_df[(spend_df["date"]>=s_ts)&(spend_df["date"]<=e_ts)&(spend_df["channel"]==mp)]["spend"].sum() if not spend_df.empty else 0
+                        rev=d["revenue"].sum(); ord_=d["orders"].sum()
+                        results.append({"marketplace":mp,"revenue":rev,"orders":ord_,"spend":sp,
+                                        "roas":(rev/sp) if sp>0 else 0,"aov":(rev/ord_) if ord_>0 else 0,
+                                        "acos":(sp/rev*100) if rev>0 else 0})
+                    st.session_state.ab_tests.append({
+                        "test_name":test_name,"test_type":"Multi-Marketplace",
+                        "created_at":datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "marketplaces":results,"period":f"{multi_date_start} to {multi_date_end}"
+                    })
+                    st.success(f"✅ Multi-marketplace test created!")
                     st.rerun()
-                elif submitted_multi and len(marketplaces_to_compare) < 2:
-                    st.error("❌ Please select at least 2 marketplaces to compare.")
-        
-        # ========== TIME PERIOD COMPARISON ==========
+
         elif test_mode == "Time Period Comparison":
             with st.form("ab_test_time_form"):
                 test_name = st.text_input("Test Name", placeholder="e.g., Q4 2024 vs Q4 2023")
-                
-                marketplace_time = st.selectbox("Select Marketplace", ["All Marketplaces"] + df_s["channel"].unique().tolist())
-                
+                marketplace_time = st.selectbox("Select Marketplace", ["All Marketplaces"]+df_s["channel"].unique().tolist())
                 col_p1, col_p2 = st.columns(2)
                 with col_p1:
                     st.markdown("**Period A**")
-                    period_a_start = st.date_input("Start", value=start_date - timedelta(days=90), key="time_a_start")
-                    period_a_end = st.date_input("End", value=start_date - timedelta(days=1), key="time_a_end")
-                
+                    period_a_start = st.date_input("Start", value=start_date-timedelta(days=90), key="time_a_start")
+                    period_a_end   = st.date_input("End",   value=start_date-timedelta(days=1),  key="time_a_end")
                 with col_p2:
                     st.markdown("**Period B**")
                     period_b_start = st.date_input("Start", value=start_date, key="time_b_start")
-                    period_b_end = st.date_input("End", value=end_date, key="time_b_end")
-                
+                    period_b_end   = st.date_input("End",   value=end_date,   key="time_b_end")
                 submitted_time = st.form_submit_button("🚀 Create Time Period Test", type="primary")
-                
                 if submitted_time and test_name:
-                    # Convert
-                    pa_start_ts = pd.to_datetime(period_a_start)
-                    pa_end_ts = pd.to_datetime(period_a_end) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-                    pb_start_ts = pd.to_datetime(period_b_start)
-                    pb_end_ts = pd.to_datetime(period_b_end) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-
-                    # Period A
-                    if marketplace_time == "All Marketplaces":
-                        mask_period_a = (sales_df["date"] >= pa_start_ts) & (sales_df["date"] <= pa_end_ts)
-                        mask_spend_a = (spend_df["date"] >= pa_start_ts) & (spend_df["date"] <= pa_end_ts)
-                    else:
-                        mask_period_a = (
-                            (sales_df["date"] >= pa_start_ts) & 
-                            (sales_df["date"] <= pa_end_ts) &
-                            (sales_df["channel"] == marketplace_time)
-                        )
-                        mask_spend_a = (
-                            (spend_df["date"] >= pa_start_ts) & 
-                            (spend_df["date"] <= pa_end_ts) &
-                            (spend_df["channel"] == marketplace_time)
-                        )
-                    
-                    df_period_a = sales_df[mask_period_a]
-                    spend_period_a = spend_df[mask_spend_a]["spend"].sum()
-                    
-                    # Period B
-                    if marketplace_time == "All Marketplaces":
-                        mask_period_b = (sales_df["date"] >= pb_start_ts) & (sales_df["date"] <= pb_end_ts)
-                        mask_spend_b = (spend_df["date"] >= pb_start_ts) & (spend_df["date"] <= pb_end_ts)
-                    else:
-                        mask_period_b = (
-                            (sales_df["date"] >= pb_start_ts) & 
-                            (sales_df["date"] <= pb_end_ts) &
-                            (sales_df["channel"] == marketplace_time)
-                        )
-                        mask_spend_b = (
-                            (spend_df["date"] >= pb_start_ts) & 
-                            (spend_df["date"] <= pb_end_ts) &
-                            (spend_df["channel"] == marketplace_time)
-                        )
-                    
-                    df_period_b = sales_df[mask_period_b]
-                    spend_period_b = spend_df[mask_spend_b]["spend"].sum()
-                    
-                    test_data = {
-                        'test_name': test_name,
-                        'test_type': 'Time Period',
-                        'created_at': datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        'marketplace': marketplace_time,
-                        'period_a': {
-                            'name': f"{period_a_start} to {period_a_end}",
-                            'revenue': df_period_a['revenue'].sum(),
-                            'orders': df_period_a['orders'].sum(),
-                            'spend': spend_period_a,
-                            'roas': (df_period_a['revenue'].sum() / spend_period_a) if spend_period_a > 0 else 0,
-                            'aov': (df_period_a['revenue'].sum() / df_period_a['orders'].sum()) if df_period_a['orders'].sum() > 0 else 0
-                        },
-                        'period_b': {
-                            'name': f"{period_b_start} to {period_b_end}",
-                            'revenue': df_period_b['revenue'].sum(),
-                            'orders': df_period_b['orders'].sum(),
-                            'spend': spend_period_b,
-                            'roas': (df_period_b['revenue'].sum() / spend_period_b) if spend_period_b > 0 else 0,
-                            'aov': (df_period_b['revenue'].sum() / df_period_b['orders'].sum()) if df_period_b['orders'].sum() > 0 else 0
-                        }
-                    }
-                    
-                    st.session_state.ab_tests.append(test_data)
-                    st.success(f"✅ Time period test '{test_name}' created successfully!")
+                    def _period_metrics(ps, pe, mp):
+                        s_ts=pd.to_datetime(ps); e_ts=pd.to_datetime(pe)+pd.Timedelta(days=1)-pd.Timedelta(seconds=1)
+                        mask_s = (sales_df["date"]>=s_ts)&(sales_df["date"]<=e_ts)
+                        mask_sp = (spend_df["date"]>=s_ts)&(spend_df["date"]<=e_ts) if not spend_df.empty else pd.Series(dtype=bool)
+                        if mp != "All Marketplaces":
+                            mask_s  &= (sales_df["channel"]==mp)
+                            if not spend_df.empty: mask_sp &= (spend_df["channel"]==mp)
+                        d=sales_df[mask_s]; sp=spend_df[mask_sp]["spend"].sum() if not spend_df.empty else 0
+                        rev=d["revenue"].sum(); ord_=d["orders"].sum()
+                        return {"name":f"{ps} to {pe}","revenue":rev,"orders":ord_,"spend":sp,
+                                "roas":(rev/sp) if sp>0 else 0,"aov":(rev/ord_) if ord_>0 else 0}
+                    st.session_state.ab_tests.append({
+                        "test_name":test_name,"test_type":"Time Period",
+                        "created_at":datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "marketplace":marketplace_time,
+                        "period_a":_period_metrics(period_a_start,period_a_end,marketplace_time),
+                        "period_b":_period_metrics(period_b_start,period_b_end,marketplace_time),
+                    })
+                    st.success(f"✅ Time period test created!")
                     st.rerun()
-    
+
     with col2:
         st.markdown("**💡 Testing Guide**")
-        
-        if test_mode == "Single Marketplace Comparison":
-            st.markdown("""
-            **Best for:**
-            - Comparing campaigns on same marketplace
-            - Testing different strategies
-            - Before/after analysis
-            
-            **Tips:**
-            - Use same time periods for accuracy
-            - Run tests for 7+ days minimum
-            - Isolate one variable at a time
-            """)
-        
-        elif test_mode == "Multi-Marketplace Comparison":
-            st.markdown("""
-            **Best for:**
-            - Comparing marketplace performance
-            - Channel allocation decisions
-            - Finding best-performing platforms
-            
-            **Tips:**
-            - Compare 2-5 marketplaces
-            - Use same time period
-            - Look at ROAS and AOV together
-            """)
-        
-        else:  # Time Period
-            st.markdown("""
-            **Best for:**
-            - YoY comparisons
-            - Seasonal analysis
-            - Campaign performance over time
-            
-            **Tips:**
-            - Compare similar periods (e.g., Q4 vs Q4)
-            - Account for seasonality
-            - Look at growth percentages
-            """)
-    
-    # Display existing tests
+        guides = {
+            "Single Marketplace Comparison": "Compare campaigns on same marketplace. Use same time periods for accuracy. Run 7+ days minimum.",
+            "Multi-Marketplace Comparison":  "Compare 2-5 marketplaces. Use same time period. Look at ROAS and AOV together.",
+            "Time Period Comparison":        "Compare YoY or seasonal periods. Account for seasonality. Look at growth %.",
+        }
+        st.info(guides.get(test_mode,""))
+
     if st.session_state.ab_tests:
         st.markdown("---")
         st.markdown("**🔬 Test Results**")
-        
         for idx, test in enumerate(st.session_state.ab_tests):
-            # ========== SINGLE MARKETPLACE TEST DISPLAY ==========
             if test['test_type'] == 'Single Marketplace':
                 with st.expander(f"🧪 {test['test_name']} ({test['test_type']}) - {test['created_at']}", expanded=True):
-                    var_a = test['variant_a']
-                    var_b = test['variant_b']
-                    
-                    # Calculate improvements
-                    revenue_improvement = ((var_b['revenue'] - var_a['revenue']) / var_a['revenue'] * 100) if var_a['revenue'] > 0 else 0
-                    orders_improvement = ((var_b['orders'] - var_a['orders']) / var_a['orders'] * 100) if var_a['orders'] > 0 else 0
-                    roas_improvement = ((var_b['roas'] - var_a['roas']) / var_a['roas'] * 100) if var_a['roas'] > 0 else 0
-                    
-                    # Display comparison
-                    st.markdown(f"**{var_a['name']} ({var_a['channel']})** vs **{var_b['name']} ({var_b['channel']})**")
-                    
-                    comparison_data = pd.DataFrame({
-                        'Metric': ['Revenue', 'Orders', 'Ad Spend', 'ROAS', 'AOV'],
-                        var_a['name']: [
-                            f"${var_a['revenue']:,.0f}",
-                            f"{var_a['orders']:,.0f}",
-                            f"${var_a['spend']:,.0f}",
-                            f"{var_a['roas']:.2f}x",
-                            f"${var_a['aov']:.2f}"
-                        ],
-                        var_b['name']: [
-                            f"${var_b['revenue']:,.0f}",
-                            f"{var_b['orders']:,.0f}",
-                            f"${var_b['spend']:,.0f}",
-                            f"{var_b['roas']:.2f}x",
-                            f"${var_b['aov']:.2f}"
-                        ],
-                        'Change': [
-                            f"{revenue_improvement:+.1f}%",
-                            f"{orders_improvement:+.1f}%",
-                            f"{((var_b['spend'] - var_a['spend']) / var_a['spend'] * 100) if var_a['spend'] > 0 else 0:+.1f}%",
-                            f"{roas_improvement:+.1f}%",
-                            f"{((var_b['aov'] - var_a['aov']) / var_a['aov'] * 100) if var_a['aov'] > 0 else 0:+.1f}%"
-                        ]
+                    va, vb = test['variant_a'], test['variant_b']
+                    rev_imp  = ((vb['revenue']-va['revenue'])/va['revenue']*100) if va['revenue']>0 else 0
+                    roas_imp = ((vb['roas']-va['roas'])/va['roas']*100) if va['roas']>0 else 0
+                    st.markdown(f"**{va['name']} ({va.get('channel',va['name'])})** vs **{vb['name']} ({vb.get('channel',vb['name'])})**")
+                    comp = pd.DataFrame({
+                        "Metric":["Revenue","Orders","Ad Spend","ROAS","AOV"],
+                        va['name']:[f"${va['revenue']:,.0f}",f"{va['orders']:,.0f}",f"${va['spend']:,.0f}",f"{va['roas']:.2f}x",f"${va['aov']:.2f}"],
+                        vb['name']:[f"${vb['revenue']:,.0f}",f"{vb['orders']:,.0f}",f"${vb['spend']:,.0f}",f"{vb['roas']:.2f}x",f"${vb['aov']:.2f}"],
+                        "Change":[f"{rev_imp:+.1f}%",f"{((vb['orders']-va['orders'])/va['orders']*100) if va['orders']>0 else 0:+.1f}%",
+                                  f"{((vb['spend']-va['spend'])/va['spend']*100) if va['spend']>0 else 0:+.1f}%",
+                                  f"{roas_imp:+.1f}%",f"{((vb['aov']-va['aov'])/va['aov']*100) if va['aov']>0 else 0:+.1f}%"]
                     })
-                    
-                    st.dataframe(comparison_data, hide_index=True, use_container_width=True)
-                    
-                    # Winner determination
-                    st.markdown("**🏆 Test Result:**")
-                    if revenue_improvement > 10 and roas_improvement > 5:
-                        st.success(f"✅ **{var_b['name']} is the clear winner!** (+{revenue_improvement:.1f}% revenue, +{roas_improvement:.1f}% ROAS)")
-                    elif revenue_improvement < -10 or roas_improvement < -5:
-                        st.error(f"❌ **{var_a['name']} performs better.** Stick with control.")
-                    else:
-                        st.info(f"➡️ **Results are inconclusive.** Consider running test longer or with larger sample size.")
-                    
-                    # Delete button
-                    if st.button(f"🗑️ Delete Test", key=f"delete_single_{idx}"):
-                        st.session_state.ab_tests.pop(idx)
-                        st.rerun()
-            
-            # ========== MULTI-MARKETPLACE TEST DISPLAY ==========
+                    st.dataframe(comp, hide_index=True, use_container_width=True)
+                    if rev_imp>10 and roas_imp>5: st.success(f"✅ **{vb['name']} wins!** +{rev_imp:.1f}% revenue, +{roas_imp:.1f}% ROAS")
+                    elif rev_imp<-10 or roas_imp<-5: st.error(f"❌ **{va['name']} performs better.** Stick with control.")
+                    else: st.info("➡️ **Results inconclusive.** Run longer or with larger sample.")
+                    if st.button("🗑️ Delete", key=f"del_single_{idx}"):
+                        st.session_state.ab_tests.pop(idx); st.rerun()
+
             elif test['test_type'] == 'Multi-Marketplace':
                 with st.expander(f"🛒 {test['test_name']} (Multi-Marketplace) - {test['created_at']}", expanded=True):
-                    st.markdown(f"**Period:** {test['period']}")
-                    st.markdown(f"**Comparing {len(test['marketplaces'])} Marketplaces**")
-                    
-                    # Create comparison dataframe
-                    mp_comparison = pd.DataFrame(test['marketplaces'])
-                    mp_comparison = mp_comparison.sort_values('revenue', ascending=False)
-                    
-                    # Visual comparison
-                    col1, col2 = st.columns([3, 1])
-                    
-                    with col1:
-                        # Bar chart comparison
-                        fig_mp_compare = go.Figure()
-                        
-                        fig_mp_compare.add_trace(go.Bar(
-                            x=mp_comparison['marketplace'],
-                            y=mp_comparison['revenue'],
-                            name='Revenue',
-                            marker_color='#3b82f6',
-                            text=mp_comparison['revenue'].apply(lambda x: f'${x:,.0f}'),
-                            textposition='outside'
-                        ))
-                        
-                        fig_mp_compare.update_layout(
-                            template="plotly_dark",
-                            paper_bgcolor="rgba(0,0,0,0)",
-                            plot_bgcolor="rgba(0,0,0,0)",
-                            yaxis=dict(title="Revenue ($)", showgrid=True, gridcolor="#2d303e"),
-                            xaxis=dict(title="Marketplace"),
-                            margin=dict(l=0, r=0, t=20, b=0),
-                            height=300
-                        )
-                        st.plotly_chart(fig_mp_compare, config={'displayModeBar': False})
-                    
-                    with col2:
-                        # Top performers
-                        best_revenue = mp_comparison.iloc[0]
-                        best_roas = mp_comparison.nlargest(1, 'roas').iloc[0]
-                        
-                        st.success(f"💰 **Best Revenue:**\n{best_revenue['marketplace']}\n${best_revenue['revenue']:,.0f}")
-                        st.info(f"🎯 **Best ROAS:**\n{best_roas['marketplace']}\n{best_roas['roas']:.2f}x")
-                    
-                    # Detailed table
-                    st.markdown("**📊 Detailed Comparison:**")
-                    st.dataframe(
-                        mp_comparison,
-                        column_config={
-                            "marketplace": "Marketplace",
-                            "revenue": st.column_config.NumberColumn("Revenue", format="$%d"),
-                            "orders": st.column_config.NumberColumn("Orders", format="%d"),
-                            "spend": st.column_config.NumberColumn("Ad Spend", format="$%d"),
-                            "roas": st.column_config.NumberColumn("ROAS", format="%.2fx"),
-                            "aov": st.column_config.NumberColumn("AOV", format="$%.2f"),
-                            "acos": st.column_config.NumberColumn("ACOS", format="%.1f%%"),
-                        },
-                        hide_index=True,
-                        use_container_width=True
-                    )
-                    
-                    # Recommendations
-                    st.markdown("**💡 Recommendations:**")
-                    top_performer = mp_comparison.iloc[0]['marketplace']
-                    worst_performer = mp_comparison.iloc[-1]['marketplace']
-                    
-                    st.success(f"✅ **Scale:** {top_performer} is your top performer. Consider increasing ad budget here.")
-                    if mp_comparison.iloc[-1]['roas'] < 2.0:
-                        st.warning(f"⚠️ **Review:** {worst_performer} has low ROAS. Consider optimizing or reducing spend.")
-                    
-                    # Delete button
-                    if st.button(f"🗑️ Delete Test", key=f"delete_multi_{idx}"):
-                        st.session_state.ab_tests.pop(idx)
-                        st.rerun()
-            
-            # ========== TIME PERIOD TEST DISPLAY ==========
+                    mp_df = pd.DataFrame(test['marketplaces']).sort_values('revenue', ascending=False)
+                    st.dataframe(mp_df, column_config={
+                        "marketplace":st.column_config.TextColumn("Marketplace"),
+                        "revenue":st.column_config.NumberColumn("Revenue",format="$%d"),
+                        "orders": st.column_config.NumberColumn("Orders", format="%d"),
+                        "spend":  st.column_config.NumberColumn("Ad Spend",format="$%d"),
+                        "roas":   st.column_config.NumberColumn("ROAS",   format="%.2fx"),
+                        "aov":    st.column_config.NumberColumn("AOV",    format="$%.2f"),
+                        "acos":   st.column_config.NumberColumn("ACOS",   format="%.1f%%"),
+                    }, hide_index=True, use_container_width=True)
+                    st.success(f"🏆 **Top:** {mp_df.iloc[0]['marketplace']} — ${mp_df.iloc[0]['revenue']:,.0f}")
+                    if st.button("🗑️ Delete", key=f"del_multi_{idx}"):
+                        st.session_state.ab_tests.pop(idx); st.rerun()
+
             elif test['test_type'] == 'Time Period':
                 with st.expander(f"📅 {test['test_name']} (Time Period) - {test['created_at']}", expanded=True):
-                    st.markdown(f"**Marketplace:** {test['marketplace']}")
-                    
-                    period_a = test['period_a']
-                    period_b = test['period_b']
-                    
-                    # Calculate changes
-                    revenue_change = ((period_b['revenue'] - period_a['revenue']) / period_a['revenue'] * 100) if period_a['revenue'] > 0 else 0
-                    orders_change = ((period_b['orders'] - period_a['orders']) / period_a['orders'] * 100) if period_a['orders'] > 0 else 0
-                    roas_change = ((period_b['roas'] - period_a['roas']) / period_a['roas'] * 100) if period_a['roas'] > 0 else 0
-                    
-                    # Display comparison
-                    time_comparison = pd.DataFrame({
-                        'Metric': ['Revenue', 'Orders', 'Ad Spend', 'ROAS', 'AOV'],
-                        period_a['name']: [
-                            f"${period_a['revenue']:,.0f}",
-                            f"{period_a['orders']:,.0f}",
-                            f"${period_a['spend']:,.0f}",
-                            f"{period_a['roas']:.2f}x",
-                            f"${period_a['aov']:.2f}"
-                        ],
-                        period_b['name']: [
-                            f"${period_b['revenue']:,.0f}",
-                            f"{period_b['orders']:,.0f}",
-                            f"${period_b['spend']:,.0f}",
-                            f"{period_b['roas']:.2f}x",
-                            f"${period_b['aov']:.2f}"
-                        ],
-                        'Change': [
-                            f"{revenue_change:+.1f}%",
-                            f"{orders_change:+.1f}%",
-                            f"{((period_b['spend'] - period_a['spend']) / period_a['spend'] * 100) if period_a['spend'] > 0 else 0:+.1f}%",
-                            f"{roas_change:+.1f}%",
-                            f"{((period_b['aov'] - period_a['aov']) / period_a['aov'] * 100) if period_a['aov'] > 0 else 0:+.1f}%"
-                        ]
+                    pa, pb = test['period_a'], test['period_b']
+                    rev_ch = ((pb['revenue']-pa['revenue'])/pa['revenue']*100) if pa['revenue']>0 else 0
+                    comp = pd.DataFrame({
+                        "Metric":["Revenue","Orders","Ad Spend","ROAS","AOV"],
+                        pa['name']:[f"${pa['revenue']:,.0f}",f"{pa['orders']:,.0f}",f"${pa['spend']:,.0f}",f"{pa['roas']:.2f}x",f"${pa['aov']:.2f}"],
+                        pb['name']:[f"${pb['revenue']:,.0f}",f"{pb['orders']:,.0f}",f"${pb['spend']:,.0f}",f"{pb['roas']:.2f}x",f"${pb['aov']:.2f}"],
+                        "Change":[f"{rev_ch:+.1f}%",f"{((pb['orders']-pa['orders'])/pa['orders']*100) if pa['orders']>0 else 0:+.1f}%",
+                                  f"{((pb['spend']-pa['spend'])/pa['spend']*100) if pa['spend']>0 else 0:+.1f}%",
+                                  f"{((pb['roas']-pa['roas'])/pa['roas']*100) if pa['roas']>0 else 0:+.1f}%",
+                                  f"{((pb['aov']-pa['aov'])/pa['aov']*100) if pa['aov']>0 else 0:+.1f}%"]
                     })
-                    
-                    st.dataframe(time_comparison, hide_index=True, use_container_width=True)
-                    
-                    # Analysis
-                    st.markdown("**📈 Period Analysis:**")
-                    if revenue_change > 20:
-                        st.success(f"🎉 Excellent growth of {revenue_change:.1f}%! Business is scaling well.")
-                    elif revenue_change > 0:
-                        st.info(f"📈 Positive growth of {revenue_change:.1f}%. Continue current strategies.")
-                    elif revenue_change > -10:
-                        st.warning(f"⚠️ Slight decline of {abs(revenue_change):.1f}%. Monitor trends closely.")
-                    else:
-                        st.error(f"🚨 Significant decline of {abs(revenue_change):.1f}%. Review strategy immediately.")
-                    
-                    # Delete button
-                    if st.button(f"🗑️ Delete Test", key=f"delete_time_{idx}"):
-                        st.session_state.ab_tests.pop(idx)
-                        st.rerun()
+                    st.dataframe(comp, hide_index=True, use_container_width=True)
+                    if rev_ch>20: st.success(f"🎉 Excellent growth of {rev_ch:.1f}%!")
+                    elif rev_ch>0: st.info(f"📈 Positive growth of {rev_ch:.1f}%.")
+                    elif rev_ch>-10: st.warning(f"⚠️ Slight decline of {abs(rev_ch):.1f}%.")
+                    else: st.error(f"🚨 Significant decline of {abs(rev_ch):.1f}%.")
+                    if st.button("🗑️ Delete", key=f"del_time_{idx}"):
+                        st.session_state.ab_tests.pop(idx); st.rerun()
     else:
-        st.info("📝 No A/B tests created yet. Use the forms above to create your first test!")
+        st.info("📝 No A/B tests yet. Use the forms above to create your first test!")
 
+# ══════════════════════════════════════════════════════════════════════════════
 # TAB 8: Weekly Reports
+# ══════════════════════════════════════════════════════════════════════════════
 with tabs[7]:
     st.markdown('<div class="section-header">📅 Weekly Performance Reports</div>', unsafe_allow_html=True)
 
-    st.markdown("""
-    <div class="info-box">
-    📊 <strong>Generate Weekly Reports with Year-over-Year Comparison:</strong> Every metric is automatically 
-    compared against the <strong>exact same period last year</strong> so you instantly see whether you're growing or declining.
-    </div>
-    """, unsafe_allow_html=True)
-
-    # ── CONTROLS ─────────────────────────────────────────────────────────────
-    cfg_col1, cfg_col2 = st.columns([2, 1])
-
+    cfg_col1, cfg_col2 = st.columns([2,1])
     with cfg_col1:
         st.markdown("**📋 Report Generator**")
         col_date1, col_date2 = st.columns(2)
         with col_date1:
-            report_start = st.date_input(
-                "From Date",
-                value=max_date - timedelta(days=7),
-                min_value=min_date, max_value=max_date,
-                key="report_start"
-            )
+            report_start = st.date_input("From Date", value=max_date-timedelta(days=7),
+                                         min_value=min_date, max_value=date.today(), key="report_start")
         with col_date2:
-            report_end = st.date_input(
-                "To Date",
-                value=max_date,
-                min_value=min_date, max_value=max_date,
-                key="report_end"
-            )
+            report_end   = st.date_input("To Date", value=max_date,
+                                         min_value=min_date, max_value=date.today(), key="report_end")
 
-        # ── Marketplace filter ────────────────────────────────────────────
         all_marketplaces = sorted(sales_df["channel"].dropna().unique().tolist())
-        report_marketplace_options = ["All Marketplaces"] + all_marketplaces
-        report_selected_mp = st.multiselect(
-            "🛒 Filter by Marketplace",
-            options=report_marketplace_options,
-            default=["All Marketplaces"],
-            key="report_marketplace_filter",
-            help="Select one or more marketplaces to scope this report. Defaults to all."
-        )
-        # Resolve to actual channel list
-        if not report_selected_mp or "All Marketplaces" in report_selected_mp:
-            report_channels = all_marketplaces
-        else:
-            report_channels = report_selected_mp
-
-        # Show active filter badge
+        report_selected_mp = st.multiselect("🛒 Filter by Marketplace",
+                                             options=["All Marketplaces"]+all_marketplaces,
+                                             default=["All Marketplaces"], key="report_marketplace_filter")
+        report_channels = all_marketplaces if (not report_selected_mp or "All Marketplaces" in report_selected_mp) else report_selected_mp
         if report_channels != all_marketplaces:
             st.info(f"📌 Report scoped to: **{', '.join(report_channels)}**")
 
         st.markdown("**📑 Include Sections:**")
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            include_kpis            = st.checkbox("KPI Summary",          value=True)
-            include_trends          = st.checkbox("Trend Chart",           value=True)
-        with c2:
-            include_marketplaces    = st.checkbox("Marketplace Breakdown", value=True)
-            include_skus            = st.checkbox("Top SKUs",              value=True)
-        with c3:
-            include_recommendations = st.checkbox("Recommendations",       value=True)
-            include_yoy             = st.checkbox("YoY Comparison",        value=True)
+        c1,c2,c3 = st.columns(3)
+        with c1: include_kpis=st.checkbox("KPI Summary",value=True); include_trends=st.checkbox("Trend Chart",value=True)
+        with c2: include_marketplaces=st.checkbox("Marketplace Breakdown",value=True); include_skus=st.checkbox("Top SKUs",value=True)
+        with c3: include_recommendations=st.checkbox("Recommendations",value=True); include_yoy=st.checkbox("YoY Comparison",value=True)
 
         if st.button("📊 Generate Report", type="primary", key="generate_report"):
-            period_len = (report_end - report_start).days + 1
-
             rep_start_ts = pd.to_datetime(report_start)
-            rep_end_ts = pd.to_datetime(report_end) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-
-            # ── Current period ──────────────────────────────────────────────
-            mask_s = (
-                (sales_df["date"] >= rep_start_ts) &
-                (sales_df["date"] <= rep_end_ts) &
-                (sales_df["channel"].isin(report_channels))
-            )
-            mask_sp = (
-                (spend_df["date"] >= rep_start_ts) &
-                (spend_df["date"] <= rep_end_ts) &
-                (spend_df["channel"].isin(report_channels))
-            )
+            rep_end_ts   = pd.to_datetime(report_end)+pd.Timedelta(days=1)-pd.Timedelta(seconds=1)
+            mask_s  = (sales_df["date"]>=rep_start_ts)&(sales_df["date"]<=rep_end_ts)&(sales_df["channel"].isin(report_channels))
+            mask_sp = (spend_df["date"]>=rep_start_ts)&(spend_df["date"]<=rep_end_ts)&(spend_df["channel"].isin(report_channels)) if not spend_df.empty else pd.Series(dtype=bool)
             report_df_s  = sales_df[mask_s]
-            report_df_sp = spend_df[mask_sp]
+            report_df_sp = spend_df[mask_sp] if not spend_df.empty else pd.DataFrame(columns=["date","channel","spend"])
             report_metrics = calc_metrics(report_df_s, report_df_sp)
 
-            # ── Same period LAST YEAR ───────────────────────────────────────
-            yoy_start = report_start - timedelta(days=365)
-            yoy_end   = report_end   - timedelta(days=365)
-            yoy_start_ts = pd.to_datetime(yoy_start)
-            yoy_end_ts = pd.to_datetime(yoy_end) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-            
-            mask_yoy_s = (
-                (sales_df["date"] >= yoy_start_ts) &
-                (sales_df["date"] <= yoy_end_ts) &
-                (sales_df["channel"].isin(report_channels))
-            )
-            mask_yoy_sp = (
-                (spend_df["date"] >= yoy_start_ts) &
-                (spend_df["date"] <= yoy_end_ts) &
-                (spend_df["channel"].isin(report_channels))
-            )
+            yoy_start = report_start-timedelta(days=365); yoy_end = report_end-timedelta(days=365)
+            yoy_s_ts  = pd.to_datetime(yoy_start); yoy_e_ts = pd.to_datetime(yoy_end)+pd.Timedelta(days=1)-pd.Timedelta(seconds=1)
+            mask_yoy_s  = (sales_df["date"]>=yoy_s_ts)&(sales_df["date"]<=yoy_e_ts)&(sales_df["channel"].isin(report_channels))
+            mask_yoy_sp = (spend_df["date"]>=yoy_s_ts)&(spend_df["date"]<=yoy_e_ts)&(spend_df["channel"].isin(report_channels)) if not spend_df.empty else pd.Series(dtype=bool)
             yoy_df_s  = sales_df[mask_yoy_s]
-            yoy_df_sp = spend_df[mask_yoy_sp]
-            yoy_metrics = calc_metrics(yoy_df_s, yoy_df_sp) if len(yoy_df_s) > 0 else None
+            yoy_df_sp = spend_df[mask_yoy_sp] if not spend_df.empty else pd.DataFrame(columns=["date","channel","spend"])
+            yoy_metrics = calc_metrics(yoy_df_s, yoy_df_sp) if len(yoy_df_s)>0 else None
 
-            mp_label = ", ".join(report_channels) if report_channels != all_marketplaces else "All Marketplaces"
+            mp_label = ", ".join(report_channels) if report_channels!=all_marketplaces else "All Marketplaces"
             st.session_state.current_report = {
-                'period':        f"{report_start.strftime('%b %d, %Y')} – {report_end.strftime('%b %d, %Y')}",
-                'yoy_period':    f"{yoy_start.strftime('%b %d, %Y')} – {yoy_end.strftime('%b %d, %Y')}",
-                'metrics':       report_metrics,
-                'yoy_metrics':   yoy_metrics,
-                'sales_data':    report_df_s,
-                'spend_data':    report_df_sp,
-                'yoy_sales':     yoy_df_s,
-                'yoy_spend':     yoy_df_sp,
-                'report_start':  report_start,
-                'report_end':    report_end,
-                'marketplace_label': mp_label,
-                'sections': {
-                    'kpis':            include_kpis,
-                    'trends':          include_trends,
-                    'marketplaces':    include_marketplaces,
-                    'skus':            include_skus,
-                    'recommendations': include_recommendations,
-                    'yoy':             include_yoy,
-                }
+                'period':    f"{report_start.strftime('%b %d, %Y')} – {report_end.strftime('%b %d, %Y')}",
+                'yoy_period':f"{yoy_start.strftime('%b %d, %Y')} – {yoy_end.strftime('%b %d, %Y')}",
+                'metrics':   report_metrics, 'yoy_metrics': yoy_metrics,
+                'sales_data':report_df_s,'spend_data':report_df_sp,
+                'yoy_sales': yoy_df_s,'yoy_spend':yoy_df_sp,
+                'report_start':report_start,'report_end':report_end,
+                'marketplace_label':mp_label,
+                'sections':{'kpis':include_kpis,'trends':include_trends,'marketplaces':include_marketplaces,
+                            'skus':include_skus,'recommendations':include_recommendations,'yoy':include_yoy}
             }
             st.success("✅ Report generated!")
             st.rerun()
@@ -2943,341 +1657,92 @@ with tabs[7]:
     with cfg_col2:
         st.markdown("**💡 Tips**")
         st.markdown("""
-        **Periods:**
-        - Last 7 days → Weekly
-        - Last 30 days → Monthly
-        - Last 90 days → Quarter
+        **Periods:** Last 7 days → Weekly · Last 30 → Monthly · Last 90 → Quarter
 
-        **YoY Comparison:**
-        Automatically uses exact same
-        calendar period one year ago.
+        **YoY:** Uses exact same calendar period one year ago.
 
-        **No data last year?**
-        YoY section is hidden gracefully.
-
-        **Export:**
-        Download full markdown report
-        or copy text for email/Slack.
+        **Export:** Download as Markdown or PDF.
         """)
 
-    # ── RENDER REPORT ─────────────────────────────────────────────────────────
     if 'current_report' in st.session_state:
         report = st.session_state.current_report
-        m      = report['metrics']
-        ym     = report['yoy_metrics']   # None if no last-year data
+        m = report['metrics']; ym = report['yoy_metrics']
         has_yoy = ym is not None and report['sections']['yoy']
 
-        def _delta(curr, prev, fmt="$"):
-            if prev is None or prev == 0:
-                return None
-            pct = (curr - prev) / abs(prev) * 100
-            if fmt == "$":
-                return f"{pct:+.1f}% vs last year (was ${prev:,.0f})"
-            elif fmt == "x":
-                return f"{pct:+.1f}% vs last year (was {prev:.2f}x)"
-            else:
-                return f"{pct:+.1f}% vs last year (was {prev:.1f}{fmt})"
+        def _delta(curr_v, prev_v, fmt="$"):
+            if prev_v is None or prev_v==0: return None
+            pct = (curr_v-prev_v)/abs(prev_v)*100
+            if fmt=="$": return f"{pct:+.1f}% vs last year (was ${prev_v:,.0f})"
+            elif fmt=="x": return f"{pct:+.1f}% vs last year (was {prev_v:.2f}x)"
+            else: return f"{pct:+.1f}% vs last year (was {prev_v:.1f}{fmt})"
 
         st.markdown("---")
-
-        # ── HEADER BANNER ────────────────────────────────────────────────────
-        mp_scope = report.get('marketplace_label', 'All Marketplaces')
-        mp_badge = (
-            f"&nbsp;|&nbsp; 🛒 <strong>Marketplace:</strong> {mp_scope}"
-            if mp_scope != "All Marketplaces"
-            else ""
-        )
+        mp_scope = report.get('marketplace_label','All Marketplaces')
         st.markdown(
             f"<h2 style='margin:0'>📊 Performance Report</h2>"
-            f"<p style='color:#9ca3af; margin:4px 0 16px 0;'>"
-            f"📅 <strong>This period:</strong> {report['period']} &nbsp;|&nbsp; "
-            f"📅 <strong>Last year same period:</strong> {report['yoy_period']}"
-            f"{mp_badge}"
-            f"</p>",
-            unsafe_allow_html=True
-        )
+            f"<p style='color:#9ca3af;margin:4px 0 16px 0;'>📅 <strong>This period:</strong> {report['period']} &nbsp;|&nbsp; "
+            f"📅 <strong>Last year:</strong> {report['yoy_period']} &nbsp;|&nbsp; 🛒 {mp_scope}</p>",
+            unsafe_allow_html=True)
 
-        # ── KPI SECTION ───────────────────────────────────────────────────────
         if report['sections']['kpis']:
             st.markdown("### 💎 Key Performance Indicators")
-            st.caption("Delta shown vs same period last year. Green = improvement, Red = decline.")
+            k1,k2,k3,k4 = st.columns(4)
+            k1.metric("💰 Revenue",    f"${m['Revenue']:,.0f}",    delta=_delta(m['Revenue'],   ym['Revenue']    if has_yoy else None))
+            k2.metric("🛒 Orders",     f"{m['Orders']:,.0f}",      delta=_delta(m['Orders'],    ym['Orders']     if has_yoy else None,""))
+            k3.metric("🎯 ROAS",       f"{m['ROAS']:.2f}x",        delta=_delta(m['ROAS'],      ym['ROAS']       if has_yoy else None,"x"))
+            k4.metric("💹 Net Profit", f"${m['Net']:,.0f}",        delta=_delta(m['Net'],       ym['Net']        if has_yoy else None))
+            k5,k6,k7,k8 = st.columns(4)
+            k5.metric("📢 Ad Spend",   f"${m['Spend']:,.0f}",      delta=_delta(m['Spend'],     ym['Spend']      if has_yoy else None), delta_color="inverse")
+            k6.metric("🏪 Commission", f"${m['Commission']:,.0f}", delta=_delta(m['Commission'],ym['Commission'] if has_yoy else None), delta_color="inverse")
+            k7.metric("📊 ACOS",       f"{m['ACOS']:.1f}%",        delta=_delta(m['ACOS'],      ym['ACOS']       if has_yoy else None,"%"), delta_color="inverse")
+            k8.metric("🧾 AOV",        f"${m['AOV']:.2f}",         delta=_delta(m['AOV'],       ym['AOV']        if has_yoy else None))
 
-            k1, k2, k3, k4 = st.columns(4)
-            with k1:
-                st.metric("💰 Revenue",   f"${m['Revenue']:,.0f}",
-                          delta=_delta(m['Revenue'], ym['Revenue'] if has_yoy else None) if has_yoy else None)
-            with k2:
-                st.metric("🛒 Orders",    f"{m['Orders']:,.0f}",
-                          delta=_delta(m['Orders'], ym['Orders'] if has_yoy else None, fmt="") if has_yoy else None)
-            with k3:
-                st.metric("🎯 ROAS",      f"{m['ROAS']:.2f}x",
-                          delta=_delta(m['ROAS'], ym['ROAS'] if has_yoy else None, fmt="x") if has_yoy else None)
-            with k4:
-                st.metric("💹 Net Profit", f"${m['Net']:,.0f}",
-                          delta=_delta(m['Net'], ym['Net'] if has_yoy else None) if has_yoy else None)
-
-            k5, k6, k7, k8 = st.columns(4)
-            with k5:
-                st.metric("📢 Ad Spend",   f"${m['Spend']:,.0f}",
-                          delta=_delta(m['Spend'], ym['Spend'] if has_yoy else None) if has_yoy else None,
-                          delta_color="inverse")
-            with k6:
-                st.metric("🏪 Commission", f"${m['Commission']:,.0f}",
-                          delta=_delta(m['Commission'], ym['Commission'] if has_yoy else None) if has_yoy else None,
-                          delta_color="inverse")
-            with k7:
-                st.metric("📊 ACOS",       f"{m['ACOS']:.1f}%",
-                          delta=_delta(m['ACOS'], ym['ACOS'] if has_yoy else None, fmt="%") if has_yoy else None,
-                          delta_color="inverse")
-            with k8:
-                st.metric("🧾 AOV",        f"${m['AOV']:.2f}",
-                          delta=_delta(m['AOV'], ym['AOV'] if has_yoy else None) if has_yoy else None)
-
-        # ── YoY VISUAL COMPARISON ─────────────────────────────────────────────
-        if has_yoy and report['sections']['yoy']:
-            st.markdown("### 📅 This Week vs Same Week Last Year")
-
-            metrics_to_compare = {
-                "Revenue": ("$", m['Revenue'], ym['Revenue']),
-                "Orders":  ("",  m['Orders'],  ym['Orders']),
-                "Ad Spend":("$", m['Spend'],   ym['Spend']),
-                "Net Profit":("$",m['Net'],    ym['Net']),
-                "ROAS":    ("x", m['ROAS'],    ym['ROAS']),
-                "ACOS %":  ("%", m['ACOS'],    ym['ACOS']),
-            }
-
-            yoy_rows = []
-            for metric_name, (unit, curr_val, prev_val) in metrics_to_compare.items():
-                pct = ((curr_val - prev_val) / abs(prev_val) * 100) if prev_val != 0 else 0
-                if unit == "$":
-                    curr_str = f"${curr_val:,.0f}"
-                    prev_str = f"${prev_val:,.0f}"
-                elif unit == "x":
-                    curr_str = f"{curr_val:.2f}x"
-                    prev_str = f"{prev_val:.2f}x"
-                elif unit == "%":
-                    curr_str = f"{curr_val:.1f}%"
-                    prev_str = f"{prev_val:.1f}%"
-                else:
-                    curr_str = f"{curr_val:,.0f}"
-                    prev_str = f"{prev_val:,.0f}"
-                yoy_rows.append({
-                    "Metric":         metric_name,
-                    "This Period":    curr_str,
-                    "Last Year":      prev_str,
-                    "Change %":       pct,
-                    "Trend":          "📈" if pct > 0 else ("📉" if pct < 0 else "➡️")
-                })
-
-            df_yoy = pd.DataFrame(yoy_rows)
-            st.dataframe(
-                df_yoy,
-                column_config={
-                    "Metric":      st.column_config.TextColumn("Metric"),
-                    "This Period": st.column_config.TextColumn("This Period"),
-                    "Last Year":   st.column_config.TextColumn("Same Period Last Year"),
-                    "Change %":    st.column_config.NumberColumn("Change %", format="%.1f%%"),
-                    "Trend":       st.column_config.TextColumn(""),
-                },
-                hide_index=True,
-                use_container_width=True
-            )
-
-            # YoY revenue trend chart side-by-side
-            daily_curr = report['sales_data'].groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
-            daily_yoy  = report['yoy_sales'].groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
-
-            # Align on day-offset so both plot on the same x-axis
-            daily_curr["day"] = range(len(daily_curr))
-            daily_yoy["day"]  = range(len(daily_yoy))
-            max_days = max(len(daily_curr), len(daily_yoy))
-
-            fig_yoy = go.Figure()
-            fig_yoy.add_trace(go.Scatter(
-                x=daily_curr["day"], y=daily_curr["revenue"],
-                name=f"This Period ({report['period'][:6]})",
-                line=dict(color="#3b82f6", width=3),
-                fill="tozeroy", fillcolor="rgba(59,130,246,0.15)"
-            ))
-            fig_yoy.add_trace(go.Scatter(
-                x=daily_yoy["day"], y=daily_yoy["revenue"],
-                name=f"Last Year ({report['yoy_period'][:6]})",
-                line=dict(color="#f59e0b", width=2, dash="dot")
-            ))
-            fig_yoy.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                xaxis=dict(title="Day of Period", showgrid=False),
-                yaxis=dict(title="Revenue ($)", showgrid=True, gridcolor="#2d303e"),
-                legend=dict(orientation="h", y=1.12),
-                margin=dict(l=0, r=0, t=30, b=0),
-                height=320
-            )
-            st.plotly_chart(fig_yoy, config={"displayModeBar": False})
-
-            # Overall YoY summary callout
-            rev_growth = ((m['Revenue'] - ym['Revenue']) / ym['Revenue'] * 100) if ym['Revenue'] > 0 else 0
-            if rev_growth > 10:
-                st.success(f"🎉 **Strong YoY Growth!** Revenue is up **{rev_growth:.1f}%** vs same period last year.")
-            elif rev_growth > 0:
-                st.info(f"📈 **Positive YoY Growth.** Revenue up {rev_growth:.1f}% vs last year.")
-            elif rev_growth > -10:
-                st.warning(f"⚠️ **Slight YoY Decline.** Revenue down {abs(rev_growth):.1f}% vs last year.")
-            else:
-                st.error(f"🚨 **Significant YoY Decline.** Revenue down {abs(rev_growth):.1f}% — review strategy.")
-
-        # ── TREND CHART ───────────────────────────────────────────────────────
-        if report['sections']['trends']:
-            st.markdown("### 📈 Revenue Trend — This Period")
-            daily_r = report['sales_data'].groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
-            fig_trend = go.Figure()
-            fig_trend.add_trace(go.Scatter(
-                x=daily_r["date"], y=daily_r["revenue"],
-                fill="tozeroy", line=dict(color="#3b82f6", width=2)
-            ))
-            fig_trend.update_layout(
-                template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                yaxis=dict(title="Revenue ($)", showgrid=True, gridcolor="#2d303e"),
-                xaxis=dict(showgrid=False),
-                margin=dict(l=0, r=0, t=10, b=0), height=260
-            )
-            st.plotly_chart(fig_trend, config={"displayModeBar": False})
-
-        # ── MARKETPLACE BREAKDOWN ─────────────────────────────────────────────
         ch_report = pd.DataFrame()
         if report['sections']['marketplaces']:
             st.markdown("### 🛒 Marketplace Performance")
-
-            ch_now = report['sales_data'].groupby("channel").agg({"revenue":"sum","orders":"sum"}).reset_index()
-            ch_sp_now = report['spend_data'].groupby("channel")["spend"].sum().reset_index()
-            ch_report = pd.merge(ch_now, ch_sp_now, on="channel", how="outer").fillna(0)
+            ch_now  = report['sales_data'].groupby("channel").agg({"revenue":"sum","orders":"sum"}).reset_index()
+            ch_sp_n = report['spend_data'].groupby("channel")["spend"].sum().reset_index() if not report['spend_data'].empty else pd.DataFrame(columns=["channel","spend"])
+            ch_report = pd.merge(ch_now, ch_sp_n, on="channel", how="outer").fillna(0)
             ch_report["roas"] = ch_report.apply(lambda r: r["revenue"]/r["spend"] if r["spend"]>0 else 0, axis=1)
             ch_report["acos"] = ch_report.apply(lambda r: r["spend"]/r["revenue"]*100 if r["revenue"]>0 else 0, axis=1)
             ch_report = ch_report.sort_values("revenue", ascending=False)
+            st.dataframe(ch_report[["channel","revenue","orders","spend","roas","acos"]], column_config={
+                "channel":st.column_config.TextColumn("Marketplace"),
+                "revenue":st.column_config.NumberColumn("Revenue",format="$%d"),
+                "orders": st.column_config.NumberColumn("Orders", format="%d"),
+                "spend":  st.column_config.NumberColumn("Ad Spend",format="$%d"),
+                "roas":   st.column_config.NumberColumn("ROAS",   format="%.2fx"),
+                "acos":   st.column_config.NumberColumn("ACOS",   format="%.1f%%"),
+            }, hide_index=True, use_container_width=True)
 
-            if has_yoy:
-                # Merge in YoY revenue per channel
-                ch_yoy = report['yoy_sales'].groupby("channel")["revenue"].sum().reset_index().rename(columns={"revenue":"yoy_revenue"})
-                ch_report = ch_report.merge(ch_yoy, on="channel", how="left").fillna(0)
-                ch_report["yoy_growth"] = ch_report.apply(
-                    lambda r: (r["revenue"]-r["yoy_revenue"])/r["yoy_revenue"]*100 if r["yoy_revenue"]>0 else float("nan"), axis=1
-                )
-
-                display_mp_cols = ["channel","revenue","orders","spend","roas","acos","yoy_revenue","yoy_growth"]
-                col_cfg_mp = {
-                    "channel":     "Marketplace",
-                    "revenue":     st.column_config.NumberColumn("Revenue",        format="$%d"),
-                    "orders":      st.column_config.NumberColumn("Orders",         format="%d"),
-                    "spend":       st.column_config.NumberColumn("Ad Spend",       format="$%d"),
-                    "roas":        st.column_config.NumberColumn("ROAS",           format="%.2fx"),
-                    "acos":        st.column_config.NumberColumn("ACOS",           format="%.1f%%"),
-                    "yoy_revenue": st.column_config.NumberColumn("Last Year Rev",  format="$%d"),
-                    "yoy_growth":  st.column_config.NumberColumn("YoY Growth",     format="%.1f%%"),
-                }
-            else:
-                display_mp_cols = ["channel","revenue","orders","spend","roas","acos"]
-                col_cfg_mp = {
-                    "channel": "Marketplace",
-                    "revenue": st.column_config.NumberColumn("Revenue",  format="$%d"),
-                    "orders":  st.column_config.NumberColumn("Orders",   format="%d"),
-                    "spend":   st.column_config.NumberColumn("Ad Spend", format="$%d"),
-                    "roas":    st.column_config.NumberColumn("ROAS",     format="%.2fx"),
-                    "acos":    st.column_config.NumberColumn("ACOS",     format="%.1f%%"),
-                }
-
-            st.dataframe(ch_report[display_mp_cols], column_config=col_cfg_mp,
-                         hide_index=True, use_container_width=True)
-
-            if len(ch_report) > 0:
-                top_mp = ch_report.iloc[0]
-                st.success(f"🏆 **Top Marketplace:** {top_mp['channel']} — ${top_mp['revenue']:,.0f} revenue | {top_mp['roas']:.2f}x ROAS")
-
-        # ── TOP SKUs ──────────────────────────────────────────────────────────
         if report['sections']['skus'] and "Parent" in report['sales_data'].columns:
             st.markdown("### 🏷️ Top SKU Performance")
-
             sku_now = report['sales_data'].groupby("Parent").agg({"revenue":"sum","orders":"sum"}).reset_index()
-            sku_now["aov"] = (sku_now["revenue"] / sku_now["orders"].replace(0, pd.NA)).fillna(0)
-            sku_now = sku_now.sort_values("revenue", ascending=False).head(10)
+            sku_now["aov"] = (sku_now["revenue"]/sku_now["orders"].replace(0,pd.NA)).fillna(0)
+            sku_now = sku_now.sort_values("revenue",ascending=False).head(10)
+            st.dataframe(sku_now[["Parent","revenue","orders","aov"]], column_config={
+                "Parent": "SKU",
+                "revenue":st.column_config.NumberColumn("Revenue",format="$%d"),
+                "orders": st.column_config.NumberColumn("Orders", format="%d"),
+                "aov":    st.column_config.NumberColumn("AOV",    format="$%.2f"),
+            }, hide_index=True, use_container_width=True)
 
-            if has_yoy and "Parent" in report['yoy_sales'].columns:
-                sku_yoy = report['yoy_sales'].groupby("Parent")["revenue"].sum().reset_index().rename(columns={"revenue":"yoy_revenue"})
-                sku_now = sku_now.merge(sku_yoy, on="Parent", how="left").fillna(0)
-                sku_now["yoy_growth"] = sku_now.apply(
-                    lambda r: (r["revenue"]-r["yoy_revenue"])/r["yoy_revenue"]*100 if r["yoy_revenue"]>0 else float("nan"), axis=1
-                )
-                st.dataframe(sku_now, column_config={
-                    "Parent":      "SKU",
-                    "revenue":     st.column_config.NumberColumn("Revenue",       format="$%d"),
-                    "orders":      st.column_config.NumberColumn("Orders",        format="%d"),
-                    "aov":         st.column_config.NumberColumn("AOV",           format="$%.2f"),
-                    "yoy_revenue": st.column_config.NumberColumn("Last Year Rev", format="$%d"),
-                    "yoy_growth":  st.column_config.NumberColumn("YoY Growth",    format="%.1f%%"),
-                }, hide_index=True, use_container_width=True)
-            else:
-                st.dataframe(sku_now[["Parent","revenue","orders","aov"]], column_config={
-                    "Parent":  "SKU",
-                    "revenue": st.column_config.NumberColumn("Revenue", format="$%d"),
-                    "orders":  st.column_config.NumberColumn("Orders",  format="%d"),
-                    "aov":     st.column_config.NumberColumn("AOV",     format="$%.2f"),
-                }, hide_index=True, use_container_width=True)
-
-        # ── RECOMMENDATIONS ───────────────────────────────────────────────────
-        recommendations_list = []
         if report['sections']['recommendations']:
             st.markdown("### 🚀 Strategic Recommendations")
             try:
-                ch_matrix_rec = ch_report if (len(ch_report) > 0 and 'roas' in ch_report.columns) \
-                    else pd.DataFrame(columns=['channel','revenue','spend','roas'])
-                recommendations_list = generate_insights(ch_matrix_rec, m)
-                for rec in recommendations_list[:5]:
-                    icon_map = {"scale":"📈","warn":"⚠️","crit":"🚨","info":"💡"}
-                    icon = icon_map.get(rec['type'], "💡")
-                    if rec['type'] == "scale":   st.success(f"{icon} **{rec['title']}** — {rec['msg']}")
-                    elif rec['type'] == "warn":  st.warning(f"{icon} **{rec['title']}** — {rec['msg']}")
-                    elif rec['type'] == "crit":  st.error(f"{icon} **{rec['title']}** — {rec['msg']}")
-                    else:                        st.info(f"{icon} **{rec['title']}** — {rec['msg']}")
-                if not recommendations_list:
-                    st.info("✅ No critical issues. Performance is stable.")
-            except Exception:
-                st.warning("⚠️ Could not generate recommendations. Include Marketplace Breakdown for best results.")
+                recs = generate_insights(ch_report if len(ch_report)>0 else pd.DataFrame(columns=["channel","revenue","spend","roas"]), m)
+                for rec in recs[:5]:
+                    icon_map={"scale":"📈","warn":"⚠️","crit":"🚨","info":"💡"}
+                    icon=icon_map.get(rec['type'],"💡")
+                    if rec['type']=="scale":   st.success(f"{icon} **{rec['title']}** — {rec['msg']}")
+                    elif rec['type']=="warn":  st.warning(f"{icon} **{rec['title']}** — {rec['msg']}")
+                    elif rec['type']=="crit":  st.error(f"{icon} **{rec['title']}** — {rec['msg']}")
+                    else:                      st.info(f"{icon} **{rec['title']}** — {rec['msg']}")
+                if not recs: st.info("✅ No critical issues. Performance is stable.")
+            except Exception: st.warning("⚠️ Could not generate recommendations.")
 
-        # ── EXPORT ────────────────────────────────────────────────────────────
         st.markdown("---")
         st.markdown("### 📤 Export Report")
-
-        # Build markdown text
-        yoy_md = ""
-        if has_yoy:
-            yoy_md = f"""
-## 📅 Year-over-Year Comparison
-Same period last year: **{report['yoy_period']}**
-
-| Metric | This Period | Last Year | Change |
-|--------|------------|-----------|--------|
-| Revenue | ${m['Revenue']:,.0f} | ${ym['Revenue']:,.0f} | {((m['Revenue']-ym['Revenue'])/ym['Revenue']*100) if ym['Revenue'] else 0:+.1f}% |
-| Orders | {m['Orders']:,.0f} | {ym['Orders']:,.0f} | {((m['Orders']-ym['Orders'])/ym['Orders']*100) if ym['Orders'] else 0:+.1f}% |
-| ROAS | {m['ROAS']:.2f}x | {ym['ROAS']:.2f}x | {((m['ROAS']-ym['ROAS'])/ym['ROAS']*100) if ym['ROAS'] else 0:+.1f}% |
-| Net Profit | ${m['Net']:,.0f} | ${ym['Net']:,.0f} | {((m['Net']-ym['Net'])/abs(ym['Net'])*100) if ym['Net'] else 0:+.1f}% |
-| ACOS | {m['ACOS']:.1f}% | {ym['ACOS']:.1f}% | {((m['ACOS']-ym['ACOS'])/ym['ACOS']*100) if ym['ACOS'] else 0:+.1f}% |
-"""
-
-        mp_md = ""
-        if report['sections']['marketplaces'] and len(ch_report) > 0:
-            mp_md = "\n## 🛒 Marketplace Breakdown\n"
-            for _, row in ch_report.head(5).iterrows():
-                yoy_str = f" | Last Year: ${row.get('yoy_revenue', 0):,.0f} ({row.get('yoy_growth', float('nan')):+.1f}%)" \
-                          if 'yoy_revenue' in ch_report.columns else ""
-                mp_md += f"- **{row['channel']}**: ${row['revenue']:,.0f} rev | {row['roas']:.2f}x ROAS{yoy_str}\n"
-
-        rec_md = ""
-        if recommendations_list:
-            rec_md = "\n## 🚀 Recommendations\n"
-            for rec in recommendations_list[:5]:
-                rec_md += f"- **{rec['title']}**: {rec['msg']}\n"
-
         markdown_report = f"""# 📊 Performance Report
 **Period:** {report['period']}
 
@@ -3291,1500 +1756,372 @@ Same period last year: **{report['yoy_period']}**
 | Ad Spend | ${m['Spend']:,.0f} |
 | ACOS | {m['ACOS']:.1f}% |
 | AOV | ${m['AOV']:.2f} |
-{yoy_md}{mp_md}{rec_md}
 ---
 *Generated by Marketplace Business Insights Dashboard*
 """
-
-        # ── Build PDF HTML ─────────────────────────────────────────────────────
-        def _build_pdf_html(report, m, ym, has_yoy, ch_report, recommendations_list):
-            def kpi_row(label, display_val, raw_val, prev=None, inverse=False):
-                if prev is not None and prev != 0:
-                    pct = (raw_val - prev) / abs(prev) * 100
-                    good = (pct > 0) if not inverse else (pct < 0)
-                    color = "#16a34a" if good else "#dc2626"
-                    arrow = "▲" if pct > 0 else "▼"
-                    delta_html = f'<span style="color:{color};font-size:12px">{arrow} {abs(pct):.1f}%</span>'
-                else:
-                    delta_html = ""
-                return f"<tr><td>{label}</td><td><strong>{display_val}</strong></td><td>{delta_html}</td></tr>"
-
-            mp_scope = report.get('marketplace_label', 'All Marketplaces')
-
-            # KPI rows
-            kpi_html = ""
-            if report['sections']['kpis']:
-                kpi_rows = [
-                    kpi_row("💰 Revenue",     f"${m['Revenue']:,.0f}",   m['Revenue'],    ym['Revenue']   if has_yoy else None),
-                    kpi_row("🛒 Orders",      f"{m['Orders']:,.0f}",     m['Orders'],     ym['Orders']    if has_yoy else None),
-                    kpi_row("📊 AOV",         f"${m['AOV']:.2f}",        m['AOV'],        ym['AOV']       if has_yoy else None),
-                    kpi_row("💹 Net Profit",  f"${m['Net']:,.0f}",       m['Net'],        ym['Net']       if has_yoy else None),
-                    kpi_row("📢 Ad Spend",    f"${m['Spend']:,.0f}",     m['Spend'],      ym['Spend']     if has_yoy else None, inverse=True),
-                    kpi_row("💳 Commission",  f"${m['Commission']:,.0f}",m['Commission'], ym['Commission'] if has_yoy else None, inverse=True),
-                    kpi_row("🎯 ROAS",        f"{m['ROAS']:.2f}x",       m['ROAS'],       ym['ROAS']      if has_yoy else None),
-                    kpi_row("📈 ACOS",        f"{m['ACOS']:.1f}%",       m['ACOS'],       ym['ACOS']      if has_yoy else None, inverse=True),
-                ]
-                kpi_html = f"""
-                <h2>💎 Key Performance Indicators</h2>
-                <table>
-                  <thead><tr><th>Metric</th><th>This Period</th><th>vs Last Year</th></tr></thead>
-                  <tbody>{"".join(kpi_rows)}</tbody>
-                </table>"""
-
-            # YoY section
-            yoy_html = ""
-            if has_yoy and report['sections']['yoy']:
-                rows = ""
-                for label, unit, curr_v, prev_v in [
-                    ("Revenue","$",m['Revenue'],ym['Revenue']),
-                    ("Orders","",m['Orders'],ym['Orders']),
-                    ("Ad Spend","$",m['Spend'],ym['Spend']),
-                    ("Net Profit","$",m['Net'],ym['Net']),
-                    ("ROAS","x",m['ROAS'],ym['ROAS']),
-                    ("ACOS","%",m['ACOS'],ym['ACOS']),
-                ]:
-                    pct = ((curr_v - prev_v) / abs(prev_v) * 100) if prev_v != 0 else 0
-                    color = "#16a34a" if pct > 0 else "#dc2626"
-                    fmt = lambda v,u: f"${v:,.0f}" if u=="$" else (f"{v:.2f}x" if u=="x" else (f"{v:.1f}%" if u=="%" else f"{v:,.0f}"))
-                    rows += f"<tr><td>{label}</td><td>{fmt(curr_v,unit)}</td><td>{fmt(prev_v,unit)}</td><td style='color:{color}'>{pct:+.1f}%</td></tr>"
-                yoy_html = f"""
-                <h2>📅 Year-over-Year Comparison</h2>
-                <p style='color:#666'>Same period last year: {report['yoy_period']}</p>
-                <table>
-                  <thead><tr><th>Metric</th><th>This Period</th><th>Last Year</th><th>Change</th></tr></thead>
-                  <tbody>{rows}</tbody>
-                </table>"""
-
-            # Marketplace section
-            mp_html = ""
-            if report['sections']['marketplaces'] and len(ch_report) > 0:
-                rows = ""
-                for _, row in ch_report.head(10).iterrows():
-                    yoy_col = f"${row.get('yoy_revenue',0):,.0f}" if 'yoy_revenue' in ch_report.columns else "—"
-                    rows += f"<tr><td>{row['channel']}</td><td>${row['revenue']:,.0f}</td><td>{row['orders']:,.0f}</td><td>${row['spend']:,.0f}</td><td>{row['roas']:.2f}x</td><td>{row['acos']:.1f}%</td><td>{yoy_col}</td></tr>"
-                mp_html = f"""
-                <h2>🛒 Marketplace Performance</h2>
-                <table>
-                  <thead><tr><th>Marketplace</th><th>Revenue</th><th>Orders</th><th>Ad Spend</th><th>ROAS</th><th>ACOS</th><th>Last Year Rev</th></tr></thead>
-                  <tbody>{rows}</tbody>
-                </table>"""
-
-            # Recommendations
-            rec_html = ""
-            if recommendations_list and report['sections']['recommendations']:
-                items = ""
-                for rec in recommendations_list[:5]:
-                    color_map = {"scale":"#16a34a","warn":"#d97706","crit":"#dc2626","info":"#2563eb"}
-                    color = color_map.get(rec['type'], "#2563eb")
-                    items += f'<li style="margin-bottom:8px;border-left:4px solid {color};padding-left:10px"><strong>{rec["title"]}</strong><br><span style="color:#555">{rec["msg"]}</span></li>'
-                rec_html = f"<h2>🚀 Strategic Recommendations</h2><ul style='list-style:none;padding:0'>{items}</ul>"
-
-            return f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-  body {{ font-family: Arial, sans-serif; color: #1f2937; margin: 40px; font-size: 13px; }}
-  h1 {{ color: #1e40af; border-bottom: 3px solid #1e40af; padding-bottom: 8px; }}
-  h2 {{ color: #1e3a8a; margin-top: 28px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }}
-  .meta {{ color: #6b7280; font-size: 12px; margin-bottom: 24px; }}
-  table {{ width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12px; }}
-  th {{ background: #1e40af; color: white; padding: 8px 10px; text-align: left; }}
-  td {{ padding: 7px 10px; border-bottom: 1px solid #e5e7eb; }}
-  tr:nth-child(even) {{ background: #f8fafc; }}
-  .footer {{ margin-top: 40px; color: #9ca3af; font-size: 11px; border-top: 1px solid #e5e7eb; padding-top: 10px; }}
-</style>
-</head>
-<body>
-<h1>📊 Performance Report</h1>
-<div class="meta">
-  📅 <strong>Period:</strong> {report['period']} &nbsp;|&nbsp;
-  📅 <strong>Last Year:</strong> {report['yoy_period']} &nbsp;|&nbsp;
-  🛒 <strong>Marketplace:</strong> {mp_scope}
-</div>
-{kpi_html}
-{yoy_html}
-{mp_html}
-{rec_html}
-<div class="footer">Generated by Marketplace Business Insights Dashboard &nbsp;|&nbsp; {report['period']}</div>
-</body>
-</html>"""
-
-        def _generate_pdf(report, m, ym, has_yoy, ch_report, recommendations_list):
-            try:
-                from fpdf import FPDF
-            except ImportError:
-                return None, "Add `fpdf2` to requirements.txt"
-
-            try:
-                import io, tempfile, os, math
-                import matplotlib
-                matplotlib.use("Agg")
-                import matplotlib.pyplot as plt
-                import matplotlib.patches as mpatches
-                import numpy as _np_pdf
-
-                # ── Colors & helpers ─────────────────────────────────────────
-                BG       = (13/255, 17/255, 23/255)
-                BG2      = (22/255, 27/255, 34/255)
-                BLUE     = (59/255,130/255,246/255)
-                GOLD     = (245/255,158/255, 11/255)
-                GREEN    = (16/255,185/255,129/255)
-                RED      = (239/255, 68/255, 68/255)
-                GRAY     = (75/255, 85/255, 99/255)
-                WHITE    = (1, 1, 1)
-                TXT_GRAY = (156/255,163/255,175/255)
-
-                tmp_files = []
-                def _tmp_png():
-                    f = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-                    tmp_files.append(f.name)
-                    return f.name
-
-                def _safe(text):
-                    t = str(text)
-                    for e,r in [("\u2013","-"),("\u2014","-"),("\u2019","'"),("\u201c",'"'),("\u201d",'"'),
-                                ("\u2018","'"),("\u2192","->")]:
-                        t = t.replace(e, r)
-                    # strip emojis
-                    import re
-                    t = re.sub(r'[^\x00-\xFF]', '', t)
-                    return t.encode("latin-1", errors="replace").decode("latin-1")
-
-                def _fmt_k(v):
-                    if abs(v) >= 1_000_000: return f"${v/1_000_000:.1f}M"
-                    if abs(v) >= 1_000:     return f"${v/1_000:.0f}k"
-                    return f"${v:.0f}"
-
-                period   = _safe(report["period"])
-                yoy_per  = _safe(report["yoy_period"])
-                mp_scope = _safe(report.get("marketplace_label","All Marketplaces"))
-
-                # ════════════════════════════════════════════════════════════
-                # CHART 1 — KPI Summary bars (Now vs LY) ──────────────────
-                # ════════════════════════════════════════════════════════════
-                chart1_path = None
-                if has_yoy:
-                    fig, axes = plt.subplots(1, 4, figsize=(12, 3), facecolor=BG)
-                    kpi_bars = [
-                        ("Revenue",    m["Revenue"],  ym["Revenue"],  BLUE,   _fmt_k(m["Revenue"])),
-                        ("Net Profit", m["Net"],      ym["Net"],      GREEN,  _fmt_k(m["Net"])),
-                        ("Ad Spend",   m["Spend"],    ym["Spend"],    GOLD,   _fmt_k(m["Spend"])),
-                        ("Orders",     m["Orders"],   ym["Orders"],   (139/255,92/255,246/255), f'{m["Orders"]:,.0f}'),
-                    ]
-                    for ax, (label, now, ly, col, lbl) in zip(axes, kpi_bars):
-                        ax.set_facecolor(BG2)
-                        bars = ax.bar(["Now","LY"], [now, ly], color=[col, GRAY], width=0.5)
-                        ax.set_title(label, color=WHITE, fontsize=10, fontweight="bold", pad=6)
-                        ax.tick_params(colors=TXT_GRAY, labelsize=8)
-                        for spine in ax.spines.values(): spine.set_visible(False)
-                        ax.yaxis.set_visible(False)
-                        ax.set_ylim(0, max(now, ly) * 1.25 if max(now,ly)>0 else 1)
-                        for bar, val in zip(bars, [lbl, _fmt_k(ly) if "$" in lbl else f'{ly:,.0f}']):
-                            ax.text(bar.get_x()+bar.get_width()/2, bar.get_height()+max(now,ly)*0.02,
-                                    val, ha="center", va="bottom", color=WHITE, fontsize=7, fontweight="bold")
-                    plt.tight_layout(pad=0.5)
-                    p = _tmp_png(); fig.savefig(p, dpi=150, facecolor=BG, bbox_inches="tight"); plt.close(fig)
-                    chart1_path = p
-
-                # ════════════════════════════════════════════════════════════
-                # CHART 2 — Daily Revenue trend ────────────────────────────
-                # ════════════════════════════════════════════════════════════
-                chart2_path = None
-                if report["sections"]["trends"]:
-                    daily_r = report["sales_data"].groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
-                    daily_r["day"] = range(len(daily_r))
-                    daily_r["ma7"] = daily_r["revenue"].rolling(7, min_periods=1).mean()
-                    fig, ax = plt.subplots(figsize=(12, 3.5), facecolor=BG)
-                    ax.set_facecolor(BG)
-                    ax.plot(daily_r["day"], daily_r["revenue"], color=BLUE, linewidth=2, label=f"This Period ({period[:6]})")
-                    ax.plot(daily_r["day"], daily_r["ma7"], color=WHITE, linewidth=1, linestyle="--", label="7-day avg")
-                    if has_yoy:
-                        daily_y = report["yoy_sales"].groupby(pd.Grouper(key="date", freq="D"))["revenue"].sum().reset_index()
-                        daily_y["day"] = range(len(daily_y))
-                        ax.plot(daily_y["day"], daily_y["revenue"], color=GOLD, linewidth=1.5, linestyle="--", label=f"Last Year ({yoy_per[:6]})")
-                    ax.fill_between(daily_r["day"], daily_r["revenue"], alpha=0.15, color=BLUE)
-                    ax.set_xlabel("Day of Period", color=TXT_GRAY, fontsize=9)
-                    ax.set_ylabel("Daily Revenue", color=TXT_GRAY, fontsize=9)
-                    ax.tick_params(colors=TXT_GRAY, labelsize=8)
-                    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x,_: _fmt_k(x)))
-                    for spine in ax.spines.values(): spine.set_color(GRAY)
-                    ax.legend(facecolor=BG2, edgecolor=GRAY, labelcolor=WHITE, fontsize=8)
-                    ax.set_facecolor(BG)
-                    plt.tight_layout()
-                    p = _tmp_png(); fig.savefig(p, dpi=150, facecolor=BG, bbox_inches="tight"); plt.close(fig)
-                    chart2_path = p
-
-                # ════════════════════════════════════════════════════════════
-                # CHART 3 — Revenue by Marketplace (horizontal bar) ────────
-                # ════════════════════════════════════════════════════════════
-                chart3_path = chart4_path = chart5_path = chart6_path = None
-                if report["sections"]["marketplaces"] and len(ch_report) > 0:
-                    ch = ch_report.copy().sort_values("revenue")
-                    total_rev = ch["revenue"].sum()
-                    pcts = (ch["revenue"] / total_rev * 100).round(1)
-                    labels = [f'{r["channel"]} ${r["revenue"]:,.0f} ({p:.0f}%)' for (_,r),p in zip(ch.iterrows(), pcts)]
-                    colors_mp = [BLUE, GOLD, GREEN, RED, (139/255,92/255,246/255), (6/255,182/255,212/255), (249/255,115/255,22/255)]
-
-                    fig, ax = plt.subplots(figsize=(12, max(3, len(ch)*0.55)), facecolor=BG)
-                    ax.set_facecolor(BG)
-                    bars = ax.barh(range(len(ch)), ch["revenue"].values,
-                                   color=[colors_mp[i % len(colors_mp)] for i in range(len(ch))], height=0.6)
-                    ax.set_yticks(range(len(ch)))
-                    ax.set_yticklabels(labels, color=WHITE, fontsize=8)
-                    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x,_: _fmt_k(x)))
-                    ax.tick_params(colors=TXT_GRAY, labelsize=8)
-                    ax.set_xlabel("Revenue", color=TXT_GRAY, fontsize=9)
-                    for spine in ax.spines.values(): spine.set_visible(False)
-                    plt.tight_layout()
-                    p = _tmp_png(); fig.savefig(p, dpi=150, facecolor=BG, bbox_inches="tight"); plt.close(fig)
-                    chart3_path = p
-
-                    # ROAS & ACOS side by side
-                    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 3.5), facecolor=BG)
-                    chs = ch_report.sort_values("revenue", ascending=False)
-                    names = [r["channel"][:10] for _,r in chs.iterrows()]
-                    roas_vals = [r["roas"] for _,r in chs.iterrows()]
-                    acos_vals = [r["acos"] for _,r in chs.iterrows()]
-
-                    for ax, vals, label, target, target_lbl, good_thresh, col_good, col_bad in [
-                        (ax1, roas_vals, "ROAS", 2.0, "Target 2x", 2.0, GREEN, RED),
-                        (ax2, acos_vals, "ACOS %", 20.0, "Good (<20%)", 20.0, GREEN, RED),
-                    ]:
-                        ax.set_facecolor(BG)
-                        bar_colors = [col_good if (v >= good_thresh if label=="ROAS" else v <= good_thresh) else col_bad for v in vals]
-                        ax.bar(range(len(names)), vals, color=bar_colors, width=0.6)
-                        ax.axhline(target, color=GOLD, linewidth=1, linestyle="--", label=target_lbl)
-                        ax.set_xticks(range(len(names)))
-                        ax.set_xticklabels(names, color=TXT_GRAY, fontsize=7, rotation=20, ha="right")
-                        ax.tick_params(colors=TXT_GRAY, labelsize=8)
-                        ax.set_title(f"{label} by Marketplace", color=WHITE, fontsize=10, fontweight="bold")
-                        for spine in ax.spines.values(): spine.set_color(GRAY)
-                        ax.legend(facecolor=BG2, edgecolor=GRAY, labelcolor=WHITE, fontsize=7)
-                        for i, v in enumerate(vals):
-                            ax.text(i, v + max(vals)*0.02, f"{v:.1f}{'x' if label=='ROAS' else '%'}",
-                                    ha="center", color=WHITE, fontsize=7)
-                    plt.tight_layout()
-                    p = _tmp_png(); fig.savefig(p, dpi=150, facecolor=BG, bbox_inches="tight"); plt.close(fig)
-                    chart4_path = p
-
-                    # Bubble / scatter (Spend vs Revenue, size=ROAS)
-                    fig, ax = plt.subplots(figsize=(12, 4), facecolor=BG)
-                    ax.set_facecolor(BG)
-                    max_rev = ch_report["revenue"].max() or 1
-                    max_sp  = ch_report["spend"].max() or 1
-                    for i, (_, r) in enumerate(ch_report.iterrows()):
-                        size = max(50, min(800, r["roas"] * 100))
-                        ax.scatter(r["spend"], r["revenue"], s=size,
-                                   color=colors_mp[i%len(colors_mp)], alpha=0.8, zorder=3)
-                        ax.annotate(r["channel"][:10], (r["spend"], r["revenue"]),
-                                    fontsize=7, color=WHITE, textcoords="offset points", xytext=(5,5))
-                    xs = _np_pdf.linspace(0, max_sp*1.1, 100)
-                    ax.plot(xs, xs,   color=RED,  linestyle="--", linewidth=1, label="Break-even (ROAS=1x)")
-                    ax.plot(xs, xs*2, color=GOLD, linestyle="--", linewidth=1, label="Target (ROAS=2x)")
-                    ax.set_xlabel("Ad Spend", color=TXT_GRAY, fontsize=9)
-                    ax.set_ylabel("Revenue",  color=TXT_GRAY, fontsize=9)
-                    ax.set_title("Spend vs Revenue (bubble size = ROAS)", color=WHITE, fontsize=10, fontweight="bold")
-                    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x,_: _fmt_k(x)))
-                    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x,_: _fmt_k(x)))
-                    ax.tick_params(colors=TXT_GRAY)
-                    for spine in ax.spines.values(): spine.set_color(GRAY)
-                    ax.legend(facecolor=BG2, edgecolor=GRAY, labelcolor=WHITE, fontsize=8)
-                    plt.tight_layout()
-                    p = _tmp_png(); fig.savefig(p, dpi=150, facecolor=BG, bbox_inches="tight"); plt.close(fig)
-                    chart5_path = p
-
-                # ════════════════════════════════════════════════════════════
-                # CHART 6 — Top SKUs horizontal bar ───────────────────────
-                # ════════════════════════════════════════════════════════════
-                chart6_path = None
-                if report["sections"]["skus"] and "Parent" in report["sales_data"].columns:
-                    sku_now = (report["sales_data"].groupby("Parent")
-                               .agg({"revenue":"sum","orders":"sum"}).reset_index()
-                               .sort_values("revenue", ascending=False).head(10))
-                    fig, ax = plt.subplots(figsize=(12, max(3, len(sku_now)*0.6)), facecolor=BG)
-                    ax.set_facecolor(BG)
-                    sku_names = [str(r["Parent"])[:20] for _,r in sku_now.iterrows()]
-                    sku_revs  = [r["revenue"] for _,r in sku_now.iterrows()]
-                    bar_colors2 = [BLUE if i==0 else (139/255,92/255,246/255) if i%2==0 else BLUE for i in range(len(sku_names))]
-                    ax.barh(range(len(sku_names)), sku_revs[::-1], color=bar_colors2[::-1], height=0.6)
-                    ax.set_yticks(range(len(sku_names)))
-                    ax.set_yticklabels([f"{n}  {_fmt_k(v)}" for n,v in zip(sku_names[::-1], sku_revs[::-1])],
-                                       color=WHITE, fontsize=8)
-                    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x,_: _fmt_k(x)))
-                    ax.tick_params(colors=TXT_GRAY, labelsize=8)
-                    for spine in ax.spines.values(): spine.set_visible(False)
-                    plt.tight_layout()
-                    p = _tmp_png(); fig.savefig(p, dpi=150, facecolor=BG, bbox_inches="tight"); plt.close(fig)
-                    chart6_path = p
-
-                # ════════════════════════════════════════════════════════════
-                # BUILD PDF ────────────────────────────────────────────────
-                # ════════════════════════════════════════════════════════════
-                BG_R,BG_G,BG_B       = 13,17,23
-                BG2_R,BG2_G,BG2_B    = 22,27,34
-                BLUE_R,BLUE_G,BLUE_B = 30,64,175
-                WHITE_R=WHITE_G=WHITE_B=255
-                GRAY_R,GRAY_G,GRAY_B = 75,85,99
-
-                pdf = FPDF()
-                pdf.set_auto_page_break(auto=True, margin=15)
-
-                def _page_bg():
-                    pdf.set_fill_color(BG_R,BG_G,BG_B)
-                    pdf.rect(0, 0, 210, 297, "F")
-
-                def _section_bar(title):
-                    pdf.set_fill_color(BLUE_R,BLUE_G,BLUE_B)
-                    pdf.rect(15, pdf.get_y(), 3, 8, "F")
-                    pdf.set_xy(20, pdf.get_y())
-                    pdf.set_font("Helvetica","B",12)
-                    pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
-                    pdf.cell(0, 8, _safe(title), ln=True)
-                    pdf.ln(2)
-
-                def _subsection(title):
-                    pdf.set_font("Helvetica","B",9)
-                    pdf.set_text_color(59,130,246)
-                    pdf.cell(0, 6, _safe(title), ln=True)
-                    pdf.ln(1)
-
-                def _th(cols, widths):
-                    pdf.set_font("Helvetica","B",8)
-                    pdf.set_fill_color(BLUE_R,BLUE_G,BLUE_B)
-                    pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
-                    for c,w in zip(cols, widths):
-                        pdf.cell(w, 7, _safe(c), border=0, fill=True, align="C")
-                    pdf.ln()
-
-                def _tr(vals, widths, even=False):
-                    pdf.set_font("Helvetica","",8)
-                    pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
-                    pdf.set_fill_color(BG2_R,BG2_G,BG2_B) if even else pdf.set_fill_color(BG_R+10,BG_G+10,BG_B+10)
-                    for v,w in zip(vals, widths):
-                        pdf.cell(w, 6, _safe(str(v)), border=0, fill=True, align="C")
-                    pdf.ln()
-
-                def _footer():
-                    pdf.set_y(-12)
-                    pdf.set_font("Helvetica","",7)
-                    pdf.set_text_color(GRAY_R,GRAY_G,GRAY_B)
-                    pdf.cell(90,5,_safe("Marketplace Business Insights Dashboard | Safe Margin 62% | Confidential"),align="L")
-                    pdf.cell(0,5,f"Page {pdf.page_no()}",align="R")
-
-                # ──────────────────────────────────────────────────────────
-                # PAGE 1 — Header + KPIs + summary chart ──────────────────
-                # ──────────────────────────────────────────────────────────
-                pdf.add_page()
-                _page_bg()
-
-                # Top accent bar
-                pdf.set_fill_color(BLUE_R,BLUE_G,BLUE_B)
-                pdf.rect(0,0,210,2,"F")
-                pdf.set_fill_color(59,130,246)
-                pdf.rect(0,2,70,1,"F")
-                pdf.set_fill_color(245,158,11)
-                pdf.rect(70,2,70,1,"F")
-                pdf.set_fill_color(16,185,129)
-                pdf.rect(140,2,70,1,"F")
-
-                # Title
-                pdf.set_xy(15,12)
-                pdf.set_font("Helvetica","B",24)
-                pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
-                pdf.cell(0,12,"PERFORMANCE REPORT",ln=True)
-
-                # Meta info box
-                pdf.set_fill_color(BG2_R,BG2_G,BG2_B)
-                pdf.rect(15,28,180,28,"F")
-                meta = [("Period",period),("YoY Baseline",yoy_per),
-                        ("Marketplace",mp_scope),
-                        ("Generated",pd.Timestamp.now().strftime("%B %d, %Y %H:%M"))]
-                pdf.set_y(31)
-                for lbl, val in meta:
-                    pdf.set_x(22)
-                    pdf.set_font("Helvetica","B",8); pdf.set_text_color(GRAY_R,GRAY_G,GRAY_B)
-                    pdf.cell(35,5,_safe(lbl)); 
-                    pdf.set_font("Helvetica","",8); pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
-                    pdf.cell(0,5,_safe(val),ln=True)
-
-                # KPI cards — row 1
-                pdf.set_y(62)
-                kpi_defs = [
-                    ("REVENUE",    f"${m['Revenue']:,.0f}", m['Revenue'], ym['Revenue'] if has_yoy else None, False, (59,130,246)),
-                    ("ORDERS",     f"{m['Orders']:,.0f}",   m['Orders'],  ym['Orders']  if has_yoy else None, False, (6,182,212)),
-                    ("ROAS",       f"{m['ROAS']:.2f}x",     m['ROAS'],    ym['ROAS']    if has_yoy else None, False, (234,179,8)),
-                    ("NET PROFIT", f"${m['Net']:,.0f}",     m['Net'],     ym['Net']     if has_yoy else None, False, (16,185,129)),
-                    ("AD SPEND",   f"${m['Spend']:,.0f}",   m['Spend'],   ym['Spend']   if has_yoy else None, True,  (249,115,22)),
-                    ("COMMISSION", f"${m['Commission']:,.0f}",m['Commission'],ym['Commission'] if has_yoy else None, True, (236,72,153)),
-                    ("ACOS",       f"{m['ACOS']:.1f}%",     m['ACOS'],    ym['ACOS']    if has_yoy else None, True,  (239,68,68)),
-                    ("AOV",        f"${m['AOV']:.2f}",      m['AOV'],     ym['AOV']     if has_yoy else None, False, (139,92,246)),
-                ]
-                card_w, card_h = 43, 28
-                card_gap = 2.5
-                start_x = 15
-                for i, (lbl, val, raw, prev, inv, (cr,cg,cb)) in enumerate(kpi_defs):
-                    col = i % 4
-                    row = i // 4
-                    x = start_x + col*(card_w+card_gap)
-                    y = 62 + row*(card_h+card_gap)
-                    # Card bg
-                    pdf.set_fill_color(BG2_R,BG2_G,BG2_B)
-                    pdf.rect(x, y, card_w, card_h, "F")
-                    # Color top bar
-                    pdf.set_fill_color(cr,cg,cb)
-                    pdf.rect(x, y, card_w, 1.5, "F")
-                    # Value
-                    pdf.set_xy(x+2, y+4)
-                    pdf.set_font("Helvetica","B",13)
-                    pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
-                    pdf.cell(card_w-4, 8, _safe(val), align="C")
-                    # Label
-                    pdf.set_xy(x+2, y+13)
-                    pdf.set_font("Helvetica","",6)
-                    pdf.set_text_color(GRAY_R,GRAY_G,GRAY_B)
-                    pdf.cell(card_w-4, 4, lbl, align="C")
-                    # Delta
-                    if prev is not None and prev != 0:
-                        pct = (raw-prev)/abs(prev)*100
-                        good = (pct>0) if not inv else (pct<0)
-                        arrow = "▲" if pct>0 else "▼"
-                        col2 = (16,185,129) if good else (239,68,68)
-                        pdf.set_xy(x+2, y+18)
-                        pdf.set_font("Helvetica","B",7)
-                        pdf.set_text_color(*col2)
-                        pdf.cell(card_w-4, 5, _safe(f"{arrow} {abs(pct):.1f}% vs LY"), align="C")
-
-                pdf.set_y(130)
-
-                # Summary chart
-                if chart1_path:
-                    _subsection("Revenue, Profit & Spend at a Glance")
-                    pdf.image(chart1_path, x=15, w=180)
-                    pdf.ln(3)
-
-                _footer()
-
-                # ──────────────────────────────────────────────────────────
-                # PAGE 2 — Revenue Trends + YoY ───────────────────────────
-                # ──────────────────────────────────────────────────────────
-                pdf.add_page()
-                _page_bg()
-                _section_bar("Revenue Trends")
-
-                if chart2_path:
-                    _subsection("Daily Revenue — This Period vs Last Year")
-                    pdf.image(chart2_path, x=15, w=180)
-                    pdf.ln(4)
-
-                # Period Insights
-                if not report["sales_data"].empty:
-                    daily_r2 = report["sales_data"].groupby(pd.Grouper(key="date",freq="D"))["revenue"].sum()
-                    peak_day = daily_r2.idxmax()
-                    _subsection("Period Insights")
-                    insights_data = [
-                        ("Peak Day", peak_day.strftime("%b %d") if hasattr(peak_day,"strftime") else str(peak_day)),
-                        ("Peak Revenue", f"${daily_r2.max():,.0f}"),
-                        ("Avg Daily Rev", f"${daily_r2.mean():,.0f}"),
-                        ("Active Days", str((daily_r2>0).sum())),
-                    ]
-                    pdf.set_fill_color(BG2_R,BG2_G,BG2_B)
-                    for lbl, val in insights_data:
-                        pdf.set_fill_color(BG2_R,BG2_G,BG2_B)
-                        pdf.set_x(15)
-                        pdf.set_font("Helvetica","",8); pdf.set_text_color(GRAY_R,GRAY_G,GRAY_B)
-                        pdf.cell(80,7,_safe(lbl),fill=True)
-                        pdf.set_font("Helvetica","B",8); pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
-                        pdf.cell(100,7,_safe(val),fill=True,ln=True)
-                    pdf.ln(4)
-
-                # YoY comparison table
-                if has_yoy and report["sections"]["yoy"]:
-                    _subsection("Year-over-Year Comparison")
-                    _th(["METRIC","THIS PERIOD","LAST YEAR","CHANGE","STATUS"],[40,35,35,30,30])
-                    yoy_rows = [
-                        ("REVENUE",    f"${m['Revenue']:,.0f}", f"${ym['Revenue']:,.0f}", m['Revenue'], ym['Revenue'], False),
-                        ("ORDERS",     f"{m['Orders']:,.0f}",   f"{ym['Orders']:,.0f}",   m['Orders'],  ym['Orders'],  False),
-                        ("ROAS",       f"{m['ROAS']:.2f}x",     f"{ym['ROAS']:.2f}x",     m['ROAS'],    ym['ROAS'],    False),
-                        ("NET PROFIT", f"${m['Net']:,.0f}",     f"${ym['Net']:,.0f}",     m['Net'],     ym['Net'],     False),
-                        ("AD SPEND",   f"${m['Spend']:,.0f}",   f"${ym['Spend']:,.0f}",   m['Spend'],   ym['Spend'],   True),
-                        ("ACOS",       f"{m['ACOS']:.1f}%",     f"{ym['ACOS']:.1f}%",     m['ACOS'],    ym['ACOS'],    True),
-                        ("AOV",        f"${m['AOV']:.2f}",      f"${ym['AOV']:.2f}",      m['AOV'],     ym['AOV'],     False),
-                    ]
-                    for i,(lbl,cs,ps,cv,pv,inv) in enumerate(yoy_rows):
-                        pct = ((cv-pv)/abs(pv)*100) if pv!=0 else 0
-                        good = (pct>0) if not inv else (pct<0)
-                        arrow = "▲" if pct>0 else "▼"
-                        status = "BETTER" if good else "WORSE"
-                        _tr([lbl, cs, ps, _safe(f"{arrow} {abs(pct):.1f}%"), status], [40,35,35,30,30], even=(i%2==0))
-
-                _footer()
-
-                # ──────────────────────────────────────────────────────────
-                # PAGE 3 — Marketplace ─────────────────────────────────────
-                # ──────────────────────────────────────────────────────────
-                if report["sections"]["marketplaces"] and len(ch_report)>0:
-                    pdf.add_page()
-                    _page_bg()
-                    _section_bar("Marketplace Breakdown")
-
-                    if chart3_path:
-                        _subsection("Revenue by Marketplace")
-                        pdf.image(chart3_path, x=15, w=180)
-                        pdf.ln(3)
-
-                    if chart4_path:
-                        _subsection("ROAS & ACOS by Marketplace")
-                        pdf.image(chart4_path, x=15, w=180)
-                        pdf.ln(3)
-
-                    if chart5_path:
-                        _subsection("Ad Spend Efficiency Analysis")
-                        pdf.image(chart5_path, x=15, w=180)
-                        pdf.ln(3)
-
-                    _footer()
-
-                    # Marketplace table on next page
-                    pdf.add_page()
-                    _page_bg()
-                    _subsection("Marketplace Detail Table")
-                    has_yoy_mp = "yoy_revenue" in ch_report.columns
-                    if has_yoy_mp:
-                        _th(["MARKETPLACE","REVENUE","ORDERS","AD SPEND","ROAS","ACOS","LY REV","YOY"],[32,25,18,25,18,18,25,19])
-                    else:
-                        _th(["MARKETPLACE","REVENUE","ORDERS","AD SPEND","ROAS","ACOS"],[42,30,22,32,24,30])
-                    for i,(_,r) in enumerate(ch_report.iterrows()):
-                        g = r.get("yoy_growth",float("nan"))
-                        yoy_str = (_safe(f"▲{abs(g):.1f}%") if g>0 else _safe(f"▼{abs(g):.1f}%")) if g==g else "-"
-                        if has_yoy_mp:
-                            _tr([str(r["channel"])[:14],f"${r['revenue']:,.0f}",f"{r['orders']:,.0f}",
-                                 f"${r['spend']:,.0f}",f"{r['roas']:.2f}x",f"{r['acos']:.1f}%",
-                                 f"${r.get('yoy_revenue',0):,.0f}",yoy_str],[32,25,18,25,18,18,25,19],even=(i%2==0))
-                        else:
-                            _tr([str(r["channel"])[:16],f"${r['revenue']:,.0f}",f"{r['orders']:,.0f}",
-                                 f"${r['spend']:,.0f}",f"{r['roas']:.2f}x",f"{r['acos']:.1f}%"],[42,30,22,32,24,30],even=(i%2==0))
-                    _footer()
-
-                # ──────────────────────────────────────────────────────────
-                # PAGE — Top SKUs ──────────────────────────────────────────
-                # ──────────────────────────────────────────────────────────
-                if report["sections"]["skus"] and "Parent" in report["sales_data"].columns:
-                    pdf.add_page()
-                    _page_bg()
-                    _section_bar("Top SKU Performance")
-
-                    if chart6_path:
-                        _subsection("Top SKUs by Revenue")
-                        pdf.image(chart6_path, x=15, w=180)
-                        pdf.ln(3)
-
-                    sku_now = (report["sales_data"].groupby("Parent")
-                               .agg({"revenue":"sum","orders":"sum"}).reset_index())
-                    sku_now["aov"] = (sku_now["revenue"]/sku_now["orders"].replace(0,pd.NA)).fillna(0)
-                    sku_now = sku_now.sort_values("revenue",ascending=False).head(20)
-                    has_sku_yoy = has_yoy and "Parent" in report["yoy_sales"].columns
-                    if has_sku_yoy:
-                        sy = report["yoy_sales"].groupby("Parent")["revenue"].sum().reset_index().rename(columns={"revenue":"yr"})
-                        sku_now = sku_now.merge(sy,on="Parent",how="left").fillna(0)
-                        _th(["SKU / PARENT","REVENUE","ORDERS","AOV","LY REV","YOY DELTA"],[55,28,20,24,28,15])
-                        for i,(_,r) in enumerate(sku_now.iterrows()):
-                            g = ((r["revenue"]-r["yr"])/r["yr"]*100) if r["yr"]>0 else float("nan")
-                            gstr = (_safe(f"▲{abs(g):.1f}%") if g>0 else _safe(f"▼{abs(g):.1f}%")) if g==g else "-"
-                            _tr([str(r["Parent"])[:22],f"${r['revenue']:,.0f}",f"{r['orders']:,.0f}",
-                                 f"${r['aov']:.2f}",f"${r['yr']:,.0f}",gstr],[55,28,20,24,28,15],even=(i%2==0))
-                    else:
-                        _th(["SKU / PARENT","REVENUE","ORDERS","AOV"],[75,40,30,30])
-                        for i,(_,r) in enumerate(sku_now.iterrows()):
-                            _tr([str(r["Parent"])[:30],f"${r['revenue']:,.0f}",f"{r['orders']:,.0f}",
-                                 f"${r['aov']:.2f}"],[75,40,30,30],even=(i%2==0))
-                    _footer()
-
-                # ──────────────────────────────────────────────────────────
-                # PAGE — Strategic Recommendations ────────────────────────
-                # ──────────────────────────────────────────────────────────
-                if recommendations_list and report["sections"]["recommendations"]:
-                    pdf.add_page()
-                    _page_bg()
-                    _section_bar("Strategic Recommendations")
-                    type_cfg = {
-                        "scale": ("SCALE UP",  (16,185,129)),
-                        "warn":  ("WARNING",   (245,158,11)),
-                        "crit":  ("CRITICAL",  (239,68,68)),
-                        "info":  ("INFO",      (59,130,246)),
-                    }
-                    for rec in recommendations_list:
-                        lbl, (lr,lg,lb) = type_cfg.get(rec["type"], ("INFO",(59,130,246)))
-                        # Badge
-                        pdf.set_fill_color(lr,lg,lb)
-                        pdf.set_x(15)
-                        pdf.set_font("Helvetica","B",7)
-                        pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
-                        pdf.cell(20,6,lbl,fill=True,align="C")
-                        # Title
-                        pdf.set_font("Helvetica","B",9)
-                        pdf.set_text_color(WHITE_R,WHITE_G,WHITE_B)
-                        pdf.cell(0,6,_safe(f"  {rec['title']}"),ln=True)
-                        # Body
-                        pdf.set_x(15)
-                        pdf.set_font("Helvetica","",8)
-                        pdf.set_text_color(GRAY_R+30,GRAY_G+30,GRAY_B+30)
-                        pdf.multi_cell(180,5,_safe(rec["msg"]))
-                        # Divider
-                        pdf.set_draw_color(GRAY_R,GRAY_G,GRAY_B)
-                        pdf.set_line_width(0.2)
-                        pdf.line(15,pdf.get_y(),195,pdf.get_y())
-                        pdf.ln(3)
-                    _footer()
-
-                buf = io.BytesIO()
-                pdf.output(buf)
-                for f in tmp_files:
-                    try: os.unlink(f)
-                    except: pass
-                return buf.getvalue(), None
-
-            except Exception as e:
-                import traceback
-                return None, f"{e} | {traceback.format_exc()[-400:]}"
-        pdf_bytes, pdf_error = _generate_pdf(report, m, ym, has_yoy, ch_report, recommendations_list)
-
-        ex1, ex2, ex3 = st.columns(3)
+        ex1, ex2 = st.columns(2)
         with ex1:
-            st.download_button(
-                "📥 Download Markdown",
-                markdown_report,
-                f"report_{report['report_start']}_{report['report_end']}.md",
-                "text/markdown",
-                key="download_md"
-            )
+            st.download_button("📥 Download Markdown", markdown_report,
+                               f"report_{report['report_start']}_{report['report_end']}.md","text/markdown",key="download_md")
         with ex2:
-            if pdf_bytes:
-                st.download_button(
-                    "📄 Download PDF",
-                    pdf_bytes,
-                    f"report_{report['report_start']}_{report['report_end']}.pdf",
-                    "application/pdf",
-                    key="download_pdf"
-                )
-            else:
-                st.warning(f"📄 PDF unavailable: {pdf_error}")
-        with ex3:
             if st.button("📋 Show Copyable Text", key="show_copy"):
                 st.text_area("Select all & copy:", markdown_report, height=200)
 
+# ══════════════════════════════════════════════════════════════════════════════
 # TAB 9: Data Explorer
+# ══════════════════════════════════════════════════════════════════════════════
 with tabs[8]:
     st.markdown('<div class="section-header">📋 Performance Data Explorer</div>', unsafe_allow_html=True)
-    
-    # Channel Performance Table
+
     tbl = ch_matrix.copy()
-    if "selling_commission" in ch_matrix.columns:
-        tbl["commission"] = ch_matrix["selling_commission"]
-    else:
-        tbl["commission"] = 0
-    
-    tbl["acos"] = tbl.apply(lambda x: (x["spend"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
-    tbl["net"] = (tbl["revenue"] * SAFE_MARGIN) - tbl["spend"] - tbl.get("commission", 0)
-    tbl["profit_margin"] = tbl.apply(lambda x: (x["net"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
-    
-    # Select columns to display
-    display_cols = ["channel", "revenue", "orders", "aov", "spend", "commission", "roas", "acos", "net", "profit_margin"]
-    display_tbl = tbl[[col for col in display_cols if col in tbl.columns]]
-    
+    tbl["commission"]     = ch_matrix.get("selling_commission", 0)
+    tbl["acos"]           = tbl.apply(lambda x: (x["spend"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
+    tbl["net"]            = (tbl["revenue"]*SAFE_MARGIN) - tbl["spend"] - tbl.get("commission",0)
+    tbl["profit_margin"]  = tbl.apply(lambda x: (x["net"]/x["revenue"]*100) if x["revenue"]>0 else 0, axis=1)
+
+    display_cols = ["channel","revenue","orders","aov","spend","commission","roas","acos","net","profit_margin"]
     st.dataframe(
-        display_tbl,
+        tbl[[c for c in display_cols if c in tbl.columns]],
         column_config={
-            "channel": st.column_config.TextColumn("Marketplace", width="medium"),
-            "revenue": st.column_config.NumberColumn("Revenue", format="$%,.0f"),
-            "orders": st.column_config.NumberColumn("Orders", format="%d"),
-            "aov": st.column_config.NumberColumn("AOV", format="$%.2f"),
-            "spend": st.column_config.NumberColumn("Ad Spend", format="$%d"),
-            "commission": st.column_config.NumberColumn("Commission", format="$%d"),
-            "roas": st.column_config.NumberColumn("ROAS", format="%.2fx"),
-            "acos": st.column_config.NumberColumn("ACOS", format="%.1f%%"),
-            "net": st.column_config.NumberColumn("Net Profit", format="$%d"),
-            "profit_margin": st.column_config.NumberColumn("Profit Margin", format="%.1f%%"),
+            "channel":       st.column_config.TextColumn("Marketplace",   width="medium"),
+            "revenue":       st.column_config.NumberColumn("Revenue",      format="$%,.0f"),
+            "orders":        st.column_config.NumberColumn("Orders",       format="%d"),
+            "aov":           st.column_config.NumberColumn("AOV",          format="$%.2f"),
+            "spend":         st.column_config.NumberColumn("Ad Spend",     format="$%d"),
+            "commission":    st.column_config.NumberColumn("Commission",   format="$%d"),
+            "roas":          st.column_config.NumberColumn("ROAS",         format="%.2fx"),
+            "acos":          st.column_config.NumberColumn("ACOS",         format="%.1f%%"),
+            "net":           st.column_config.NumberColumn("Net Profit",   format="$%d"),
+            "profit_margin": st.column_config.NumberColumn("Profit Margin",format="%.1f%%"),
         },
-        hide_index=True,
-        height=400
+        hide_index=True, height=400
     )
-    
-    # Export Options
+
     col1, col2, col3 = st.columns(3)
-    
     with col1:
-        csv = display_tbl.to_csv(index=False).encode('utf-8')
+        csv = tbl.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Download Marketplace Report (CSV)", csv, "marketplace_performance.csv", "text/csv", key="download_channel")
-    
     with col2:
         if not df_s.empty:
-            sales_csv = df_s.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Sales Data (CSV)", sales_csv, "sales_data.csv", "text/csv", key="download_sales")
-    
+            st.download_button("📥 Download Sales Data (CSV)", df_s.to_csv(index=False).encode('utf-8'), "sales_data.csv","text/csv",key="download_sales")
     with col3:
         if not df_sp.empty:
-            spend_csv = df_sp.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Spend Data (CSV)", spend_csv, "spend_data.csv", "text/csv", key="download_spend")
+            st.download_button("📥 Download Spend Data (CSV)", df_sp.to_csv(index=False).encode('utf-8'),"spend_data.csv","text/csv",key="download_spend")
 
     # ── Jewelry Type Performance ──────────────────────────────────────────────
     st.markdown("---")
     st.markdown("### 💍 Jewelry Type Performance")
-    st.caption("Revenue, orders, AOV and share by jewelry type — sourced from Google Sheets.")
+    _jt_src = df_s.copy()
 
-    _jt_src = df_s.copy()  # use ALL sales in selected date range
-
-    # Apply remap: blank→Rings, Necklace→Pendants etc.
     def _remap_jt(v):
         v = str(v).strip()
-        if v in ("", "nan", "None", "NaN", "<NA>", "Unknown"):
-            return None
-        _m = {
-            "ring":"Rings","rings":"Rings",
-            "pendant":"Pendants","pendants":"Pendants",
-            "necklace":"Pendants","necklaces":"Pendants",
-            "earring":"Earrings","earrings":"Earrings",
-            "bracelet":"Bracelets","bracelets":"Bracelets",
-            "band":"Band","bands":"Band",
-            "bangle":"Bangles","bangles":"Bangles",
-            "lapel pin":"Lapel Pin","misc":"MISC",
-            "men's band":"Men's Band","mens band":"Men's Band",
-        }
+        if v in ("","nan","None","NaN","<NA>","Unknown"): return None
+        _m = {"ring":"Rings","rings":"Rings","pendant":"Pendants","pendants":"Pendants",
+              "necklace":"Pendants","necklaces":"Pendants","earring":"Earrings","earrings":"Earrings",
+              "bracelet":"Bracelets","bracelets":"Bracelets","band":"Band","bands":"Band",
+              "bangle":"Bangles","bangles":"Bangles","lapel pin":"Lapel Pin","misc":"MISC",
+              "men's band":"Men's Band","mens band":"Men's Band"}
         return _m.get(v.lower(), v)
 
     if "type" in _jt_src.columns:
         _jt_src["jewelry_type"] = _jt_src["type"].apply(_remap_jt)
         _jt_src = _jt_src[_jt_src["jewelry_type"].notna()]
-
-        jt_tbl = (
-            _jt_src.groupby("jewelry_type", as_index=False)
-            .agg(Revenue=("revenue","sum"), Orders=("orders","sum"))
-            .sort_values("Revenue", ascending=False)
-        )
-        jt_tbl["AOV"]       = (jt_tbl["Revenue"] / jt_tbl["Orders"].replace(0, np.nan)).fillna(0)
-        _total_rev = jt_tbl["Revenue"].sum()
-        _total_ord = jt_tbl["Orders"].sum()
-        jt_tbl["Rev_Share"] = jt_tbl["Revenue"] / _total_rev * 100 if _total_rev > 0 else 0
-        jt_tbl["Ord_Share"] = jt_tbl["Orders"]  / _total_ord * 100 if _total_ord > 0 else 0
-
-        # ── Ad Spend from Supabase ────────────────────────────────────────────
-        _has_ads_de = False
-        try:
-            _sb_url_de, _sb_key_de = _get_supabase_creds()
-            _ads_de = _load_sku_ads_raw(
-                start_date.strftime("%Y-%m-%d"),
-                end_date.strftime("%Y-%m-%d"),
-                _url=_sb_url_de, _key=_sb_key_de,
-            )
-            if (not _ads_de.empty
-                    and "_error" not in _ads_de.columns
-                    and "Parent_SKU" in _ads_de.columns
-                    and "Spend" in _ads_de.columns):
-                # Map Parent_SKU → jewelry_type via sales data type column
-                _sku_type = (
-                    _jt_src[["Parent","jewelry_type"]]
-                    .drop_duplicates(subset="Parent")
-                    .rename(columns={"Parent": "Parent_SKU"})
-                )
-                _ads_de = _ads_de.merge(_sku_type, on="Parent_SKU", how="left")
-                _ads_de["jewelry_type"] = _ads_de["jewelry_type"].apply(
-                    lambda v: _remap_jt(v) if pd.notna(v) else None
-                )
-                _ads_de = _ads_de[_ads_de["jewelry_type"].notna()]
-                _ads_by_jt = (
-                    _ads_de.groupby("jewelry_type", as_index=False)
-                    .agg(Ad_Spend=("Spend","sum"), Ad_Sales=("Ad_Sales","sum"), Ad_Orders=("Ad_Orders","sum"))
-                )
-                jt_tbl = jt_tbl.merge(_ads_by_jt, on="jewelry_type", how="left")
-                jt_tbl["Ad_Spend"]  = jt_tbl["Ad_Spend"].fillna(0)
-                jt_tbl["Ad_Sales"]  = jt_tbl["Ad_Sales"].fillna(0)
-                jt_tbl["Ad_Orders"] = jt_tbl["Ad_Orders"].fillna(0)
-                jt_tbl["ACOS"] = jt_tbl.apply(
-                    lambda r: r["Ad_Spend"] / r["Ad_Sales"] * 100 if r["Ad_Sales"] > 0 else 0, axis=1)
-                _total_spend    = jt_tbl["Ad_Spend"].sum()
-                _total_ad_sales = jt_tbl["Ad_Sales"].sum()
-                _has_ads_de = True
-        except Exception:
-            _has_ads_de = False
-
-        # Totals row
-        _totals = {
-            "jewelry_type": "🔢 TOTAL",
-            "Revenue":   _total_rev,
-            "Orders":    _total_ord,
-            "AOV":       _total_rev / _total_ord if _total_ord > 0 else 0,
-            "Rev_Share": 100.0,
-            "Ord_Share": 100.0,
-        }
-        if _has_ads_de:
-            _totals.update({
-                "Ad_Spend":  _total_spend,
-                "Ad_Sales":  _total_ad_sales,
-                "Ad_Orders": jt_tbl["Ad_Orders"].sum(),
-                "ACOS":      _total_spend / _total_ad_sales * 100 if _total_ad_sales > 0 else 0,
-            })
+        jt_tbl = (_jt_src.groupby("jewelry_type", as_index=False)
+                  .agg(Revenue=("revenue","sum"), Orders=("orders","sum"))
+                  .sort_values("Revenue", ascending=False))
+        jt_tbl["AOV"] = (jt_tbl["Revenue"]/jt_tbl["Orders"].replace(0,np.nan)).fillna(0)
+        _total_rev = jt_tbl["Revenue"].sum(); _total_ord = jt_tbl["Orders"].sum()
+        jt_tbl["Rev_Share"] = jt_tbl["Revenue"]/_total_rev*100 if _total_rev>0 else 0
+        jt_tbl["Ord_Share"] = jt_tbl["Orders"]/_total_ord*100  if _total_ord>0 else 0
+        _totals = {"jewelry_type":"🔢 TOTAL","Revenue":_total_rev,"Orders":_total_ord,
+                   "AOV":_total_rev/_total_ord if _total_ord>0 else 0,"Rev_Share":100.0,"Ord_Share":100.0}
         jt_tbl = pd.concat([jt_tbl, pd.DataFrame([_totals])], ignore_index=True)
-
-        _disp_cols = ["jewelry_type","Revenue","Orders","AOV","Rev_Share","Ord_Share"]
-        _col_cfg = {
-            "jewelry_type": st.column_config.TextColumn("Jewelry Type", width="medium"),
-            "Revenue":      st.column_config.NumberColumn("Revenue ($)",  format="$%,.0f"),
-            "Orders":       st.column_config.NumberColumn("Orders",       format="%,.0f"),
-            "AOV":          st.column_config.NumberColumn("AOV ($)",      format="$%.2f"),
-            "Rev_Share":    st.column_config.NumberColumn("Rev Share %",  format="%.1f%%"),
-            "Ord_Share":    st.column_config.NumberColumn("Ord Share %",  format="%.1f%%"),
-        }
-        if _has_ads_de:
-            _disp_cols += ["Ad_Spend","Ad_Sales","Ad_Orders","ACOS"]
-            _col_cfg.update({
-                "Ad_Spend":  st.column_config.NumberColumn("Ad Spend ($)", format="$%,.0f"),
-                "Ad_Sales":  st.column_config.NumberColumn("Ad Sales ($)", format="$%,.0f"),
-                "Ad_Orders": st.column_config.NumberColumn("Ad Orders",    format="%,.0f"),
-                "ACOS":      st.column_config.NumberColumn("ACOS %",       format="%.1f%%"),
-            })
-
-        st.dataframe(
-            jt_tbl[_disp_cols],
-            column_config=_col_cfg,
-            hide_index=True, use_container_width=True,
-            height=min(500, (len(jt_tbl) + 1) * 38 + 38),
-        )
-        st.download_button(
-            "📥 Download Jewelry Type Report (CSV)",
-            jt_tbl.to_csv(index=False).encode("utf-8"),
-            "jewelry_type_performance.csv", "text/csv", key="dl_jtype_explorer"
-        )
+        st.dataframe(jt_tbl[["jewelry_type","Revenue","Orders","AOV","Rev_Share","Ord_Share"]], column_config={
+            "jewelry_type":st.column_config.TextColumn("Jewelry Type",width="medium"),
+            "Revenue":     st.column_config.NumberColumn("Revenue ($)", format="$%,.0f"),
+            "Orders":      st.column_config.NumberColumn("Orders",      format="%,.0f"),
+            "AOV":         st.column_config.NumberColumn("AOV ($)",     format="$%.2f"),
+            "Rev_Share":   st.column_config.NumberColumn("Rev Share %", format="%.1f%%"),
+            "Ord_Share":   st.column_config.NumberColumn("Ord Share %", format="%.1f%%"),
+        }, hide_index=True, use_container_width=True)
+        st.download_button("📥 Download Jewelry Type Report (CSV)",
+                           jt_tbl.to_csv(index=False).encode("utf-8"),
+                           "jewelry_type_performance.csv","text/csv",key="dl_jtype_explorer")
     else:
         st.info("No 'type' column found in sales data.")
 
+# ══════════════════════════════════════════════════════════════════════════════
 # TAB 10: Merchandising Intel
+# ══════════════════════════════════════════════════════════════════════════════
 with tabs[9]:
     st.markdown('<div class="section-header">💎 Merchandising Intelligence</div>', unsafe_allow_html=True)
 
-    # ── Load & deduplicate merchandising reference data ───────────────────────
     @st.cache_data(show_spinner=False, ttl=3600)
-    def _load_merch(_version="v2"):  # bump version to bust stale cache
-        import os
-        # Streamlit Cloud mounts the repo at /mount/src/<repo-name>/
-        # We also try the cwd and the directory of app.py
+    def _load_merch(_version="v4"):
         candidates = [
             "/mount/src/businessperformancedashboard/Merchandising_data.xlsx",
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "Merchandising_data.xlsx"),
             "Merchandising_data.xlsx",
         ]
-        found_path = None
-        for p in candidates:
-            if os.path.exists(p):
-                found_path = p
-                break
-
-        if found_path is None:
-            return None, "FILE_NOT_FOUND"
-
-        # Check openpyxl is available before reading
+        found_path = next((p for p in candidates if os.path.exists(p)), None)
+        if found_path is None: return None, "FILE_NOT_FOUND"
         try:
-            import openpyxl  # noqa: F401
+            import openpyxl  # noqa
         except ImportError:
             return None, "OPENPYXL_MISSING"
-
         try:
-            raw = pd.read_excel(
-                found_path, engine="openpyxl",
-                usecols=["Parent", "Design Code", "jewelry_type", "stone"]
-            )
+            raw = pd.read_excel(found_path, engine="openpyxl",
+                                usecols=["Parent","Design Code","jewelry_type","stone"])
         except Exception as e:
             return None, f"READ_ERROR: {e}"
-
-        raw = raw.rename(columns={"Design Code": "design_code"})
-        for col in ["Parent", "design_code", "jewelry_type", "stone"]:
+        raw = raw.rename(columns={"Design Code":"design_code"})
+        for col in ["Parent","design_code","jewelry_type","stone"]:
             raw[col] = raw[col].astype(str).str.strip()
-
-        # ── Remap jewelry types at load time ─────────────────────────────────
-        # Normalize to canonical plural names; blank/nan → Rings; Necklace → Pendants
-        _JTYPE_MAP = {
-            "ring": "Rings", "rings": "Rings",
-            "pendant": "Pendants", "pendants": "Pendants",
-            "necklace": "Pendants", "necklaces": "Pendants",
-            "earring": "Earrings", "earrings": "Earrings",
-            "bracelet": "Bracelets", "bracelets": "Bracelets",
-            "band": "Band", "bands": "Band",
-            "bangle": "Bangles", "bangles": "Bangles",
-        }
-
-        def _remap_jtype(v):
-            v = str(v).strip()
-            if v in ("", "nan", "None", "NaN", "<NA>"):
-                return "Rings"
+        _JTYPE_MAP = {"ring":"Rings","rings":"Rings","pendant":"Pendants","pendants":"Pendants",
+                      "necklace":"Pendants","necklaces":"Pendants","earring":"Earrings","earrings":"Earrings",
+                      "bracelet":"Bracelets","bracelets":"Bracelets","band":"Band","bands":"Band","bangle":"Bangles","bangles":"Bangles"}
+        def _rj(v):
+            v=str(v).strip()
+            if v in ("","nan","None","NaN","<NA>"): return "Rings"
             return _JTYPE_MAP.get(v.lower(), v)
-
-        raw["jewelry_type"] = raw["jewelry_type"].apply(_remap_jtype)
-
-        lookup = raw.drop_duplicates(subset="Parent").reset_index(drop=True)
-        return lookup, "OK"
+        raw["jewelry_type"] = raw["jewelry_type"].apply(_rj)
+        return raw.drop_duplicates(subset="Parent").reset_index(drop=True), "OK"
 
     merch_lookup, merch_status = _load_merch("v4")
 
     if merch_status == "OPENPYXL_MISSING":
-        st.error(
-            "⚠️ **openpyxl is not installed.** Add `openpyxl>=3.1.0` to your "
-            "`requirements.txt`, commit it, and redeploy."
-        )
+        st.error("⚠️ **openpyxl is not installed.** Add `openpyxl>=3.1.0` to requirements.txt.")
         st.stop()
     elif merch_status == "FILE_NOT_FOUND":
-        st.error(
-            "⚠️ **Merchandising_data.xlsx not found.** "
-            "Make sure the file is committed to your GitHub repo in the same folder as app.py."
-        )
+        st.error("⚠️ **Merchandising_data.xlsx not found.** Ensure it is committed to the repo root.")
         st.stop()
     elif merch_status != "OK" or merch_lookup is None:
         st.error(f"⚠️ Failed to load merchandising data: {merch_status}")
         st.stop()
 
-    # ── Sales base for this tab (ignore sidebar Product Types filter) ────────────
-    # Merchandising Intelligence has its own Jewelry Type / Stone filters.
-    # We still respect the global Date Range + Marketplaces filters.
-    mask_merch_sales = (
-    (sales_df["date"] >= start_ts) &
-    (sales_df["date"] <= end_ts) &
-    (sales_df["channel"].isin(selected_channels))
-    )
+    mask_merch_sales = (sales_df["date"]>=start_ts)&(sales_df["date"]<=end_ts)&(sales_df["channel"].isin(selected_channels))
     df_s_merch = sales_df[mask_merch_sales]
 
-    # ── Mapping stats ─────────────────────────────────────────────────────────
-    sales_parents  = set(df_s_merch["Parent"].dropna().unique())
-    merch_parents  = set(merch_lookup["Parent"].unique())
+    sales_parents   = set(df_s_merch["Parent"].dropna().unique())
+    merch_parents   = set(merch_lookup["Parent"].unique())
     matched_parents = sales_parents & merch_parents
+    match_pct = len(matched_parents)/len(sales_parents)*100 if sales_parents else 0
 
-    match_pct = len(matched_parents) / len(sales_parents) * 100 if sales_parents else 0
+    bm1,bm2,bm3,bm4 = st.columns(4)
+    bm1.metric("💎 Merch Catalogue", f"{len(merch_parents):,} SKUs")
+    bm2.metric("📦 Sales SKUs",      f"{len(sales_parents):,} SKUs")
+    bm3.metric("✅ Matched",         f"{len(matched_parents):,} SKUs")
+    bm4.metric("🔗 Match Rate",      f"{match_pct:.1f}%")
 
-    bm1, bm2, bm3, bm4 = st.columns(4)
-    bm1.metric("💎 Merch Catalogue",  f"{len(merch_parents):,} SKUs")
-    bm2.metric("📦 Sales SKUs",       f"{len(sales_parents):,} SKUs")
-    bm3.metric("✅ Matched",          f"{len(matched_parents):,} SKUs")
-    bm4.metric("🔗 Match Rate",       f"{match_pct:.1f}%")
-
-    if match_pct == 0:
-        st.warning("No Parent SKUs could be matched between sales data and the merchandising sheet. "
-                   "Check that Parent SKU names are formatted the same way in both sources.")
+    if match_pct==0:
+        st.warning("No Parent SKUs matched. Check that Parent SKU names are consistent between sheets.")
 
     st.markdown("---")
 
-    # ── Enrich sales data with merch attributes ───────────────────────────────
-    # ── Deduplicate merch_lookup to ONE row per Parent before merge ───────────
-    # merch_lookup already has jewelry_type remapped (blank→Rings, Necklace→Pendants)
-    merch_lookup_dedup = (
-        merch_lookup[["Parent","design_code","jewelry_type","stone"]]
-        .drop_duplicates(subset="Parent", keep="first")
-        .copy()
-    )
+    merch_lookup_dedup = merch_lookup[["Parent","design_code","jewelry_type","stone"]].drop_duplicates(subset="Parent",keep="first").copy()
+    df_enriched = df_s_merch.merge(merch_lookup_dedup, on="Parent", how="left", suffixes=("_sales","_merch"))
 
-    df_enriched = df_s_merch.merge(
-        merch_lookup_dedup,
-        on="Parent", how="left", suffixes=("_sales", "_merch")
-    )
-
-    # --- Always use merch attributes; fall back to sales only if merch is missing ---
-    def _coalesce_col(df, base):
-        merch_col = f"{base}_merch"
-        sales_col = f"{base}_sales"
-        # Prefer merch value
-        if merch_col in df.columns:
-            df[base] = df[merch_col]
-            return base
-        # Fall back to sales value
-        if sales_col in df.columns:
-            df[base] = df[sales_col]
-            return base
-        # Already exists with no suffix (no conflict during merge)
-        if base in df.columns:
-            return base
-        df[base] = np.nan
+    def _coalesce(df, base):
+        mc=f"{base}_merch"; sc=f"{base}_sales"
+        if mc in df.columns:   df[base]=df[mc]
+        elif sc in df.columns: df[base]=df[sc]
+        elif base not in df.columns: df[base]=np.nan
         return base
+    for _c in ["design_code","jewelry_type","stone"]: _coalesce(df_enriched, _c)
+    df_enriched.drop(columns=[c for c in df_enriched.columns if c.endswith("_sales") or c.endswith("_merch")], inplace=True)
 
-    for _c in ["design_code", "jewelry_type", "stone"]:
-        _coalesce_col(df_enriched, _c)
-
-    # Drop suffixed duplicates to keep downstream code stable
-    drop_cols = [c for c in df_enriched.columns if c.endswith("_sales") or c.endswith("_merch")]
-    if drop_cols:
-        df_enriched = df_enriched.drop(columns=drop_cols)
-
-    # ── Tab-level filters ─────────────────────────────────────────────────────
     st.markdown("### 🔧 Filters")
-    fcol1, fcol2, fcol3 = st.columns([2, 2, 1])
-
-    all_jtypes = sorted([
-        v for v in merch_lookup_dedup["jewelry_type"].unique()
-        if str(v).strip() not in ("", "nan", "None", "NaN", "<NA>")
-    ])
+    fcol1, fcol2, fcol3 = st.columns([2,2,1])
+    all_jtypes = sorted([v for v in merch_lookup_dedup["jewelry_type"].unique() if str(v).strip() not in ("","nan","None","NaN","<NA>")])
     all_stones = sorted(merch_lookup["stone"].dropna().unique().tolist())
+    with fcol1: sel_jtype = st.multiselect("💍 Jewelry Type", options=all_jtypes, default=[], key="merch_jtype_filter", placeholder="All jewelry types…")
+    with fcol2: sel_stone = st.multiselect("💠 Stone", options=all_stones, default=[], key="merch_stone_filter", placeholder="All stones…")
+    with fcol3: matched_only = st.toggle("Matched SKUs only", value=True, key="merch_matched_only")
 
-    with fcol1:
-        sel_jtype = st.multiselect(
-            "💍 Jewelry Type",
-            options=all_jtypes,
-            default=[],
-            key="merch_jtype_filter",
-            placeholder="All jewelry types…"
-        )
-    with fcol2:
-        sel_stone = st.multiselect(
-            "💠 Stone",
-            options=all_stones,
-            default=[],
-            key="merch_stone_filter",
-            placeholder="All stones…"
-        )
-    with fcol3:
-        matched_only = st.toggle(
-            "Matched SKUs only",
-            value=True,
-            key="merch_matched_only",
-            help="When ON, only Parent SKUs found in both sales and merchandising data are shown."
-        )
+    FILTER_COLS = ["Parent","design_code","jewelry_type","stone","revenue","orders"]
+    _df_merch_base = df_enriched[[c for c in FILTER_COLS if c in df_enriched.columns]].copy()
 
-        # Apply filters + heavy aggregations (cached for snappy interactions)
-    FILTER_COLS = ["Parent", "design_code", "jewelry_type", "stone", "revenue", "orders"]
+    # Apply filters
+    df_m = _df_merch_base.copy()
+    for _c in ["design_code","jewelry_type","stone"]:
+        if _c in df_m.columns: df_m[_c] = df_m[_c].astype("string").fillna("").str.strip()
 
-    # Make groupbys faster (especially for repeated filter changes)
-    for _c in ["jewelry_type", "stone", "design_code"]:
-        if _c in df_enriched.columns and not pd.api.types.is_categorical_dtype(df_enriched[_c]):
-            df_enriched[_c] = df_enriched[_c].astype("category")
+    if matched_only:
+        dc = df_m.get("design_code","")
+        df_m = df_m[dc.notna() & (dc.astype("string").str.strip()!="") & (dc.astype("string").str.lower()!="nan")]
+    if sel_jtype:
+        jt_norm = [s.lower() for s in sel_jtype]
+        df_m = df_m[df_m["jewelry_type"].str.lower().isin(jt_norm)]
+    if sel_stone:
+        st_norm = [s.lower() for s in sel_stone]
+        pat = r"(?:^|,\s*)({})(?:\s*,|$)".format("|".join(re.escape(s) for s in st_norm))
+        df_m = df_m[df_m["stone"].str.lower().str.contains(pat, na=False, regex=True)]
 
-    # Prepare a slim base frame once per rerun for this tab (keeps UI identical, speeds up filtering)
-    _df_merch_base = df_enriched[FILTER_COLS].copy()
-
-    # A tiny signature so cache invalidates if underlying data changes (date range, file, etc.)
-    # v2 = remap version bump to bust any stale cache
-    _data_sig = (int(_df_merch_base.shape[0]), float(_df_merch_base["revenue"].sum()), float(_df_merch_base["orders"].sum()), "remapv7")
-
-    @st.cache_data(show_spinner=False, ttl=900, max_entries=128)
-    def _compute_merch_views(_data_sig_key: tuple, _matched_only: bool, _sel_jtype: tuple, _sel_stone: tuple, _df: pd.DataFrame = None):
-        # df passed explicitly to avoid stale closure over _df_merch_base
-        df = _df.copy() if _df is not None else _df_merch_base.copy()
-
-        # Normalize columns to robust plain strings for reliable filtering
-        for _c in ["design_code", "jewelry_type", "stone"]:
-            if _c in df.columns:
-                df[_c] = df[_c].astype("string").fillna("").str.strip()
-
-        # Normalised helper cols (case-insensitive)
-        df["_jewelry_type_norm"] = df.get("jewelry_type", "").astype("string").str.lower().str.strip()
-        df["_stone_norm"] = df.get("stone", "").astype("string").str.lower().str.strip()
-
-        # Normalize selection values too
-        _sel_jtype_norm = tuple(sorted({str(x).strip().lower() for x in _sel_jtype if str(x).strip()}))
-        _sel_stone_norm = tuple(sorted({str(x).strip().lower() for x in _sel_stone if str(x).strip()}))
-
-        mask = pd.Series(True, index=df.index)
-
-        if _matched_only:
-            # matched == has a real design_code from merch lookup
-            dc = df.get("design_code", "")
-            mask &= dc.notna() & (dc.astype("string").str.strip() != "") & (dc.astype("string").str.lower() != "nan")
-
-        if _sel_jtype_norm:
-            mask &= df["_jewelry_type_norm"].isin(_sel_jtype_norm)
-
-        if _sel_stone_norm:
-            # Support comma-separated stones by matching whole tokens.
-            # Example: "Diamond, Ruby" should match selection "ruby".
-            stone_str = df["_stone_norm"].fillna("")
-            pat = r"(?:^|,\s*)({})(?:\s*,|$)".format("|".join(re.escape(s) for s in _sel_stone_norm))
-            mask &= stone_str.str.contains(pat, na=False, regex=True)
-
-        df_m = df.loc[mask, FILTER_COLS]
-
-        # Ensure stable schema even if upstream merge produced suffixed/missing columns
-        for _c in ["design_code", "jewelry_type", "stone"]:
-            if _c not in df_m.columns:
-                df_m[_c] = pd.NA
-        # If filters produce nothing, return empty-but-well-formed views.
-        # The UI will show 0s and "no data" messages instead of sticking or erroring.
-        if df_m.empty:
-            metrics = {"sku_count": 0, "design_count": 0, "rev_sum": 0.0, "ord_sum": 0.0}
-            jtype_agg = pd.DataFrame(columns=["jewelry_type","revenue","orders","aov"])
-            stone_agg = pd.DataFrame(columns=["stone","revenue"])
-            parent_agg = pd.DataFrame(columns=["Parent","revenue","orders","design_code","jewelry_type","stone","aov","revenue_share"])
-            design_agg = pd.DataFrame(columns=["design_code","revenue","orders","variants","jewelry_type","stones","aov","revenue_share"])
-            heat_raw = pd.DataFrame(columns=["jewelry_type","stone","revenue"])
-            top15_stones = []
-            return df_m, metrics, jtype_agg, stone_agg, parent_agg, design_agg, heat_raw, top15_stones
-
-        # KPI metrics
-        metrics = {
-            "sku_count": int(df_m["Parent"].nunique()),
-            "design_count": int(df_m["design_code"].nunique()),
-            "rev_sum": float(df_m["revenue"].sum()),
-            "ord_sum": float(df_m["orders"].sum()),
-        }
-
-        # Revenue by jewelry type
-        # (Guard) ensure column exists for groupby
-        if "jewelry_type" not in df_m.columns:
-            df_m["jewelry_type"] = pd.NA
-        jtype_agg = (
-            df_m.groupby("jewelry_type", dropna=False)
-            .agg(revenue=("revenue", "sum"), orders=("orders", "sum"))
-            .reset_index()
-        )
-        jtype_agg["aov"] = (jtype_agg["revenue"] / jtype_agg["orders"].replace(0, np.nan)).fillna(0)
-        jtype_agg = jtype_agg.sort_values("revenue", ascending=True)
-
-        # Top stones by revenue
-        # (Guard) some datasets may not have a plain "stone" column after merges
-        if "stone" not in df_m.columns:
-            df_m["stone"] = pd.NA
-        stone_agg = (
-            df_m.groupby("stone", dropna=False)["revenue"]
-            .sum()
-            .reset_index()
-            .sort_values("revenue", ascending=False)
-            .head(15)
-        )
-
-        # Parent SKU performance (fast attrs extraction)
-        parent_sum = (
-            df_m.groupby("Parent")
-            .agg(revenue=("revenue", "sum"), orders=("orders", "sum"))
-            .reset_index()
-        )
-        parent_attr = (
-            df_m[["Parent", "design_code", "jewelry_type", "stone"]]
-            .drop_duplicates(subset="Parent", keep="first")
-        )
-        parent_agg = parent_sum.merge(parent_attr, on="Parent", how="left")
-        for _c in ["design_code", "jewelry_type", "stone"]:
-            if _c in parent_agg.columns:
-                parent_agg[_c] = parent_agg[_c].astype("string").fillna("—")
-        parent_agg["aov"] = (parent_agg["revenue"] / parent_agg["orders"].replace(0, np.nan)).fillna(0)
-        parent_agg["revenue_share"] = (parent_agg["revenue"] / parent_agg["revenue"].sum() * 100).round(2)
-        parent_agg = parent_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
-
-        # Design code performance
-        ddf = df_m[df_m["design_code"].notna() & (df_m["design_code"].astype(str).str.lower() != "nan") & (df_m["design_code"].astype(str).str.strip() != "")].copy()
-        if ddf.empty:
-            design_agg = pd.DataFrame(columns=["design_code","revenue","orders","variants","jewelry_type","stones","aov","revenue_share"])
-        else:
-            design_sum = (
-                ddf.groupby("design_code")
-                .agg(revenue=("revenue", "sum"), orders=("orders", "sum"), variants=("Parent", "nunique"))
-                .reset_index()
-            )
-            design_jtype = (
-                ddf[["design_code", "jewelry_type"]]
-                .drop_duplicates(subset="design_code", keep="first")
-            )
-            stones_series = (
-                ddf[["design_code", "stone"]]
-                .dropna(subset=["stone"])
-                .astype({"stone": str})
-                .groupby("design_code")["stone"]
-                .apply(lambda s: ", ".join(sorted(set([x.strip() for x in s.tolist() if str(x).strip()]))))
-                .reset_index(name="stones")
-            )
-            design_agg = design_sum.merge(design_jtype, on="design_code", how="left").merge(stones_series, on="design_code", how="left")
-            design_agg["jewelry_type"] = design_agg["jewelry_type"].astype("string").fillna("—")
-            design_agg["stones"] = design_agg["stones"].astype("string").fillna("—")
-            design_agg["aov"] = (design_agg["revenue"] / design_agg["orders"].replace(0, np.nan)).fillna(0)
-            design_agg["revenue_share"] = (design_agg["revenue"] / design_agg["revenue"].sum() * 100).round(2)
-            design_agg = design_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
-
-        # Heatmap data
-        heat_raw = (
-            df_m.groupby(["jewelry_type", "stone"], dropna=False)["revenue"]
-            .sum()
-            .reset_index()
-        )
-        top15_stones = heat_raw.groupby("stone")["revenue"].sum().nlargest(15).index.tolist()
-
-        return df_m, metrics, jtype_agg, stone_agg, parent_agg, design_agg, heat_raw, top15_stones
-
-    _sel_jtype_t = tuple(sel_jtype or [])
-    _sel_stone_t = tuple(sel_stone or [])
-
-    _views = _compute_merch_views(_data_sig, matched_only, _sel_jtype_t, _sel_stone_t, _df=_df_merch_base)
-
-    df_m, _m_metrics, jtype_agg, stone_agg, parent_agg, design_agg, heat_raw, top15_stones = _views
-    if df_m.empty:
-        st.warning("No sales match the current Merchandising filters. Showing 0s for this selection.")
-
-    # Active filter badges
     active = []
     if sel_jtype: active.append(f"💍 {', '.join(sel_jtype)}")
-    if sel_stone: active.append(f"💠 {', '.join(sel_stone[:3])}{'…+more' if len(sel_stone) > 3 else ''}")
-    if active:
-        st.info("📌 Active: " + "  |  ".join(active) +
-                f"  ·  **{_m_metrics['sku_count']:,} SKUs** · "
-                f"**${_m_metrics['rev_sum']:,.0f}** revenue")
+    if sel_stone: active.append(f"💠 {', '.join(sel_stone[:3])}")
+    if active: st.info("📌 Active: " + "  |  ".join(active) + f"  ·  **{df_m['Parent'].nunique():,} SKUs** · **${df_m['revenue'].sum():,.0f}** revenue")
 
     st.markdown("---")
-
-    # ════════════════════════════════════════════════════════════════════════════
-    # SECTION 1 ── Revenue by Jewelry Type & Stone
-    # ════════════════════════════════════════════════════════════════════════════
     st.markdown("### 📊 Category Revenue Overview")
-
     ov_left, ov_right = st.columns(2)
 
-    # ── Jewelry Type bar ─────────────────────────────────────────────────────
     with ov_left:
         st.markdown("**💍 Revenue by Jewelry Type**")
-        jtype_agg = (
-            df_m.groupby("jewelry_type", dropna=False)
-            .agg(revenue=("revenue","sum"), orders=("orders","sum"))
-            .reset_index()
-            .sort_values("revenue", ascending=True)
-        )
-        jtype_agg["aov"] = (jtype_agg["revenue"] / jtype_agg["orders"].replace(0, np.nan)).fillna(0)
-
-        if jtype_agg.empty:
-            st.info("No jewelry type sales for the current selection.")
+        jtype_agg = (df_m.groupby("jewelry_type", dropna=False)
+                     .agg(revenue=("revenue","sum"),orders=("orders","sum")).reset_index()
+                     .sort_values("revenue",ascending=True))
+        jtype_agg["aov"] = (jtype_agg["revenue"]/jtype_agg["orders"].replace(0,np.nan)).fillna(0)
+        if jtype_agg.empty: st.info("No jewelry type sales for current selection.")
         else:
-            fig_jtype = px.bar(
-                jtype_agg, x="revenue", y="jewelry_type", orientation="h",
-                color="aov", color_continuous_scale="Blues",
-                custom_data=["orders","aov"],
-                labels={"revenue":"Revenue ($)","jewelry_type":"","aov":"AOV ($)"},
-                text=jtype_agg["revenue"].apply(lambda v: f"${v/1000:.0f}k")
-            )
-            fig_jtype.update_traces(
-                textposition="outside",
-                hovertemplate="<b>%{y}</b><br>Revenue: $%{x:,.0f}<br>Orders: %{customdata[0]:,.0f}<br>AOV: $%{customdata[1]:.2f}<extra></extra>"
-            )
-            fig_jtype.update_layout(
-                template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)", height=max(350, len(jtype_agg)*35+60),
-                margin=dict(l=0, r=70, t=10, b=0),
-                coloraxis_showscale=False,
-                xaxis=dict(showgrid=True, gridcolor="#2d303e"),
-                yaxis=dict(showgrid=False)
-            )
+            fig_jtype = px.bar(jtype_agg, x="revenue", y="jewelry_type", orientation="h",
+                               color="aov", color_continuous_scale="Blues",
+                               custom_data=["orders","aov"],
+                               labels={"revenue":"Revenue ($)","jewelry_type":"","aov":"AOV ($)"},
+                               text=jtype_agg["revenue"].apply(lambda v: f"${v/1000:.0f}k"))
+            fig_jtype.update_traces(textposition="outside",
+                                    hovertemplate="<b>%{y}</b><br>Revenue: $%{x:,.0f}<br>Orders: %{customdata[0]:,.0f}<br>AOV: $%{customdata[1]:.2f}<extra></extra>")
+            fig_jtype.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                                    height=max(350,len(jtype_agg)*35+60), margin=dict(l=0,r=70,t=10,b=0),
+                                    coloraxis_showscale=False)
             st.plotly_chart(fig_jtype, config={"displayModeBar":False}, use_container_width=True)
 
-    # ── Stone pie ────────────────────────────────────────────────────────────
     with ov_right:
         st.markdown("**💠 Top 15 Stones by Revenue**")
-        # stone_agg is precomputed (cached) based on filters
-        if stone_agg.empty:
-            st.info("No stone sales for the current selection.")
+        stone_agg = (df_m.groupby("stone",dropna=False)["revenue"].sum().reset_index()
+                     .sort_values("revenue",ascending=False).head(15))
+        if stone_agg.empty: st.info("No stone sales for current selection.")
         else:
-            fig_stone = px.pie(
-                stone_agg, values="revenue", names="stone", hole=0.48,
-                color_discrete_sequence=px.colors.qualitative.Pastel
-            )
-            fig_stone.update_traces(
-                textposition="outside", textinfo="percent+label",
-                textfont_size=10,
-                hovertemplate="<b>%{label}</b><br>Revenue: $%{value:,.0f}<br>Share: %{percent}<extra></extra>"
-            )
-            fig_stone.update_layout(
-                template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-                height=max(350, len(jtype_agg)*35+60),
-                margin=dict(l=0, r=0, t=10, b=40),
-                showlegend=False
-            )
+            fig_stone = px.pie(stone_agg, values="revenue", names="stone", hole=0.48,
+                               color_discrete_sequence=px.colors.qualitative.Pastel)
+            fig_stone.update_traces(textposition="outside", textinfo="percent+label", textfont_size=10)
+            fig_stone.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+                                    height=max(350,len(jtype_agg)*35+60), margin=dict(l=0,r=0,t=10,b=40), showlegend=False)
             st.plotly_chart(fig_stone, config={"displayModeBar":False}, use_container_width=True)
 
-    # ── KPI summary row ───────────────────────────────────────────────────────
-    kp1, kp2, kp3, kp4, kp5 = st.columns(5)
-    kp1.metric("💰 Total Revenue",    f"${df_m['revenue'].sum():,.0f}")
-    kp2.metric("🛒 Total Orders",     f"{df_m['orders'].sum():,.0f}")
-    aov_all = df_m['revenue'].sum() / df_m['orders'].sum() if df_m['orders'].sum() > 0 else 0
-    kp3.metric("📊 Blended AOV",      f"${aov_all:,.2f}")
+    kp1,kp2,kp3,kp4,kp5 = st.columns(5)
+    kp1.metric("💰 Total Revenue",      f"${df_m['revenue'].sum():,.0f}")
+    kp2.metric("🛒 Total Orders",       f"{df_m['orders'].sum():,.0f}")
+    aov_all = df_m['revenue'].sum()/df_m['orders'].sum() if df_m['orders'].sum()>0 else 0
+    kp3.metric("📊 Blended AOV",        f"${aov_all:,.2f}")
     kp4.metric("🏷️ Active Parent SKUs", f"{df_m['Parent'].nunique():,}")
-    kp5.metric("🎨 Design Codes",     f"{df_m['design_code'].nunique():,}")
+    kp5.metric("🎨 Design Codes",       f"{df_m['design_code'].nunique():,}")
 
     st.markdown("---")
-
-    # ════════════════════════════════════════════════════════════════════════════
-    # SECTION 2 ── Parent SKU Performance Table
-    # ════════════════════════════════════════════════════════════════════════════
     st.markdown("### 🏷️ Parent SKU Performance")
-    st.caption("Each Parent SKU mapped to its Design Code, Jewelry Type and Stone from the merchandising catalogue.")
 
-    # parent_agg is precomputed (cached) based on filters
+    parent_sum  = df_m.groupby("Parent").agg(revenue=("revenue","sum"),orders=("orders","sum")).reset_index()
+    parent_attr = df_m[["Parent","design_code","jewelry_type","stone"]].drop_duplicates(subset="Parent",keep="first")
+    parent_agg  = parent_sum.merge(parent_attr, on="Parent", how="left")
+    for _c in ["design_code","jewelry_type","stone"]:
+        if _c in parent_agg.columns: parent_agg[_c] = parent_agg[_c].astype("string").fillna("—")
+    parent_agg["aov"]           = (parent_agg["revenue"]/parent_agg["orders"].replace(0,np.nan)).fillna(0)
+    parent_agg["revenue_share"] = (parent_agg["revenue"]/parent_agg["revenue"].sum()*100).round(2)
+    parent_agg = parent_agg.sort_values("revenue", ascending=False).reset_index(drop=True)
 
-    # Inline search
     ps1, ps2 = st.columns([3,1])
-    with ps1:
-        p_search = st.text_input("🔎 Search Parent SKU or Design Code",
-                                  placeholder="e.g. EJ_SE or FC_SB…",
-                                  key="merch_parent_search",
-                                  label_visibility="collapsed")
-    with ps2:
-        top_n = st.selectbox("Show top", [25, 50, 100, "All"],
-                              key="merch_parent_topn", label_visibility="collapsed")
+    with ps1: p_search = st.text_input("🔎 Search Parent SKU or Design Code", placeholder="e.g. EJ_SE…", key="merch_parent_search", label_visibility="collapsed")
+    with ps2: top_n    = st.selectbox("Show top", [25,50,100,"All"], key="merch_parent_topn", label_visibility="collapsed")
 
     p_disp = parent_agg.copy()
     if p_search.strip():
-        q = p_search.strip()
-        p_disp = p_disp[
-            p_disp["Parent"].str.contains(q, case=False, na=False) |
-            p_disp["design_code"].str.contains(q, case=False, na=False)
-        ]
-    if top_n != "All":
-        p_disp = p_disp.head(int(top_n))
+        p_disp = p_disp[p_disp["Parent"].str.contains(p_search.strip(),case=False,na=False)|p_disp["design_code"].str.contains(p_search.strip(),case=False,na=False)]
+    if top_n != "All": p_disp = p_disp.head(int(top_n))
 
-    st.dataframe(
-        p_disp[["Parent","design_code","jewelry_type","stone",
-                "revenue","orders","aov","revenue_share"]],
-        column_config={
-            "Parent":        st.column_config.TextColumn("Parent SKU",   width="medium"),
-            "design_code":   st.column_config.TextColumn("Design Code",  width="medium"),
-            "jewelry_type":  st.column_config.TextColumn("Jewelry Type", width="small"),
-            "stone":         st.column_config.TextColumn("Stone",        width="medium"),
-            "revenue":       st.column_config.NumberColumn("Revenue ($)", format="$%,.0f"),
-            "orders":        st.column_config.NumberColumn("Orders",      format="%d"),
-            "aov":           st.column_config.NumberColumn("AOV ($)",     format="$%.2f"),
-            "revenue_share": st.column_config.NumberColumn("Rev Share %", format="%.2f%%"),
-        },
-        hide_index=True, use_container_width=True, height=430
-    )
+    st.dataframe(p_disp[["Parent","design_code","jewelry_type","stone","revenue","orders","aov","revenue_share"]], column_config={
+        "Parent":        st.column_config.TextColumn("Parent SKU",  width="medium"),
+        "design_code":   st.column_config.TextColumn("Design Code", width="medium"),
+        "jewelry_type":  st.column_config.TextColumn("Jewelry Type",width="small"),
+        "stone":         st.column_config.TextColumn("Stone",       width="medium"),
+        "revenue":       st.column_config.NumberColumn("Revenue ($)",format="$%,.0f"),
+        "orders":        st.column_config.NumberColumn("Orders",     format="%d"),
+        "aov":           st.column_config.NumberColumn("AOV ($)",    format="$%.2f"),
+        "revenue_share": st.column_config.NumberColumn("Rev Share %",format="%.2f%%"),
+    }, hide_index=True, use_container_width=True, height=430)
     st.caption(f"Showing {len(p_disp):,} of {len(parent_agg):,} Parent SKUs")
-    st.download_button(
-        "📥 Download Parent SKU Report (CSV)",
-        p_disp.to_csv(index=False).encode("utf-8"),
-        "parent_sku_performance.csv", "text/csv", key="dl_merch_parent"
-    )
+    st.download_button("📥 Download Parent SKU Report (CSV)", p_disp.to_csv(index=False).encode("utf-8"),
+                       "parent_sku_performance.csv","text/csv",key="dl_merch_parent")
 
     st.markdown("---")
-
-    # ════════════════════════════════════════════════════════════════════════════
-    # SECTION 3 ── Design Code Performance
-    # ════════════════════════════════════════════════════════════════════════════
     st.markdown("### 🎨 Design Code Performance")
-    st.caption("A Design Code groups multiple Parent SKUs (different stones/variants of the same design). Revenue is aggregated across all its variants.")
 
-    # design_agg is precomputed (cached) based on filters
+    ddf = df_m[df_m["design_code"].notna()&(df_m["design_code"].astype(str).str.lower()!="nan")&(df_m["design_code"].astype(str).str.strip()!="")].copy()
+    if not ddf.empty:
+        design_sum   = ddf.groupby("design_code").agg(revenue=("revenue","sum"),orders=("orders","sum"),variants=("Parent","nunique")).reset_index()
+        design_jtype = ddf[["design_code","jewelry_type"]].drop_duplicates(subset="design_code",keep="first")
+        stones_s     = (ddf[["design_code","stone"]].dropna(subset=["stone"]).astype({"stone":str})
+                        .groupby("design_code")["stone"]
+                        .apply(lambda s:", ".join(sorted(set([x.strip() for x in s.tolist() if str(x).strip()]))))
+                        .reset_index(name="stones"))
+        design_agg = design_sum.merge(design_jtype,on="design_code",how="left").merge(stones_s,on="design_code",how="left")
+        design_agg["jewelry_type"]  = design_agg["jewelry_type"].astype("string").fillna("—")
+        design_agg["stones"]        = design_agg["stones"].astype("string").fillna("—")
+        design_agg["aov"]           = (design_agg["revenue"]/design_agg["orders"].replace(0,np.nan)).fillna(0)
+        design_agg["revenue_share"] = (design_agg["revenue"]/design_agg["revenue"].sum()*100).round(2)
+        design_agg = design_agg.sort_values("revenue",ascending=False).reset_index(drop=True)
 
-    # Top 20 chart
-    top20 = design_agg.head(20).copy()
-    fig_dc = px.bar(
-        top20, x="design_code", y="revenue",
-        color="jewelry_type",
-        custom_data=["orders","aov","variants","stones"],
-        labels={"revenue":"Revenue ($)","design_code":"Design Code","jewelry_type":"Type"},
-        text=top20["revenue"].apply(lambda v: f"${v/1000:.1f}k")
-    )
-    fig_dc.update_traces(
-        textposition="outside",
-        hovertemplate=(
-            "<b>%{x}</b><br>"
-            "Revenue: $%{y:,.0f}<br>"
-            "Orders: %{customdata[0]:,.0f}<br>"
-            "AOV: $%{customdata[1]:.2f}<br>"
-            "Variants: %{customdata[2]}<br>"
-            "Stones: %{customdata[3]}<extra></extra>"
-        )
-    )
-    fig_dc.update_layout(
-        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)", height=380,
-        margin=dict(l=0, r=0, t=20, b=0),
-        xaxis=dict(tickangle=-40, showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor="#2d303e"),
-        legend=dict(title="Jewelry Type", orientation="h", y=1.14),
-        bargap=0.25
-    )
-    st.plotly_chart(fig_dc, config={"displayModeBar":False}, use_container_width=True)
+        top20 = design_agg.head(20).copy()
+        fig_dc = px.bar(top20, x="design_code", y="revenue", color="jewelry_type",
+                        custom_data=["orders","aov","variants","stones"],
+                        labels={"revenue":"Revenue ($)","design_code":"Design Code","jewelry_type":"Type"},
+                        text=top20["revenue"].apply(lambda v: f"${v/1000:.1f}k"))
+        fig_dc.update_traces(textposition="outside",
+                             hovertemplate="<b>%{x}</b><br>Revenue: $%{y:,.0f}<br>Orders: %{customdata[0]:,.0f}<br>AOV: $%{customdata[1]:.2f}<br>Variants: %{customdata[2]}<br>Stones: %{customdata[3]}<extra></extra>")
+        fig_dc.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                             height=380, margin=dict(l=0,r=0,t=20,b=0),
+                             xaxis=dict(tickangle=-40,showgrid=False), yaxis=dict(showgrid=True,gridcolor="#2d303e"),
+                             legend=dict(title="Jewelry Type",orientation="h",y=1.14), bargap=0.25)
+        st.plotly_chart(fig_dc, config={"displayModeBar":False}, use_container_width=True)
 
-    # Design code searchable table
-    ds1, ds2 = st.columns([3,1])
-    with ds1:
-        dc_search = st.text_input("🔎 Search Design Code or Stone",
-                                   placeholder="e.g. FC_SB or Diamond…",
-                                   key="merch_dc_search",
-                                   label_visibility="collapsed")
-    with ds2:
-        dc_top_n = st.selectbox("Show top", [25, 50, 100, "All"],
-                                 key="merch_dc_topn", label_visibility="collapsed")
-
-    dc_disp = design_agg.copy()
-    if dc_search.strip():
-        q2 = dc_search.strip()
-        dc_disp = dc_disp[
-            dc_disp["design_code"].str.contains(q2, case=False, na=False) |
-            dc_disp["stones"].str.contains(q2, case=False, na=False)
-        ]
-    if dc_top_n != "All":
-        dc_disp = dc_disp.head(int(dc_top_n))
-
-    st.dataframe(
-        dc_disp[["design_code","jewelry_type","stones","variants",
-                 "revenue","orders","aov","revenue_share"]],
-        column_config={
+        ds1, ds2 = st.columns([3,1])
+        with ds1: dc_search = st.text_input("🔎 Search Design Code or Stone", placeholder="e.g. FC_SB or Diamond…", key="merch_dc_search", label_visibility="collapsed")
+        with ds2: dc_top_n  = st.selectbox("Show top", [25,50,100,"All"], key="merch_dc_topn", label_visibility="collapsed")
+        dc_disp = design_agg.copy()
+        if dc_search.strip():
+            dc_disp = dc_disp[dc_disp["design_code"].str.contains(dc_search.strip(),case=False,na=False)|dc_disp["stones"].str.contains(dc_search.strip(),case=False,na=False)]
+        if dc_top_n != "All": dc_disp = dc_disp.head(int(dc_top_n))
+        st.dataframe(dc_disp[["design_code","jewelry_type","stones","variants","revenue","orders","aov","revenue_share"]], column_config={
             "design_code":   st.column_config.TextColumn("Design Code",  width="medium"),
             "jewelry_type":  st.column_config.TextColumn("Jewelry Type", width="small"),
             "stones":        st.column_config.TextColumn("Stones",       width="large"),
             "variants":      st.column_config.NumberColumn("# Variants", format="%d"),
-            "revenue":       st.column_config.NumberColumn("Revenue ($)", format="$%,.0f"),
-            "orders":        st.column_config.NumberColumn("Orders",      format="%d"),
-            "aov":           st.column_config.NumberColumn("AOV ($)",     format="$%.2f"),
-            "revenue_share": st.column_config.NumberColumn("Rev Share %", format="%.2f%%"),
-        },
-        hide_index=True, use_container_width=True, height=430
-    )
-    st.caption(f"Showing {len(dc_disp):,} of {len(design_agg):,} Design Codes")
-    st.download_button(
-        "📥 Download Design Code Report (CSV)",
-        dc_disp.to_csv(index=False).encode("utf-8"),
-        "design_code_performance.csv", "text/csv", key="dl_merch_design"
-    )
+            "revenue":       st.column_config.NumberColumn("Revenue ($)",format="$%,.0f"),
+            "orders":        st.column_config.NumberColumn("Orders",     format="%d"),
+            "aov":           st.column_config.NumberColumn("AOV ($)",    format="$%.2f"),
+            "revenue_share": st.column_config.NumberColumn("Rev Share %",format="%.2f%%"),
+        }, hide_index=True, use_container_width=True, height=430)
+        st.download_button("📥 Download Design Code Report (CSV)", dc_disp.to_csv(index=False).encode("utf-8"),
+                           "design_code_performance.csv","text/csv",key="dl_merch_design")
 
     st.markdown("---")
-
-    # ════════════════════════════════════════════════════════════════════════════
-    # SECTION 4 ── Jewelry Type × Stone Heatmap
-    # ════════════════════════════════════════════════════════════════════════════
     st.markdown("### 🔥 Revenue Heatmap — Jewelry Type × Stone")
-    st.caption("Top 15 stones shown. Colour intensity and label = revenue. Hover for exact figure.")
+    heat_raw    = df_m.groupby(["jewelry_type","stone"],dropna=False)["revenue"].sum().reset_index()
+    top15_stones = heat_raw.groupby("stone")["revenue"].sum().nlargest(15).index.tolist()
+    heat_filt   = heat_raw[heat_raw["stone"].isin(top15_stones)]
+    if not heat_filt.empty:
+        pivot = heat_filt.pivot(index="jewelry_type", columns="stone", values="revenue").fillna(0)
+        text_matrix = [[f"${v/1000:.0f}k" if v>0 else "" for v in row] for row in pivot.values]
+        fig_heat = go.Figure(data=go.Heatmap(
+            z=pivot.values, x=pivot.columns.tolist(), y=pivot.index.tolist(),
+            colorscale="Blues", hoverongaps=False,
+            hovertemplate="<b>%{y}</b> × <b>%{x}</b><br>Revenue: $%{z:,.0f}<extra></extra>",
+            text=text_matrix, texttemplate="%{text}", textfont={"size":9}
+        ))
+        fig_heat.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                               height=max(320,len(pivot)*42+80), margin=dict(l=0,r=0,t=10,b=0),
+                               xaxis=dict(tickangle=-42,side="bottom"), yaxis=dict(autorange="reversed"))
+        st.plotly_chart(fig_heat, config={"displayModeBar":False}, use_container_width=True)
 
-    # heat_raw and top15_stones are precomputed (cached) based on filters
-    pivot = heat_raw.pivot(index="jewelry_type", columns="stone", values="revenue").fillna(0)
-
-    text_matrix = [
-        [f"${v/1000:.0f}k" if v > 0 else "" for v in row]
-        for row in pivot.values
-    ]
-    fig_heat = go.Figure(data=go.Heatmap(
-        z=pivot.values,
-        x=pivot.columns.tolist(),
-        y=pivot.index.tolist(),
-        colorscale="Blues",
-        hoverongaps=False,
-        hovertemplate="<b>%{y}</b> × <b>%{x}</b><br>Revenue: $%{z:,.0f}<extra></extra>",
-        text=text_matrix,
-        texttemplate="%{text}",
-        textfont={"size": 9}
-    ))
-    fig_heat.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        height=max(320, len(pivot) * 42 + 80),
-        margin=dict(l=0, r=0, t=10, b=0),
-        xaxis=dict(tickangle=-42, side="bottom"),
-        yaxis=dict(autorange="reversed")
-    )
-    st.plotly_chart(fig_heat, config={"displayModeBar":False}, use_container_width=True)
-
-    # Unmatched callout (collapsible)
     if len(sales_parents - merch_parents) > 0:
-        with st.expander(f"ℹ️ {len(sales_parents - merch_parents):,} sales SKUs with no merchandising match"):
-            st.caption("These Parent SKUs have sales data but were not found in Merchandising_data.xlsx.")
-            unmatched_df = pd.DataFrame(sorted(sales_parents - merch_parents), columns=["Parent SKU"])
+        with st.expander(f"ℹ️ {len(sales_parents-merch_parents):,} sales SKUs with no merchandising match"):
+            unmatched_df = pd.DataFrame(sorted(sales_parents-merch_parents), columns=["Parent SKU"])
             st.dataframe(unmatched_df, hide_index=True, use_container_width=True, height=250)
-            st.download_button("📥 Download Unmatched SKU List",
-                                unmatched_df.to_csv(index=False).encode("utf-8"),
-                                "unmatched_skus.csv", "text/csv", key="dl_unmatched")
+            st.download_button("📥 Download Unmatched SKU List", unmatched_df.to_csv(index=False).encode("utf-8"),
+                               "unmatched_skus.csv","text/csv",key="dl_unmatched")
 
 # ---------------- FOOTER ----------------
 st.markdown("---")
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.markdown(f"<div style='text-align: left; color: #6b7280; font-size: 12px;'>📅 Last Updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}</div>", unsafe_allow_html=True)
-with col2:
-    st.markdown(f"<div style='text-align: center; color: #6b7280; font-size: 12px;'>⚙️ Safe Margin: {SAFE_MARGIN*100:.0f}%</div>", unsafe_allow_html=True)
-with col3:
-    st.markdown(f"<div style='text-align: right; color: #6b7280; font-size: 12px;'>📊 Data Points: {len(df_s):,}</div>", unsafe_allow_html=True)
+f1, f2, f3 = st.columns(3)
+with f1: st.markdown(f"<div style='text-align:left;color:#6b7280;font-size:12px;'>📅 Last Updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}</div>", unsafe_allow_html=True)
+with f2: st.markdown(f"<div style='text-align:center;color:#6b7280;font-size:12px;'>⚙️ Safe Margin: {SAFE_MARGIN*100:.0f}%</div>", unsafe_allow_html=True)
+with f3: st.markdown(f"<div style='text-align:right;color:#6b7280;font-size:12px;'>📊 Data Points: {len(df_s):,}</div>", unsafe_allow_html=True)
