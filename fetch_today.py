@@ -113,23 +113,58 @@ if new_df.empty:
 
 print(f"Fetched {len(new_df):,} rows from Amazon Ads")
 
-# ── Rename to lowercase to match Supabase table columns ───────────────────────
+# ── Prepare DataFrame for Supabase ────────────────────────────────────────────
 new_df = new_df.copy()
+
+# Format date as ISO string
 new_df["date"] = new_df["Date"].dt.strftime("%Y-%m-%d")
 
-# Compute CTR, CPC, ACOS before renaming
-new_df["CTR"]  = new_df.apply(lambda r: r["Clicks"] / r["Impressions"] * 100 if r["Impressions"] else 0, axis=1)
-new_df["CPC"]  = new_df.apply(lambda r: r["Spend"]  / r["Clicks"]      if r["Clicks"]      else 0, axis=1)
-new_df["ACOS"] = new_df.apply(lambda r: r["Spend"]  / r["Ad_Sales"]    * 100 if r["Ad_Sales"]  else 0, axis=1)
+# Compute derived metrics before column selection
+new_df["CTR"]  = new_df.apply(
+    lambda r: r["Clicks"] / r["Impressions"] * 100 if r["Impressions"] else 0, axis=1
+)
+new_df["CPC"]  = new_df.apply(
+    lambda r: r["Spend"] / r["Clicks"] if r["Clicks"] else 0, axis=1
+)
+new_df["ACOS"] = new_df.apply(
+    lambda r: r["Spend"] / r["Ad_Sales"] * 100 if r["Ad_Sales"] else 0, axis=1
+)
 
-# Keep only columns that exactly match Supabase table schema
-# Table columns: date, Market, Parent_SKU, SKU, ASIN, Impressions, Clicks, Spend, Ad_Sales, Ad_Orders, CTR, CPC, ACOS
-keep = ["date", "Market", "Parent_SKU", "SKU", "ASIN",
-        "Impressions", "Clicks", "Spend", "Ad_Sales", "Ad_Orders",
-        "CTR", "CPC", "ACOS"]
-rows = new_df[[c for c in keep if c in new_df.columns]].to_dict(orient="records")
+# ── FIX: map DataFrame columns → lowercase Supabase column names ──────────────
+# PostgREST is case-sensitive. The table was created with all-lowercase column
+# names (confirmed by working SELECT queries returning 'date', 'market', etc.)
+# Sending mixed-case keys like 'Market', 'ASIN', 'Parent_SKU' causes PGRST204.
+# Solution: rename every column to its exact lowercase DB name before upsert.
+COL_MAP = {
+    "date":        "date",        # already lowercase from strftime step above
+    "Market":      "market",
+    "Parent_SKU":  "parent_sku",
+    "SKU":         "sku",
+    "ASIN":        "asin",
+    "Impressions": "impressions",
+    "Clicks":      "clicks",
+    "Spend":       "spend",
+    "Ad_Sales":    "ad_sales",
+    "Ad_Orders":   "ad_orders",
+    "CTR":         "ctr",
+    "CPC":         "cpc",
+    "ACOS":        "acos",
+}
+
+# Select only columns that exist in both the DataFrame and our mapping
+cols_present = [src for src in COL_MAP if src in new_df.columns]
+export_df    = new_df[cols_present].rename(columns=COL_MAP)
+
+# Guard: warn about any DB columns we couldn't populate
+expected_db_cols = set(COL_MAP.values())
+actual_db_cols   = set(export_df.columns)
+missing          = expected_db_cols - actual_db_cols
+if missing:
+    print(f"⚠️  These DB columns have no source data and will be skipped: {sorted(missing)}")
+
+rows = export_df.to_dict(orient="records")
 
 print(f"Upserting {len(rows):,} rows into Supabase table '{TABLE}'...")
-print(f"Columns being sent: {list(rows[0].keys()) if rows else 'empty'}")
+print(f"Columns being sent: {list(export_df.columns.tolist())}")
 sb_upsert(rows)
 print(f"Done ✅  {len(rows):,} rows saved to Supabase.")
