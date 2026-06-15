@@ -338,41 +338,27 @@ with st.spinner("⚡ Loading business intelligence..."):
         st.stop()
 
 # ---------------- SIDEBAR FILTERS ----------------
-# ---------------- SIDEBAR FILTERS ----------------
 st.sidebar.title("🎛️ Control Panel")
 
 min_date = sales_df["date"].min().date()
 max_date = sales_df["date"].max().date()
 
-# Show available data range
-st.sidebar.info(
-    f"Available Data\n\n{min_date.strftime('%Y-%m-%d')} → {max_date.strftime('%Y-%m-%d')}"
-)
-
-default_end = max_date
-default_start = max(min_date, max_date - timedelta(days=30))
-
 col1, col2 = st.sidebar.columns(2)
-
 with col1:
+    # FIX: max_value=date.today() so calendar isn't locked at last data row
     start_date = st.date_input(
         "Start Date",
-        value=default_start,
+        max_date - timedelta(days=30),
         min_value=min_date,
-        max_value=max_date
+        max_value=date.today()      # ← was max_date
     )
-
 with col2:
     end_date = st.date_input(
         "End Date",
-        value=default_end,
+        max_date,
         min_value=min_date,
-        max_value=max_date
+        max_value=date.today()      # ← was max_date
     )
-
-if start_date > end_date:
-    st.error("Start date cannot be after End date")
-    st.stop()
 
 # Multi-Selects
 selected_channels = multiselect_with_all("📺 Marketplaces", sales_df["channel"].unique())
