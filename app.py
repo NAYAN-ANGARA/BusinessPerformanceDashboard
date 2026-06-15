@@ -172,6 +172,55 @@ def _norm_cols(df):
     """Return list of stripped-lowercase column names."""
     return [str(c).strip().lower() for c in df.columns]
 
+# ============================================================
+# FIX: robust date parser for mixed M-D-YYYY / M/D/YYYY formats
+# The Google Sheet stores dates as M-D-YYYY (US format with dashes)
+# for most rows, but newer rows use M/D/YYYY (US format with slashes).
+# pd.to_datetime without an explicit format silently drops day>12 rows
+# because it tries to interpret the first token as a day (dayfirst guess)
+# which makes months 13-31 -> NaT. We fix this by parsing each separator
+# style with an explicit format string so nothing is dropped.
+# ============================================================
+def _parse_dates_robust(series: pd.Series) -> pd.Series:
+    """Parse a mixed M-D-YYYY / M/D/YYYY date series with zero NaT loss."""
+    out = pd.Series(pd.NaT, index=series.index)
+
+    # Rows that use slash separator  → M/D/YYYY
+    slash_mask = series.astype(str).str.contains('/', na=False)
+    if slash_mask.any():
+        out[slash_mask] = pd.to_datetime(
+            series[slash_mask], format='%m/%d/%Y', errors='coerce'
+        )
+
+    # Rows that use dash separator   → M-D-YYYY
+    dash_mask = series.astype(str).str.contains('-', na=False)
+    if dash_mask.any():
+        out[dash_mask] = pd.to_datetime(
+            series[dash_mask], format='%m-%d-%Y', errors='coerce'
+        )
+
+    # Anything remaining: let pandas guess (catches ISO strings, etc.)
+    remaining = out.isna() & series.notna()
+    if remaining.any():
+        out[remaining] = pd.to_datetime(series[remaining], errors='coerce')
+
+    return out
+
+# ============================================================
+# FIX: strip currency symbols and commas before numeric conversion
+# The sheet stores Selling Commission as '$29.80' and
+# Discounted Price sometimes as '1,499.00' — pd.to_numeric
+# returns NaN/0 on those strings without stripping first.
+# ============================================================
+def _to_numeric_currency(series: pd.Series) -> pd.Series:
+    """Strip $, £, commas etc. then convert to float."""
+    return (
+        series.astype(str)
+        .str.replace(r'[\$£€,\s]', '', regex=True)
+        .pipe(pd.to_numeric, errors='coerce')
+        .fillna(0)
+    )
+
 # ---------------- DATA LOADER ----------------
 @st.cache_data(show_spinner=True, ttl=600)
 def load_and_process_data():
@@ -238,34 +287,40 @@ def load_and_process_data():
     # Normalise column names to snake_case
     sales_df.columns = [str(c).strip().lower().replace(" ", "_") for c in sales_df.columns]
 
-    sales_df["date"] = pd.to_datetime(sales_df["purchased_on"], errors="coerce")
+    # ── FIX 1: DATE — sheet mixes M-D-YYYY (dashes) and M/D/YYYY (slashes).
+    # pd.to_datetime without explicit format silently drops rows where
+    # day > 12 (misinterprets them as invalid month numbers → NaT → dropped).
+    # Root cause confirmed: '5-15-2026' without format → month=5, day=15 ok,
+    # but '1-13-2021' → month=1, day=13 → NaT under dayfirst=True guess.
+    # Fix: parse each separator style with an explicit format string.
+    sales_df["date"] = _parse_dates_robust(sales_df["purchased_on"])
 
-    sales_df["revenue"] = pd.to_numeric(
-        sales_df.get("discounted_price", 0), errors="coerce"
-    ).fillna(0)
+    # ── FIX 2: REVENUE — Discounted Price sometimes stored as '1,499.00'
+    # (commas as thousand separators). pd.to_numeric returns NaN on those.
+    sales_df["revenue"] = _to_numeric_currency(
+        sales_df["discounted_price"] if "discounted_price" in sales_df.columns
+        else pd.Series(0, index=sales_df.index, dtype=float)
+    )
 
     sales_df["orders"] = pd.to_numeric(
         sales_df.get("no_of_orders", 0), errors="coerce"
     ).fillna(0)
 
-    # ── FIX: selling_commission — tolerate missing column ─────────────
-    # The actual column from the sheet header is "Selling Commission"
-    # → snake_case → "selling_commission".
-    # Also guard against the column simply not existing.
+    # ── FIX 3: SELLING COMMISSION — sheet stores as '$29.80' (dollar prefix).
+    # pd.to_numeric returns 0 on currency strings. Strip $ first.
     if "selling_commission" in sales_df.columns:
-        sales_df["selling_commission"] = pd.to_numeric(
-            sales_df["selling_commission"], errors="coerce"
-        ).fillna(0)
+        sales_df["selling_commission"] = _to_numeric_currency(
+            sales_df["selling_commission"]
+        )
     else:
-        # Try to find it under any similar name
         _comm_candidates = [
             c for c in sales_df.columns
             if "commission" in c or "comm" in c
         ]
         if _comm_candidates:
-            sales_df["selling_commission"] = pd.to_numeric(
-                sales_df[_comm_candidates[0]], errors="coerce"
-            ).fillna(0)
+            sales_df["selling_commission"] = _to_numeric_currency(
+                sales_df[_comm_candidates[0]]
+            )
         else:
             sales_df["selling_commission"] = 0.0
 
@@ -290,8 +345,10 @@ def load_and_process_data():
     spend_df.columns = [str(c).strip().lower().replace(" ", "_") for c in spend_df.columns]
 
     if len(spend_df) > 0:
-        spend_df["date"] = pd.to_datetime(spend_df["date"], errors="coerce", format="mixed")
-        spend_df["spend"] = pd.to_numeric(spend_df["spend"], errors="coerce").fillna(0)
+        # FIX: use robust date parser for spend sheet too (may have same M-D-YYYY format)
+        spend_df["date"] = _parse_dates_robust(spend_df["date"])
+        # FIX: strip currency symbols from spend values in case they have $ prefix
+        spend_df["spend"] = _to_numeric_currency(spend_df["spend"])
 
         # FIX: channel column may be named differently or absent
         if "channel" not in spend_df.columns:
@@ -330,6 +387,8 @@ with st.spinner("⚡ Loading business intelligence..."):
 
     sales_df, spend_df = result[0], result[1]
 
+    # Re-parse: dates were already parsed in load_and_process_data with robust parser.
+    # This pass is a safety net for any ISO strings that might have slipped through.
     sales_df["date"] = pd.to_datetime(sales_df["date"], errors="coerce")
     spend_df["date"] = pd.to_datetime(spend_df["date"], errors="coerce")
 
